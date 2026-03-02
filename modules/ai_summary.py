@@ -99,7 +99,7 @@ def get_earnings_analysis(
     try:
         client = _get_client()
         response = client.messages.create(
-            model="claude-haiku-4-5-20251001",
+            model="claude-3-5-haiku-20241022",
             max_tokens=600,
             messages=[{"role": "user", "content": prompt}],
         )
@@ -114,9 +114,10 @@ def get_earnings_analysis(
         }
     except Exception as e:
         err_type = type(e).__name__
+        err_msg = str(e)[:200]
         return {
             "assessment": "中立",
-            "assessment_detail": f"AI分析を取得できませんでした（{err_type}）",
+            "assessment_detail": f"AI分析エラー（{err_type}）: {err_msg}",
             "key_points": [],
             "stock_impact": "中立",
             "reasoning": "",
@@ -154,7 +155,7 @@ def get_news_analysis(
     try:
         client = _get_client()
         response = client.messages.create(
-            model="claude-haiku-4-5-20251001",
+            model="claude-3-5-haiku-20241022",
             max_tokens=600,
             messages=[{"role": "user", "content": prompt}],
         )
@@ -169,8 +170,9 @@ def get_news_analysis(
         }
     except Exception as e:
         err_type = type(e).__name__
+        err_msg = str(e)[:200]
         return {
-            "summary": f"AI分析を取得できませんでした（{err_type}）",
+            "summary": f"AI分析エラー（{err_type}）: {err_msg}",
             "stock_impact": "中立",
             "confidence": "低",
             "reasoning": "",
