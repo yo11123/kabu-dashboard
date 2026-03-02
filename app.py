@@ -220,10 +220,6 @@ def main() -> None:
         show_news = st.checkbox("● ニュースマーカー", value=True)
 
         st.divider()
-        st.subheader("表示設定")
-        chart_height = st.slider("チャートの高さ", min_value=400, max_value=1200, value=630, step=50)
-
-        st.divider()
         st.caption(market_status_label())
 
     # ─── データ取得（常に上場来全データ）────────────────────────────
@@ -284,6 +280,13 @@ def main() -> None:
     c3.metric(f"期間安値（{PERIOD_LABELS[period]}）", f"¥{df_view['Low'].min():,.0f}")
     c4.metric("決算マーカー", f"{len(earnings_events)} 件")
     c5.metric("ニュースマーカー", f"{len(news_events)} 件")
+
+    # ─── チャートの高さ調整（チャート直上に配置）────────────────────
+    chart_height = st.slider(
+        "チャートの高さ", min_value=400, max_value=1200, value=630, step=50,
+        label_visibility="collapsed",
+        help="チャートの高さを調整（400〜1200px）",
+    )
 
     # ─── チャート描画 ────────────────────────────────────────────────
     fig, earnings_trace_idx, news_trace_idx = create_candlestick_chart(

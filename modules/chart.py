@@ -198,6 +198,9 @@ def create_candlestick_chart(
                 opacity=1.0,
                 line=dict(color="#FF8C00", width=2),
             ),
+            # 他の点が選択されても透明にならないよう opacity を固定
+            unselected=dict(marker=dict(opacity=1.0, color="#FFD700")),
+            selected=dict(marker=dict(opacity=1.0, size=26, color="#FFD700")),
             text=["決算"] * len(earn_x),
             textposition="top center",
             textfont=dict(size=11, color="#FFD700"),
@@ -236,6 +239,9 @@ def create_candlestick_chart(
                 opacity=1.0,
                 line=dict(color="#0097A7", width=2),
             ),
+            # 他の点が選択されても透明にならないよう opacity を固定
+            unselected=dict(marker=dict(opacity=1.0, color="#00BCD4")),
+            selected=dict(marker=dict(opacity=1.0, size=18, color="#00BCD4")),
             name="ニュース",
             customdata=list(zip(news_custom, news_hover)) if news_custom else [],
             hovertemplate="ニュース: %{customdata[1]}<br>日付: %{customdata[0]}<br>クリックで詳細表示<extra></extra>",
