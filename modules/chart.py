@@ -39,6 +39,7 @@ def create_candlestick_chart(
     show_bb: bool = False,
     view_start_idx: int = 0,
     view_end_idx: int | None = None,
+    chart_height: int = 630,
 ) -> tuple[go.Figure, int, int]:
     """
     ローソク足チャート（イベントマーカー付き）を生成する。
@@ -247,7 +248,7 @@ def create_candlestick_chart(
     fig.update_layout(
         title=dict(text=title, font=dict(size=16)),
         xaxis_rangeslider_visible=False,
-        height=630,
+        height=chart_height,
         legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1),
         margin=dict(l=60, r=20, t=60, b=40),
         plot_bgcolor="#0e1117",

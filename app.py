@@ -220,6 +220,10 @@ def main() -> None:
         show_news = st.checkbox("● ニュースマーカー", value=True)
 
         st.divider()
+        st.subheader("表示設定")
+        chart_height = st.slider("チャートの高さ", min_value=400, max_value=1200, value=630, step=50)
+
+        st.divider()
         st.caption(market_status_label())
 
     # ─── データ取得（常に上場来全データ）────────────────────────────
@@ -292,6 +296,7 @@ def main() -> None:
         show_bb=show_bb,
         view_start_idx=view_start_idx,
         view_end_idx=view_end_idx,
+        chart_height=chart_height,
     )
 
     event_data = st.plotly_chart(
