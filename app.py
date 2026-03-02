@@ -223,23 +223,25 @@ def main() -> None:
         st.caption(market_status_label())
 
     # ─── データ取得（常に上場来全データ）────────────────────────────
+    # @st.cache_data の TTL でレート制限を制御するため、毎回関数を呼ぶ。
+    # 銘柄変更・ボタン押下時だけスピナーを表示し、autorefresh 時はサイレント更新。
     ticker_changed = st.session_state.get("current_ticker") != ticker
 
-    if fetch_btn or ticker_changed or "df_raw" not in st.session_state:
-        with st.spinner(f"{ticker} の全期間データを取得中..."):
-            if is_tse_open():
-                df_raw = fetch_stock_data_max_realtime(ticker)
-            else:
-                df_raw = fetch_stock_data_max(ticker)
+    if fetch_btn or ticker_changed:
+        with st.spinner(f"{ticker} のデータを取得中..."):
+            df_raw = fetch_stock_data_max_realtime(ticker) if is_tse_open() \
+                else fetch_stock_data_max(ticker)
+    else:
+        # autorefresh または UI 操作時 — キャッシュが切れていれば自動で再取得
+        df_raw = fetch_stock_data_max_realtime(ticker) if is_tse_open() \
+            else fetch_stock_data_max(ticker)
 
-        if df_raw is None or df_raw.empty:
-            st.error(f"'{ticker}' のデータを取得できませんでした。銘柄コードと期間を確認してください。")
-            return
+    if df_raw is None or df_raw.empty:
+        st.error(f"'{ticker}' のデータを取得できませんでした。銘柄コードを確認してください。")
+        return
 
-        st.session_state["df_raw"] = df_raw
-        st.session_state["current_ticker"] = ticker
-
-    df = st.session_state["df_raw"].copy()
+    st.session_state["current_ticker"] = ticker
+    df = df_raw.copy()
 
     # 初期表示範囲（選択期間に対応するインデックス）
     view_start_idx = _calc_view_start_idx(df, period)
