@@ -13,7 +13,6 @@ from modules.data_loader import (
 from modules.indicators import calc_sma, calc_ema, calc_bollinger_bands, calc_volume_ma
 from modules.chart import create_candlestick_chart
 from modules.events import fetch_earnings_events, fetch_news_events
-from modules.ai_summary import get_earnings_analysis, get_news_analysis
 from modules.market_hours import is_tse_open, get_refresh_interval_ms, market_status_label
 
 st.set_page_config(
@@ -65,62 +64,22 @@ def show_earnings_dialog(
     # クリック日に対応するイベントを検索（スナップされた日付に対応できるよう柔軟に）
     ev = next((e for e in earnings_events if e["date"] == clicked_date), None)
     if ev is None:
-        # customdata には元の日付が入っているので再度照合
         ev = earnings_events[0] if earnings_events else None
     if ev is None:
         st.error("決算データが見つかりません")
         return
 
     company_name = ticker_info.get("name", ticker)
+    st.subheader(f"{company_name}　決算期: {ev['period_end']}  |  発表日: {ev['date']}")
 
-    # ── AI 分析（24h キャッシュ）──
-    with st.spinner("AI が決算を分析中..."):
-        ai = get_earnings_analysis(
-            ticker=ticker,
-            company_name=company_name,
-            period_end=ev["period_end"],
-            revenue=ev["revenue"],
-            operating_income=ev["operating_income"],
-            eps_actual=ev["eps_actual"],
-            eps_estimate=ev["eps_estimate"],
-            beat=ev["beat"],
-        )
-
-    # ── 判定（大きく表示）──
-    assessment = ai.get("assessment", "中立")
-    color_map = {"良い": "#4CAF50", "悪い": "#ef5350", "中立": "#FF9800"}
-    color = color_map.get(assessment, "#FF9800")
-    emoji_map = {"良い": "✅", "悪い": "❌", "中立": "➡️"}
-    emoji = emoji_map.get(assessment, "➡️")
-
-    st.markdown(
-        f"<div style='text-align:center; padding:12px 0;'>"
-        f"<span style='font-size:80px; color:{color};'>{emoji}</span>"
-        f"<h1 style='color:{color}; margin:0; font-size:64px;'>{assessment}</h1>"
-        f"</div>",
-        unsafe_allow_html=True,
-    )
-
-    # 株価予測
-    impact = ai.get("stock_impact", "中立")
-    impact_color = {"上昇": "#4CAF50", "下落": "#ef5350", "中立": "#FF9800"}
-    impact_arrow = {"上昇": "↑", "下落": "↓", "中立": "→"}
-    st.markdown(
-        f"<p style='text-align:center; color:{impact_color.get(impact, '#FF9800')};"
-        f" font-size:28px; font-weight:bold; margin:4px 0;'>"
-        f"株価予測: {impact_arrow.get(impact, '→')} {impact}</p>",
-        unsafe_allow_html=True,
-    )
-
-    st.markdown(f"> {ai.get('assessment_detail', '')}")
-    if ai.get("reasoning"):
-        st.caption(f"根拠: {ai['reasoning']}")
-
-    st.divider()
+    # ── EPS 予想比較バッジ ──
+    beat = ev.get("beat")
+    if beat is True:
+        st.success("✅ EPS 予想超過")
+    elif beat is False:
+        st.error("❌ EPS 予想未達")
 
     # ── 財務指標 ──
-    st.subheader(f"決算期: {ev['period_end']}  |  発表日: {ev['date']}")
-
     col1, col2, col3 = st.columns(3)
 
     rev = ev.get("revenue")
@@ -147,15 +106,8 @@ def show_earnings_dialog(
         "EPS",
         eps_disp,
         eps_delta,
-        delta_color="normal" if ev.get("beat") is True else ("inverse" if ev.get("beat") is False else "off"),
+        delta_color="normal" if beat is True else ("inverse" if beat is False else "off"),
     )
-
-    # ── 注目ポイント ──
-    key_pts = ai.get("key_points", [])
-    if key_pts:
-        st.subheader("注目ポイント")
-        for pt in key_pts:
-            st.markdown(f"- {pt}")
 
     st.divider()
 
@@ -198,44 +150,9 @@ def show_news_dialog(
     company_name = ticker_info.get("name", ticker)
     all_items = ev.get("all_items", [{"title": ev["title"], "publisher": ev["publisher"],
                                       "link": ev["link"], "uuid": ev["uuid"]}])
-    all_titles = tuple(item["title"] for item in all_items)
-
-    # ── AI 分析（24h キャッシュ）──
-    with st.spinner("AI がニュースを分析中..."):
-        ai = get_news_analysis(
-            ticker=ticker,
-            company_name=company_name,
-            news_titles=all_titles,
-            news_date=ev["date"],
-        )
-
-    # ── 株価影響予測（大きく表示）──
-    impact = ai.get("stock_impact", "中立")
-    confidence = ai.get("confidence", "低")
-    impact_color = {"上昇": "#4CAF50", "下落": "#ef5350", "中立": "#FF9800"}
-    impact_arrow = {"上昇": "↑ 上昇", "下落": "↓ 下落", "中立": "→ 中立"}
-
-    st.markdown(
-        f"<div style='text-align:center; padding:12px 0;'>"
-        f"<h1 style='color:{impact_color.get(impact, '#FF9800')}; font-size:60px; margin:0;'>"
-        f"{impact_arrow.get(impact, impact)}</h1>"
-        f"<p style='color:#aaa; font-size:18px; margin:4px 0;'>予測信頼度: <b>{confidence}</b></p>"
-        f"</div>",
-        unsafe_allow_html=True,
-    )
-
-    st.markdown(f"**AI 要約:** {ai.get('summary', '')}")
-    if ai.get("reasoning"):
-        st.caption(f"根拠: {ai['reasoning']}")
-
-    risk = ai.get("key_risk", "")
-    if risk:
-        st.warning(f"⚠️ リスク: {risk}")
-
-    st.divider()
 
     # ── ニュース一覧 ──
-    st.subheader(f"{ev['date']} のニュース（{len(all_items)} 件）")
+    st.subheader(f"{company_name}　{ev['date']} のニュース（{len(all_items)} 件）")
     for item in all_items:
         with st.container(border=True):
             st.markdown(f"**{item['title']}**")
