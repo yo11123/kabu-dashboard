@@ -305,6 +305,7 @@ def main() -> None:
         on_select="rerun",
         selection_mode="points",
         key="main_chart",
+        config={"scrollZoom": True, "displayModeBar": True},
     )
 
     # チャートの操作説明

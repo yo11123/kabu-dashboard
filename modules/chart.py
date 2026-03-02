@@ -182,7 +182,7 @@ def create_candlestick_chart(
         if snapped:
             idx_pos = trading_dates.index(snapped)
             earn_x.append(snapped)
-            earn_y.append(float(df["High"].iloc[idx_pos]) * 1.025)
+            earn_y.append(float(df["High"].iloc[idx_pos]) * 1.05)
             earn_custom.append(ev["date"])
 
     earnings_trace_idx = trace_idx
@@ -193,13 +193,14 @@ def create_candlestick_chart(
             mode="markers+text",
             marker=dict(
                 symbol="star",
-                size=16,
+                size=22,
                 color="#FFD700",
-                line=dict(color="#FF8C00", width=1),
+                opacity=1.0,
+                line=dict(color="#FF8C00", width=2),
             ),
-            text=["★"] * len(earn_x),
+            text=["決算"] * len(earn_x),
             textposition="top center",
-            textfont=dict(size=14, color="#FFD700"),
+            textfont=dict(size=11, color="#FFD700"),
             name="決算",
             customdata=earn_custom,
             hovertemplate="決算日: %{customdata}<br>クリックで詳細表示<extra></extra>",
@@ -230,9 +231,10 @@ def create_candlestick_chart(
             mode="markers",
             marker=dict(
                 symbol="circle",
-                size=12,
+                size=14,
                 color="#00BCD4",
-                line=dict(color="#0097A7", width=1),
+                opacity=1.0,
+                line=dict(color="#0097A7", width=2),
             ),
             name="ニュース",
             customdata=list(zip(news_custom, news_hover)) if news_custom else [],
