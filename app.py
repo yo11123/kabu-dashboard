@@ -241,19 +241,33 @@ def main() -> None:
                 return f"{t['code']}  {t['name']}  [{market}]"
             return f"{t['code']}  {t['name']}"
 
-        # スキャナー・カレンダー等から遷移してきた場合はその銘柄をデフォルト選択
-        # filtered（日経225）に含まれない銘柄は search_pool から探して先頭に挿入する
+        # ── デフォルト選択銘柄の決定 ──────────────────────────────────
+        # 優先順位:
+        #   1. スキャナー等から遷移した cal_ticker
+        #   2. 検索中でない場合は current_ticker（サイドバー操作でリセットされない）
+        #   3. 検索中は先頭候補
+        #   4. デフォルト: トヨタ
         cal_ticker = st.session_state.pop("calendar_selected_ticker", None)
-        if cal_ticker and not any(t["code"] == cal_ticker for t in filtered):
-            _found = next((t for t in search_pool if t["code"] == cal_ticker), None)
+
+        if cal_ticker:
+            target_ticker = cal_ticker
+        elif not q:
+            # 検索なし: 現在表示中の銘柄を維持（チェックボックス操作などで戻らないように）
+            target_ticker = st.session_state.get("current_ticker")
+        else:
+            target_ticker = None
+
+        # target_ticker が filtered に含まれない場合は search_pool から探して先頭に挿入
+        if target_ticker and not any(t["code"] == target_ticker for t in filtered):
+            _found = next((t for t in search_pool if t["code"] == target_ticker), None)
             if _found:
                 filtered = [_found] + filtered[:MAX_DISPLAY - 1]
 
         ticker_labels = [_label(t) for t in filtered]
 
-        if cal_ticker:
+        if target_ticker:
             default_idx = next(
-                (i for i, t in enumerate(filtered) if t["code"] == cal_ticker), 0
+                (i for i, t in enumerate(filtered) if t["code"] == target_ticker), 0
             )
         elif q:
             default_idx = 0  # 検索時は先頭候補
