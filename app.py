@@ -10,6 +10,7 @@ from modules.data_loader import (
     fetch_ticker_info,
     load_tickers,
     load_all_tse_stocks,
+    _load_tse_cached,
 )
 from modules.indicators import calc_sma, calc_ema, calc_bollinger_bands, calc_volume_ma
 from modules.chart import create_candlestick_chart
@@ -185,12 +186,25 @@ def main() -> None:
     nikkei225 = load_tickers(TICKERS_PATH)
 
     # 東証全上場銘柄（JPX データ 24h キャッシュ）。取得失敗時は日経225にフォールバック
-    all_tse = load_all_tse_stocks()
+    all_tse, tse_error = load_all_tse_stocks()
     search_pool = all_tse if all_tse else nikkei225
 
     # ─── サイドバー ─────────────────────────────────────────────────
     with st.sidebar:
         st.header("銘柄設定")
+
+        # ── 全銘柄DBステータス ──────────────────────────────
+        db_cols = st.columns([3, 1])
+        if tse_error:
+            db_cols[0].caption(f"⚠️ JPX取得失敗（日経225で代替中）")
+            # エラー詳細はexpanderで確認できる
+            with st.expander("エラー詳細"):
+                st.code(tse_error, language=None)
+        else:
+            db_cols[0].caption(f"東証全銘柄 {len(all_tse):,} 件")
+        if db_cols[1].button("↺", help="銘柄DBを再取得", use_container_width=True):
+            _load_tse_cached.clear()
+            st.rerun()
 
         # ── 銘柄検索（コード / 名称どちらでも可）──
         search_query = st.text_input(

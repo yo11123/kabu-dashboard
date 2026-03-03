@@ -1,7 +1,7 @@
 import io
 import time
-import urllib.request
 
+import requests
 import pandas as pd
 import yfinance as yf
 import streamlit as st
@@ -76,50 +76,81 @@ def fetch_ticker_info(ticker: str) -> dict:
         return {"name": ticker, "sector": "", "market_cap": None, "website": "", "currency": "JPY"}
 
 
-@st.cache_data(ttl=86400)
-def load_all_tse_stocks() -> list[dict]:
+_JPX_URL = (
+    "https://www.jpx.co.jp/markets/statistics-equities/misc/"
+    "tvdivq0000001vg2-att/data_j.xls"
+)
+_JPX_HEADERS = {
+    "User-Agent": (
+        "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
+        "AppleWebKit/537.36 (KHTML, like Gecko) "
+        "Chrome/120.0.0.0 Safari/537.36"
+    ),
+    "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+    "Accept-Language": "ja,en-US;q=0.9,en;q=0.8",
+    "Referer": "https://www.jpx.co.jp/markets/statistics-equities/misc/01.html",
+}
+
+
+def _fetch_tse_raw() -> list[dict]:
     """
-    JPX（日本取引所グループ）から東証全上場銘柄リストを取得する（TTL=24時間）。
-    取得失敗時は空リストを返す（呼び出し元が日経225にフォールバック）。
-
-    ソース: https://www.jpx.co.jp/markets/statistics-equities/misc/01.html
+    JPX から全上場銘柄を取得してパースする。失敗時は例外を raise する。
+    （@st.cache_data の外側に置き、成功したときのみキャッシュさせる）
     """
-    url = (
-        "https://www.jpx.co.jp/markets/statistics-equities/misc/"
-        "tvdivq0000001vg2-att/data_j.xls"
-    )
-    try:
-        req = urllib.request.Request(url, headers={"User-Agent": "Mozilla/5.0"})
-        with urllib.request.urlopen(req, timeout=15) as resp:
-            raw = resp.read()
+    resp = requests.get(_JPX_URL, headers=_JPX_HEADERS, timeout=20)
+    resp.raise_for_status()
 
-        df = pd.read_excel(io.BytesIO(raw), header=0, engine="xlrd")
+    df = pd.read_excel(io.BytesIO(resp.content), header=0, engine="xlrd")
 
-        result = []
-        for _, row in df.iterrows():
-            try:
-                # コード列は数値として読み込まれる場合がある（例: 7203.0）
-                code_raw = str(row.iloc[0]).replace(".0", "").strip()
-                if not code_raw.isdigit() or not (4 <= len(code_raw) <= 5):
-                    continue
-                code = code_raw.zfill(4)
-                name = str(row.iloc[1]).strip()
-                market = str(row.iloc[2]).strip() if len(row) > 2 else ""
-                sector = str(row.iloc[4]).strip() if len(row) > 4 else ""
-                if name and name != "nan":
-                    result.append({
-                        "code": f"{code}.T",
-                        "name": name,
-                        "market": market,
-                        "sector": sector,
-                    })
-            except Exception:
+    result = []
+    for _, row in df.iterrows():
+        try:
+            # コード列は数値として読み込まれる場合がある（例: 7203.0）
+            code_raw = str(row.iloc[0]).replace(".0", "").strip()
+            if not code_raw.isdigit() or not (4 <= len(code_raw) <= 5):
                 continue
+            code = code_raw.zfill(4)
+            name = str(row.iloc[1]).strip()
+            market = str(row.iloc[2]).strip() if len(row) > 2 else ""
+            sector = str(row.iloc[4]).strip() if len(row) > 4 else ""
+            if name and name != "nan":
+                result.append({
+                    "code": f"{code}.T",
+                    "name": name,
+                    "market": market,
+                    "sector": sector,
+                })
+        except Exception:
+            continue
 
-        return sorted(result, key=lambda x: x["code"])
+    if not result:
+        raise ValueError("JPX ファイルのパース結果が 0 件でした")
 
-    except Exception:
-        return []
+    return sorted(result, key=lambda x: x["code"])
+
+
+@st.cache_data(ttl=86400)
+def _load_tse_cached() -> list[dict]:
+    """
+    成功時のみ 24h キャッシュ。
+    _fetch_tse_raw() が raise すると @st.cache_data はその結果を保存しない。
+    次回呼び出し時に再試行される。
+    """
+    return _fetch_tse_raw()
+
+
+def load_all_tse_stocks() -> tuple[list[dict], str]:
+    """
+    東証全上場銘柄を返す。
+    Returns:
+        (stocks, error_message)
+        成功: (list[dict], "")
+        失敗: ([], "エラー内容")
+    """
+    try:
+        return _load_tse_cached(), ""
+    except Exception as e:
+        return [], f"{type(e).__name__}: {e}"
 
 
 def load_tickers(filepath: str) -> list[dict]:
