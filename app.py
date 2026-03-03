@@ -10,7 +10,7 @@ from modules.data_loader import (
     fetch_ticker_info,
     load_tickers,
     load_all_tse_stocks,
-    _load_tse_cached,
+    clear_tse_cache,
 )
 from modules.indicators import calc_sma, calc_ema, calc_bollinger_bands, calc_volume_ma
 from modules.chart import create_candlestick_chart
@@ -203,7 +203,7 @@ def main() -> None:
         else:
             db_cols[0].caption(f"東証全銘柄 {len(all_tse):,} 件")
         if db_cols[1].button("↺", help="銘柄DBを再取得", use_container_width=True):
-            _load_tse_cached.clear()
+            clear_tse_cache()
             st.rerun()
 
         # ── 銘柄検索（コード / 名称どちらでも可）──

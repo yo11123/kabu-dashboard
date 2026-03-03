@@ -139,6 +139,11 @@ def _load_tse_cached() -> list[dict]:
     return _fetch_tse_raw()
 
 
+def clear_tse_cache() -> None:
+    """東証全銘柄キャッシュをクリアする（再取得ボタン用）。"""
+    _load_tse_cached.clear()
+
+
 def load_all_tse_stocks() -> tuple[list[dict], str]:
     """
     東証全上場銘柄を返す。
