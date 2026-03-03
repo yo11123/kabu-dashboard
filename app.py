@@ -12,7 +12,7 @@ from modules.data_loader import (
 )
 from modules.indicators import calc_sma, calc_ema, calc_bollinger_bands, calc_volume_ma
 from modules.chart import create_candlestick_chart
-from modules.events import fetch_earnings_events, fetch_news_events, is_nikkei_publisher
+from modules.events import fetch_earnings_events, fetch_news_events
 from modules.market_hours import is_tse_open, get_refresh_interval_ms, market_status_label
 
 st.set_page_config(
@@ -160,7 +160,8 @@ def show_news_dialog(
     st.subheader(f"{company_name}　{ev['date']} のニュース（{len(all_items)} 件）")
     for item in all_items:
         with st.container(border=True):
-            if is_nikkei_publisher(item.get("publisher", "")):
+            pub = item.get("publisher", "").lower()
+            if any(k in pub for k in ("日本経済新聞", "日経", "nikkei")):
                 st.caption("🗞️ 日本経済新聞")
             st.markdown(f"**{item['title']}**")
             st.caption(f"出典: {item['publisher']}")
