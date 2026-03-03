@@ -92,6 +92,34 @@ _JPX_HEADERS = {
 }
 
 
+def _read_jpx_excel(raw: bytes) -> pd.DataFrame:
+    """
+    .xls / .xlsx 両形式、header 行の位置ずれにも対応して DataFrame を返す。
+    """
+    for engine in ("xlrd", "openpyxl"):
+        for skiprows in (0, 1, 2):
+            try:
+                df = pd.read_excel(
+                    io.BytesIO(raw), header=skiprows, engine=engine
+                )
+                # 最初の列に 4 桁数字が含まれていれば正しいシートとみなす
+                if len(df) > 10:
+                    sample = str(df.iloc[0, 0]).replace(".0", "").strip()
+                    if sample.isdigit() and len(sample) == 4:
+                        return df
+            except Exception:
+                continue
+    raise ValueError("Excel エンジン xlrd/openpyxl いずれでも読み込めませんでした")
+
+
+def _detect_col(headers: list[str], keywords: list[str], default: int) -> int:
+    """列ヘッダー名からキーワードに一致する列インデックスを返す。"""
+    for i, h in enumerate(headers):
+        if any(k in h for k in keywords):
+            return i
+    return default
+
+
 def _fetch_tse_raw() -> list[dict]:
     """
     JPX から全上場銘柄を取得してパースする。失敗時は例外を raise する。
@@ -100,20 +128,26 @@ def _fetch_tse_raw() -> list[dict]:
     resp = requests.get(_JPX_URL, headers=_JPX_HEADERS, timeout=20)
     resp.raise_for_status()
 
-    df = pd.read_excel(io.BytesIO(resp.content), header=0, engine="xlrd")
+    df = _read_jpx_excel(resp.content)
+
+    # 列名からコード・銘柄名・市場区分・業種区分の列を自動検出
+    headers = [str(c).strip() for c in df.columns]
+    code_ci   = _detect_col(headers, ["コード", "code", "Code"],          0)
+    name_ci   = _detect_col(headers, ["銘柄名", "name", "Name"],          1)
+    market_ci = _detect_col(headers, ["市場", "Market", "market"],        2)
+    sector_ci = _detect_col(headers, ["33業種区分", "業種区分", "業種"], 4)
 
     result = []
     for _, row in df.iterrows():
         try:
-            # コード列は数値として読み込まれる場合がある（例: 7203.0）
-            code_raw = str(row.iloc[0]).replace(".0", "").strip()
-            if not code_raw.isdigit() or not (4 <= len(code_raw) <= 5):
+            code_raw = str(row.iloc[code_ci]).replace(".0", "").strip()
+            if not code_raw.isdigit() or not (1 <= len(code_raw) <= 6):
                 continue
             code = code_raw.zfill(4)
-            name = str(row.iloc[1]).strip()
-            market = str(row.iloc[2]).strip() if len(row) > 2 else ""
-            sector = str(row.iloc[4]).strip() if len(row) > 4 else ""
-            if name and name != "nan":
+            name = str(row.iloc[name_ci]).strip()
+            market = str(row.iloc[market_ci]).strip() if len(row) > market_ci else ""
+            sector = str(row.iloc[sector_ci]).strip() if len(row) > sector_ci else ""
+            if name and name not in ("nan", "None", ""):
                 result.append({
                     "code": f"{code}.T",
                     "name": name,
@@ -124,7 +158,13 @@ def _fetch_tse_raw() -> list[dict]:
             continue
 
     if not result:
-        raise ValueError("JPX ファイルのパース結果が 0 件でした")
+        # サイドバーのエラー詳細に表示するため、実際の列名と先頭行を含める
+        first_row = [str(v) for v in df.iloc[0].tolist()[:6]] if len(df) > 0 else []
+        raise ValueError(
+            f"パース結果 0 件 | "
+            f"列名: {headers[:6]} | "
+            f"1行目: {first_row}"
+        )
 
     return sorted(result, key=lambda x: x["code"])
 
