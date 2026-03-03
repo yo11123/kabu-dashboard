@@ -173,7 +173,7 @@ def _build_prompt(
 
 
 def _parse_json(text: str) -> dict:
-    """Claude の応答テキストから JSON を抽出してパースする。"""
+    """LLM の応答テキストから JSON を抽出してパースする。"""
     text = text.strip()
     if "```" in text:
         for part in text.split("```"):
@@ -185,21 +185,75 @@ def _parse_json(text: str) -> dict:
     return json.loads(text)
 
 
+# ─── プロバイダー別 LLM 呼び出し ─────────────────────────────────────────
+
+
+def _call_claude(prompt: str, api_key: str) -> str:
+    """Claude (Anthropic) を呼び出す。"""
+    client = anthropic.Anthropic(api_key=api_key)
+    response = client.messages.create(
+        model="claude-haiku-4-5-20251001",
+        max_tokens=1500,
+        messages=[{"role": "user", "content": prompt}],
+    )
+    return response.content[0].text
+
+
+def _call_openai(prompt: str, api_key: str) -> str:
+    """ChatGPT (OpenAI) を呼び出す。"""
+    from openai import OpenAI
+    client = OpenAI(api_key=api_key)
+    response = client.chat.completions.create(
+        model="gpt-4o-mini",
+        max_tokens=1500,
+        messages=[{"role": "user", "content": prompt}],
+    )
+    return response.choices[0].message.content
+
+
+def _call_gemini(prompt: str, api_key: str) -> str:
+    """Gemini (Google) を呼び出す。"""
+    import google.generativeai as genai
+    genai.configure(api_key=api_key)
+    model = genai.GenerativeModel("gemini-1.5-flash")
+    response = model.generate_content(prompt)
+    return response.text
+
+
+def _classify_error(err_str: str, provider: str) -> str:
+    """エラー文字列から分かりやすいメッセージを生成する。"""
+    s = err_str.lower()
+    if "credit balance is too low" in s or "upgrade or purchase credits" in s:
+        return (
+            "💳 APIクレジットが不足しています。\n"
+            "Anthropic コンソール（Plans & Billing）でクレジットを追加してください。"
+        )
+    if "quota" in s or "rate limit" in s or "resource_exhausted" in s:
+        return "⏱️ APIレート制限またはクォータ超過です。しばらく待ってから再試行してください。"
+    if "invalid_api_key" in s or "incorrect api key" in s or "api_key_invalid" in s:
+        return f"🔑 APIキーが無効です（{provider}）。入力した API キーを確認してください。"
+    if "authentication" in s or "unauthorized" in s or "permission" in s:
+        return f"🔑 認証エラーです（{provider}）。APIキーを確認してください。"
+    return f"分析エラー ({provider}): {err_str[:300]}"
+
+
 @st.cache_data(ttl=86400)
 def get_comprehensive_analysis(
     ticker: str,
     company_name: str,
-    tech_json: str,           # calc_technical_summary の結果を JSON 化したもの
-    fund_text: str,           # format_fundamental_text の結果
+    tech_json: str,            # calc_technical_summary の結果を JSON 化したもの
+    fund_text: str,            # format_fundamental_text の結果
     news_titles: tuple[str, ...],
+    provider: str = "claude",  # "claude" | "openai" | "gemini"
+    api_key: str = "",         # ユーザー入力キー（空なら secrets から Claude キーを使用）
 ) -> dict:
     """
-    Claude を使って銘柄の総合AI分析を行う（24時間キャッシュ）。
+    指定されたプロバイダーの LLM で銘柄の総合AI分析を行う（24時間キャッシュ）。
 
     Returns:
         technical_score, fundamental_score, news_score, overall_score (0-100),
         judgment, technical_detail, fundamental_detail, news_detail,
-        overall_detail, opportunities, risks
+        overall_detail, opportunities, risks, error (bool)
     """
     _default = {
         "technical_score": 50,
@@ -213,45 +267,70 @@ def get_comprehensive_analysis(
         "overall_detail": "",
         "opportunities": [],
         "risks": [],
+        "error": False,
     }
 
-    try:
-        api_key = st.secrets.get("ANTHROPIC_API_KEY", "")
-        if not api_key or len(api_key) < 20:
-            return {
-                **_default,
-                "overall_detail": "ANTHROPIC_API_KEY が設定されていません。.streamlit/secrets.toml を確認してください。",
-                "error": True,
-            }
+    _provider_labels = {
+        "claude": "Claude (Anthropic)",
+        "openai": "ChatGPT (OpenAI)",
+        "gemini": "Gemini (Google)",
+    }
+    label = _provider_labels.get(provider, provider)
 
+    try:
         tech = json.loads(tech_json)
         prompt = _build_prompt(ticker, company_name, tech, fund_text, news_titles)
 
-        client = anthropic.Anthropic(api_key=api_key)
-        response = client.messages.create(
-            model="claude-haiku-4-5-20251001",
-            max_tokens=1500,
-            messages=[{"role": "user", "content": prompt}],
-        )
-        result = _parse_json(response.content[0].text)
+        if provider == "claude":
+            # Claude は secrets の共用キー or ユーザー入力キーを使用
+            key = api_key.strip() or st.secrets.get("ANTHROPIC_API_KEY", "")
+            if not key or len(key) < 20:
+                return {
+                    **_default,
+                    "overall_detail": "Anthropic API キーが設定されていません。サイドバーにキーを入力するか、secrets.toml を確認してください。",
+                    "error": True,
+                }
+            text = _call_claude(prompt, key)
+
+        elif provider == "openai":
+            key = api_key.strip()
+            if not key:
+                return {
+                    **_default,
+                    "overall_detail": "OpenAI API キーが入力されていません。サイドバーの「AI 分析設定」にキーを入力してください。",
+                    "error": True,
+                }
+            text = _call_openai(prompt, key)
+
+        elif provider == "gemini":
+            key = api_key.strip()
+            if not key:
+                return {
+                    **_default,
+                    "overall_detail": "Google AI (Gemini) API キーが入力されていません。サイドバーの「AI 分析設定」にキーを入力してください。",
+                    "error": True,
+                }
+            text = _call_gemini(prompt, key)
+
+        else:
+            return {
+                **_default,
+                "overall_detail": f"不明なプロバイダー: {provider}",
+                "error": True,
+            }
+
+        result = _parse_json(text)
 
         # 数値フィールドを int に正規化
-        for key in ("technical_score", "fundamental_score", "news_score", "overall_score"):
-            result[key] = int(result.get(key, 50))
+        for k in ("technical_score", "fundamental_score", "news_score", "overall_score"):
+            result[k] = int(result.get(k, 50))
 
+        result["error"] = False
+        result["provider"] = label
         return result
 
     except Exception as e:
-        err_str = str(e)
-        if "credit balance is too low" in err_str or "upgrade or purchase credits" in err_str:
-            detail = (
-                "💳 APIクレジットが不足しています。\n"
-                "Anthropic コンソール（Plans & Billing）でクレジットを追加してください。"
-            )
-        elif "invalid_api_key" in err_str or "authentication" in err_str.lower():
-            detail = "🔑 APIキーが無効です。secrets.toml の ANTHROPIC_API_KEY を確認してください。"
-        else:
-            detail = f"分析エラー ({type(e).__name__}): {err_str[:300]}"
+        detail = _classify_error(str(e), label)
         return {**_default, "overall_detail": detail, "error": True}
 
 

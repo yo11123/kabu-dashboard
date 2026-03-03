@@ -393,6 +393,42 @@ def main() -> None:
         show_news = st.checkbox("● ニュースマーカー", value=True)
 
         st.divider()
+        st.subheader("🤖 AI 分析設定")
+
+        ai_provider = st.selectbox(
+            "プロバイダー",
+            options=["claude", "openai", "gemini"],
+            format_func=lambda x: {
+                "claude": "Claude (Anthropic)",
+                "openai": "ChatGPT (OpenAI)",
+                "gemini": "Gemini (Google)",
+            }[x],
+            key="ai_provider_select",
+        )
+
+        _has_owner_claude_key = bool(st.secrets.get("ANTHROPIC_API_KEY", ""))
+        if ai_provider == "claude" and _has_owner_claude_key:
+            st.caption("✅ Anthropic キー設定済み（共用）")
+            ai_api_key = ""
+        else:
+            _placeholder = {
+                "claude": "sk-ant-...",
+                "openai": "sk-...",
+                "gemini": "AIza...",
+            }[ai_provider]
+            ai_api_key = st.text_input(
+                "API キー",
+                type="password",
+                placeholder=_placeholder,
+                help="入力したキーはこのブラウザセッション中のみ保持されます",
+                key=f"ai_key_{ai_provider}",
+            )
+            if ai_api_key:
+                st.caption("✅ キー入力済み（セッション中のみ保持）")
+            else:
+                st.caption("⬜ API キーを入力してください")
+
+        st.divider()
         st.caption(market_status_label())
 
     # ─── データ取得（常に上場来全データ）────────────────────────────
@@ -516,24 +552,31 @@ def main() -> None:
 
     # ─── AI 総合分析 ────────────────────────────────────────────────
     st.divider()
-    st.subheader("🤖 AI 総合分析")
+    _provider_label = {
+        "claude": "Claude (Anthropic)",
+        "openai": "ChatGPT (OpenAI)",
+        "gemini": "Gemini (Google)",
+    }.get(ai_provider, ai_provider)
+    st.subheader(f"🤖 AI 総合分析　({_provider_label})")
 
     if "analyzed_tickers" not in st.session_state:
         st.session_state.analyzed_tickers = set()
 
-    already_analyzed = ticker in st.session_state.analyzed_tickers
+    # プロバイダーが変わったら別の分析扱いにする
+    _analyzed_key = f"{ticker}::{ai_provider}"
+    already_analyzed = _analyzed_key in st.session_state.analyzed_tickers
 
     btn_col, note_col = st.columns([2, 5])
     if btn_col.button("🤖 AI総合分析を実行", type="primary", key="main_ai_btn", use_container_width=True):
-        st.session_state.analyzed_tickers.add(ticker)
+        st.session_state.analyzed_tickers.add(_analyzed_key)
         already_analyzed = True
 
     if already_analyzed:
         note_col.caption("✅ 分析済み（結果は24時間キャッシュされます）")
     else:
         note_col.caption(
-            "テクニカル・ファンダメンタル・ニュースを総合した AI 分析レポートを生成します。"
-            "（Claude API の利用料が発生します）"
+            f"テクニカル・ファンダメンタル・ニュースを総合した AI 分析レポートを生成します。"
+            f"（{_provider_label} API の利用料が発生します）"
         )
 
     if already_analyzed:
@@ -550,6 +593,8 @@ def main() -> None:
                 tech_json=tech_json,
                 fund_text=fund_text,
                 news_titles=news_titles,
+                provider=ai_provider,
+                api_key=ai_api_key,
             )
         _render_ai_results(_ai_result)
 
