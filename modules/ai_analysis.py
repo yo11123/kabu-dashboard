@@ -213,10 +213,12 @@ def _call_openai(prompt: str, api_key: str) -> str:
 
 def _call_gemini(prompt: str, api_key: str) -> str:
     """Gemini (Google) を呼び出す。"""
-    import google.generativeai as genai
-    genai.configure(api_key=api_key)
-    model = genai.GenerativeModel("gemini-1.5-flash")
-    response = model.generate_content(prompt)
+    from google import genai
+    client = genai.Client(api_key=api_key)
+    response = client.models.generate_content(
+        model="gemini-2.0-flash",
+        contents=prompt,
+    )
     return response.text
 
 
