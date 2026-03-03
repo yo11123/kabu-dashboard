@@ -1,4 +1,7 @@
+import io
 import time
+import urllib.request
+
 import pandas as pd
 import yfinance as yf
 import streamlit as st
@@ -71,6 +74,52 @@ def fetch_ticker_info(ticker: str) -> dict:
         }
     except Exception:
         return {"name": ticker, "sector": "", "market_cap": None, "website": "", "currency": "JPY"}
+
+
+@st.cache_data(ttl=86400)
+def load_all_tse_stocks() -> list[dict]:
+    """
+    JPX（日本取引所グループ）から東証全上場銘柄リストを取得する（TTL=24時間）。
+    取得失敗時は空リストを返す（呼び出し元が日経225にフォールバック）。
+
+    ソース: https://www.jpx.co.jp/markets/statistics-equities/misc/01.html
+    """
+    url = (
+        "https://www.jpx.co.jp/markets/statistics-equities/misc/"
+        "tvdivq0000001vg2-att/data_j.xls"
+    )
+    try:
+        req = urllib.request.Request(url, headers={"User-Agent": "Mozilla/5.0"})
+        with urllib.request.urlopen(req, timeout=15) as resp:
+            raw = resp.read()
+
+        df = pd.read_excel(io.BytesIO(raw), header=0, engine="xlrd")
+
+        result = []
+        for _, row in df.iterrows():
+            try:
+                # コード列は数値として読み込まれる場合がある（例: 7203.0）
+                code_raw = str(row.iloc[0]).replace(".0", "").strip()
+                if not code_raw.isdigit() or not (4 <= len(code_raw) <= 5):
+                    continue
+                code = code_raw.zfill(4)
+                name = str(row.iloc[1]).strip()
+                market = str(row.iloc[2]).strip() if len(row) > 2 else ""
+                sector = str(row.iloc[4]).strip() if len(row) > 4 else ""
+                if name and name != "nan":
+                    result.append({
+                        "code": f"{code}.T",
+                        "name": name,
+                        "market": market,
+                        "sector": sector,
+                    })
+            except Exception:
+                continue
+
+        return sorted(result, key=lambda x: x["code"])
+
+    except Exception:
+        return []
 
 
 def load_tickers(filepath: str) -> list[dict]:

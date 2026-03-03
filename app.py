@@ -9,6 +9,7 @@ from modules.data_loader import (
     fetch_stock_data_max_realtime,
     fetch_ticker_info,
     load_tickers,
+    load_all_tse_stocks,
 )
 from modules.indicators import calc_sma, calc_ema, calc_bollinger_bands, calc_volume_ma
 from modules.chart import create_candlestick_chart
@@ -181,7 +182,11 @@ def main() -> None:
 
     st.title("📊 日本株ダッシュボード")
 
-    tickers = load_tickers(TICKERS_PATH)
+    nikkei225 = load_tickers(TICKERS_PATH)
+
+    # 東証全上場銘柄（JPX データ 24h キャッシュ）。取得失敗時は日経225にフォールバック
+    all_tse = load_all_tse_stocks()
+    search_pool = all_tse if all_tse else nikkei225
 
     # ─── サイドバー ─────────────────────────────────────────────────
     with st.sidebar:
@@ -190,26 +195,39 @@ def main() -> None:
         # ── 銘柄検索（コード / 名称どちらでも可）──
         search_query = st.text_input(
             "銘柄検索",
-            placeholder="例: トヨタ・7203・ソニー",
+            placeholder="例: トヨタ・7203・ソニー・電機",
             key="ticker_search",
         )
 
-        # 検索クエリでフィルタリング（前方・部分一致、大文字小文字無視）
         q = search_query.strip().lower()
+        MAX_DISPLAY = 100  # 一覧に表示する最大件数
+
         if q:
-            filtered = [
-                t for t in tickers
+            matched = [
+                t for t in search_pool
                 if q in t["code"].lower() or q in t["name"].lower()
             ]
-            if not filtered:
-                st.caption("該当なし — 全銘柄を表示中")
-                filtered = tickers
-            else:
-                st.caption(f"{len(filtered)} 件ヒット")
-        else:
-            filtered = tickers
+            total_hits = len(matched)
+            filtered = matched[:MAX_DISPLAY]
 
-        ticker_labels = [f"{t['code']}  {t['name']}" for t in filtered]
+            if not filtered:
+                st.caption("該当なし — 日経225を表示")
+                filtered = nikkei225
+            elif total_hits > MAX_DISPLAY:
+                st.caption(f"上位 {MAX_DISPLAY} 件を表示（計 {total_hits} 件ヒット）")
+            else:
+                st.caption(f"{total_hits} 件ヒット")
+        else:
+            filtered = nikkei225  # デフォルト表示は日経225
+
+        # 市場区分があれば表示に加える（複数候補の区別に有用）
+        def _label(t: dict) -> str:
+            market = t.get("market", "")
+            if market and market != "nan":
+                return f"{t['code']}  {t['name']}  [{market}]"
+            return f"{t['code']}  {t['name']}"
+
+        ticker_labels = [_label(t) for t in filtered]
 
         # カレンダーページから遷移してきた場合はその銘柄をデフォルト選択
         cal_ticker = st.session_state.pop("calendar_selected_ticker", None)
@@ -218,7 +236,7 @@ def main() -> None:
                 (i for i, t in enumerate(filtered) if t["code"] == cal_ticker), 0
             )
         elif q:
-            default_idx = 0  # 検索時は先頭候補を選択
+            default_idx = 0  # 検索時は先頭候補
         else:
             default_idx = next(
                 (i for i, t in enumerate(filtered) if t["code"] == "7203.T"), 0
@@ -232,8 +250,8 @@ def main() -> None:
         )
         selected_ticker = selected_label.split()[0]
 
-        # 日経225以外のコードを直接入力する場合（省略可）
-        manual = st.text_input("日経225外の銘柄（例: 6758.T）", value="")
+        # 海外ETF・ADRなど東証外のコードを直接入力する場合（省略可）
+        manual = st.text_input("海外ETF等の直接入力（例: VTI）", value="")
         ticker = manual.strip() if manual.strip() else selected_ticker
 
         period = st.select_slider(
