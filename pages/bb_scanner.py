@@ -50,11 +50,19 @@ def _run_scan(
 ) -> pd.DataFrame:
     """
     yfinance 一括ダウンロードで 3ヶ月分データを取得し、
-    BB 2σ沿い上昇ブレイク銘柄をスクリーニングする。
+    「上昇中の BB +2σ に沿って上がり始めた」銘柄をスクリーニングする。
+
+    スクリーニング条件（全て AND）:
+      1. 現在値 >= BB上限 × threshold（上限ライン付近）
+      2. BB上限自体が右肩上がり（バンドが上昇中）
+      3. BB中心（移動平均）も上昇中（上昇トレンド確認）
+      4. バンド幅が拡大中（モメンタム増加）
+      5. lookback 日前は上限に達していなかった（新規ブレイク）
+      6. 出来高が平均以上（ブレイクアウトの裏付け）
     """
     name_map   = dict(zip(ticker_codes, ticker_names))
     market_map = dict(zip(ticker_codes, ticker_markets))
-    min_bars   = bb_period + lookback + 5
+    min_bars   = bb_period + max(lookback, 10) + 5
     single     = len(ticker_codes) == 1
 
     try:
@@ -92,53 +100,81 @@ def _run_scan(
             df = calc_volume_ma(df)
             df.dropna(subset=["BB_upper", "BB_middle", "BB_lower"], inplace=True)
 
-            if len(df) < lookback + 2:
+            n = len(df)
+            if n < 12:
                 continue
 
-            latest = df.iloc[-1]
+            # インデックス参照用スナップショット
+            p0 = df.iloc[-1]   # 現在
+            p3 = df.iloc[-4]   # 3営業日前
+            p6 = df.iloc[-7]   # 6営業日前（存在チェック済み: n>=12）
 
-            # ── スクリーニング ──────────────────────────────────────
-            # 1. 現在値が BB 上限付近
-            if pd.isna(latest["BB_upper"]) or latest["Close"] < latest["BB_upper"] * threshold:
+            # ── 条件1: 現在値が BB 上限付近 ──────────────────────────
+            if pd.isna(p0["BB_upper"]) or p0["Close"] < p0["BB_upper"] * threshold:
                 continue
 
-            # 2. BB 中心より上（上昇トレンド確認）
-            if latest["Close"] <= latest["BB_middle"]:
+            # ── 条件2: BB 上限自体が右肩上がり ───────────────────────
+            # 「3日前より高く、6日前より高い」＝ 連続的に上昇中
+            if not (p0["BB_upper"] > p3["BB_upper"] > p6["BB_upper"]):
                 continue
 
-            # 3. lookback 日前は BB 上限に達していなかった（新規性）
-            prev = df.iloc[-(lookback + 1)]
-            if not pd.isna(prev["BB_upper"]) and prev["Close"] >= prev["BB_upper"] * threshold:
+            # ── 条件3: BB 中心（移動平均）も上昇中 ───────────────────
+            if not (p0["BB_middle"] > p3["BB_middle"] > p6["BB_middle"]):
                 continue
 
-            # ── メトリクス ─────────────────────────────────────────
-            prev_close  = float(df.iloc[-2]["Close"]) if len(df) >= 2 else float(latest["Close"])
-            change_pct  = (float(latest["Close"]) - prev_close) / prev_close * 100
+            # ── 条件4: バンド幅が拡大中（モメンタム増加）────────────
+            bw_now  = float(p0["BB_upper"]) - float(p0["BB_lower"])
+            bw_prev = float(p6["BB_upper"]) - float(p6["BB_lower"])
+            if bw_now <= bw_prev:
+                continue
 
-            bb_width = float(latest["BB_upper"]) - float(latest["BB_lower"])
-            bb_pos   = (float(latest["Close"]) - float(latest["BB_lower"])) / bb_width if bb_width > 0 else 0
+            # ── 条件5: lookback 日前は上限に未達（新規ブレイク）─────
+            if n > lookback + 1:
+                px = df.iloc[-(lookback + 1)]
+                if not pd.isna(px["BB_upper"]) and px["Close"] >= px["BB_upper"] * threshold:
+                    continue
 
-            from_upper = (float(latest["Close"]) / float(latest["BB_upper"]) - 1) * 100
-
-            # 出来高比（最新 / 25日MA）
-            vol_ratio = None
+            # ── 条件6: 出来高が平均以上（ブレイクの裏付け）──────────
             vol_ma_col = next((c for c in df.columns if c.startswith("Vol_M")), None)
-            if vol_ma_col and float(latest[vol_ma_col]) > 0:
-                vol_ratio = float(latest["Volume"]) / float(latest[vol_ma_col])
+            vol_ratio = None
+            if vol_ma_col:
+                vma = float(p0[vol_ma_col])
+                if vma > 0:
+                    vol_ratio = float(p0["Volume"]) / vma
+                    if vol_ratio < 0.8:   # 出来高が平均の 80% 未満は除外
+                        continue
 
-            walk_days = _count_walk_days(df["Close"].iloc[-20:], df["BB_upper"].iloc[-20:], threshold)
+            # ── メトリクス計算 ────────────────────────────────────────
+            prev_close = float(df.iloc[-2]["Close"]) if n >= 2 else float(p0["Close"])
+            change_pct = (float(p0["Close"]) - prev_close) / prev_close * 100
+
+            bb_width = float(p0["BB_upper"]) - float(p0["BB_lower"])
+            bb_pos   = (float(p0["Close"]) - float(p0["BB_lower"])) / bb_width if bb_width > 0 else 0
+            from_upper = (float(p0["Close"]) / float(p0["BB_upper"]) - 1) * 100
+
+            # BB 上限の 5 営業日傾き（%/日）
+            if n >= 6:
+                bb_slope_pct = (float(p0["BB_upper"]) - float(p6["BB_upper"])) \
+                               / float(p6["BB_upper"]) * 100
+            else:
+                bb_slope_pct = 0.0
+
+            walk_days = _count_walk_days(
+                df["Close"].iloc[-20:], df["BB_upper"].iloc[-20:], threshold
+            )
 
             results.append({
-                "コード":    code,
-                "銘柄名":    name_map.get(code, code),
-                "市場":      market_map.get(code, ""),
-                "現在値":    int(round(float(latest["Close"]))),
-                "前日比%":   round(change_pct, 2),
-                "BB上限":    int(round(float(latest["BB_upper"]))),
-                "BB乖離%":   round(from_upper, 2),
-                "継続日数":  walk_days,
+                "コード":      code,
+                "銘柄名":      name_map.get(code, code),
+                "市場":        market_map.get(code, ""),
+                "現在値":      int(round(float(p0["Close"]))),
+                "前日比%":     round(change_pct, 2),
+                "BB上限":      int(round(float(p0["BB_upper"]))),
+                "BB乖離%":     round(from_upper, 2),
+                "BB上昇率%":   round(bb_slope_pct, 2),
+                "継続日数":    walk_days,
                 "BBポジション": round(bb_pos * 100, 1),
-                "出来高比":  round(vol_ratio, 2) if vol_ratio is not None else None,
+                "出来高比":    round(vol_ratio, 2) if vol_ratio is not None else None,
             })
 
         except Exception:
@@ -148,9 +184,9 @@ def _run_scan(
         return pd.DataFrame()
 
     df_result = pd.DataFrame(results)
-    # 継続日数が少ない（新しいブレイク）順 → BBポジション高い順
+    # BB 上昇率が高く、かつ継続日数が少ない（新しいブレイク）順
     df_result = df_result.sort_values(
-        ["継続日数", "BBポジション"],
+        ["継続日数", "BB上昇率%"],
         ascending=[True, False],
     ).reset_index(drop=True)
     return df_result
@@ -252,12 +288,15 @@ def main() -> None:
             st.markdown("""
 | 条件 | 内容 |
 |------|------|
-| **① BB 上限到達** | 終値 ≥ BB 上限（2σ）× 判定 % |
-| **② 上昇トレンド** | 終値 > BB 中心（20 日移動平均）|
-| **③ 新規ブレイク** | N 日前は BB 上限に達していなかった |
+| **① 現在値が上限付近** | 終値 ≥ BB 上限（2σ）× 判定 % |
+| **② BB 上限が右肩上がり** | 現在 > 3日前 > 6日前（バンド自体が上昇中）|
+| **③ BB 中心も上昇中** | 移動平均が 3日・6日前より高い（上昇トレンド確認）|
+| **④ バンド幅が拡大中** | 現在の幅 > 6日前の幅（モメンタム増加）|
+| **⑤ 新規ブレイク** | N 日前は BB 上限に未達（ずっと居座っている銘柄を除外）|
+| **⑥ 出来高裏付け** | 直近出来高 ≥ 25日平均の 80%（空振りブレイクを除外）|
 
-**継続日数**（少ない = 新しいブレイク）で昇順ソートし、
-最もフレッシュなブレイクアウト銘柄が上に来ます。
+**BB 上昇率%**（高い）→ **継続日数**（少ない）順でソートし、
+勢いが強く、かつ最もフレッシュなブレイクアウト銘柄が上に来ます。
             """)
         return
 
@@ -275,9 +314,9 @@ def main() -> None:
     c4.metric("新規性チェック", f"{meta.get('lookback', 5)} 日前")
 
     st.caption(
-        f"**{meta.get('universe', '')}** のうち BB 2σ 上限を"
-        f"直近 {meta.get('lookback', 5)} 日以内にブレイクした銘柄 — "
-        "継続日数（少）→ BBポジション（高）順"
+        f"**{meta.get('universe', '')}** のうち「上昇中 BB +2σ に沿って"
+        f"直近 {meta.get('lookback', 5)} 日以内にブレイクした」銘柄 — "
+        "継続日数（少）→ BB上昇率（高）順"
     )
 
     st.divider()
@@ -289,18 +328,20 @@ def main() -> None:
         display_df,
         use_container_width=True,
         column_config={
-            "コード":    st.column_config.TextColumn("コード",    width="small"),
-            "銘柄名":    st.column_config.TextColumn("銘柄名",    width="medium"),
-            "市場":      st.column_config.TextColumn("市場",      width="small"),
-            "現在値":    st.column_config.NumberColumn("現在値",   format="¥%d"),
-            "前日比%":   st.column_config.NumberColumn("前日比%",  format="%.2f%%"),
-            "BB上限":    st.column_config.NumberColumn("BB 上限",  format="¥%d"),
-            "BB乖離%":   st.column_config.NumberColumn("BB 乖離%", format="%.2f%%",
-                         help="現在値が BB 上限を何 % 上回っているか（+ は上方突破）"),
-            "継続日数":  st.column_config.NumberColumn("継続日数", format="%d 日",
-                         help="BB 上限付近に連続して滞在している日数（1 日 = 今日ブレイク）"),
-            "出来高比":  st.column_config.NumberColumn("出来高比", format="%.2f ×",
-                         help="直近出来高 / 25 日平均出来高"),
+            "コード":     st.column_config.TextColumn("コード",     width="small"),
+            "銘柄名":     st.column_config.TextColumn("銘柄名",     width="medium"),
+            "市場":       st.column_config.TextColumn("市場",       width="small"),
+            "現在値":     st.column_config.NumberColumn("現在値",    format="¥%d"),
+            "前日比%":    st.column_config.NumberColumn("前日比%",   format="%.2f%%"),
+            "BB上限":     st.column_config.NumberColumn("BB 上限",   format="¥%d"),
+            "BB乖離%":    st.column_config.NumberColumn("BB 乖離%",  format="%.2f%%",
+                          help="現在値が BB 上限を何 % 上回っているか（+ は上方突破）"),
+            "BB上昇率%":  st.column_config.NumberColumn("BB 上昇率%", format="%.2f%%",
+                          help="6営業日前と比べた BB 上限の上昇率（高いほど勢いが強い）"),
+            "継続日数":   st.column_config.NumberColumn("継続日数",  format="%d 日",
+                          help="BB 上限付近に連続して滞在している日数（1 日 = 今日ブレイク）"),
+            "出来高比":   st.column_config.NumberColumn("出来高比",  format="%.2f ×",
+                          help="直近出来高 / 25 日平均出来高"),
         },
         hide_index=True,
     )
