@@ -92,52 +92,49 @@ _JPX_HEADERS = {
 }
 
 
-def _validate_jpx_df(df: pd.DataFrame) -> bool:
-    """最初の列に 4 桁の銘柄コードがあれば正しいデータとみなす。"""
-    if len(df) <= 10:
-        return False
-    sample = str(df.iloc[0, 0]).replace(".0", "").strip()
-    return sample.isdigit() and len(sample) == 4
-
-
 def _read_jpx_excel(raw: bytes) -> pd.DataFrame:
     """
-    .xls / .xlsx / HTML-as-XLS の各形式に対応して DataFrame を返す。
-    JPX は HTML テーブルを .xls 拡張子で配信することがある。
+    .xls(BIFF) / .xlsx / HTML-as-XLS の各形式に対応して DataFrame を返す。
+    各試行で発生したエラーを収集し、失敗時に全件を例外メッセージに含める。
     """
-    # ── 1. Excel エンジンで試行 ──────────────────────────────────────
-    for engine in ("xlrd", "openpyxl"):
-        for skiprows in (0, 1, 2):
-            try:
-                df = pd.read_excel(
-                    io.BytesIO(raw), header=skiprows, engine=engine
-                )
-                if _validate_jpx_df(df):
+    errors: list[str] = []
+
+    # ── 1. xlrd（真の XLS / BIFF 形式）──────────────────────────────
+    for skiprows in (0, 1, 2):
+        try:
+            df = pd.read_excel(
+                io.BytesIO(raw), header=skiprows, engine="xlrd"
+            )
+            if len(df) > 100 and len(df.columns) >= 3:
+                return df
+            errors.append(f"xlrd skip={skiprows}: 行数={len(df)} 列数={len(df.columns)}")
+        except Exception as e:
+            errors.append(f"xlrd skip={skiprows}: {type(e).__name__}: {e}")
+
+    # ── 2. openpyxl（XLSX 形式）─────────────────────────────────────
+    for skiprows in (0, 1, 2):
+        try:
+            df = pd.read_excel(
+                io.BytesIO(raw), header=skiprows, engine="openpyxl"
+            )
+            if len(df) > 100 and len(df.columns) >= 3:
+                return df
+            errors.append(f"openpyxl skip={skiprows}: 行数={len(df)} 列数={len(df.columns)}")
+        except Exception as e:
+            errors.append(f"openpyxl skip={skiprows}: {type(e).__name__}: {e}")
+
+    # ── 3. HTML テーブル（偽装 XLS 対策） ───────────────────────────
+    for enc in ("utf-8", "cp932"):
+        try:
+            tables = pd.read_html(io.BytesIO(raw), encoding=enc, flavor="lxml")
+            for df in tables:
+                if len(df) > 100 and len(df.columns) >= 3:
                     return df
-            except Exception:
-                continue
-
-    # ── 2. HTML テーブルとして読み込み（偽装 XLS 対策） ─────────────
-    try:
-        tables = pd.read_html(io.BytesIO(raw), encoding="utf-8", flavor="lxml")
-        for df in tables:
-            if _validate_jpx_df(df):
-                return df
-    except Exception:
-        pass
-
-    # ── 3. Shift_JIS エンコーディングで HTML 再試行 ─────────────────
-    try:
-        tables = pd.read_html(io.BytesIO(raw), encoding="cp932", flavor="lxml")
-        for df in tables:
-            if _validate_jpx_df(df):
-                return df
-    except Exception:
-        pass
+        except Exception as e:
+            errors.append(f"html enc={enc}: {type(e).__name__}: {e}")
 
     raise ValueError(
-        f"xlrd/openpyxl/HTML いずれでも読み込めませんでした "
-        f"(先頭 {raw[:4]} bytes={raw[:4].hex()})"
+        f"magic={raw[:4].hex()} | " + " | ".join(errors[:8])
     )
 
 
