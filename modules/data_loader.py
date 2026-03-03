@@ -92,24 +92,53 @@ _JPX_HEADERS = {
 }
 
 
+def _validate_jpx_df(df: pd.DataFrame) -> bool:
+    """最初の列に 4 桁の銘柄コードがあれば正しいデータとみなす。"""
+    if len(df) <= 10:
+        return False
+    sample = str(df.iloc[0, 0]).replace(".0", "").strip()
+    return sample.isdigit() and len(sample) == 4
+
+
 def _read_jpx_excel(raw: bytes) -> pd.DataFrame:
     """
-    .xls / .xlsx 両形式、header 行の位置ずれにも対応して DataFrame を返す。
+    .xls / .xlsx / HTML-as-XLS の各形式に対応して DataFrame を返す。
+    JPX は HTML テーブルを .xls 拡張子で配信することがある。
     """
+    # ── 1. Excel エンジンで試行 ──────────────────────────────────────
     for engine in ("xlrd", "openpyxl"):
         for skiprows in (0, 1, 2):
             try:
                 df = pd.read_excel(
                     io.BytesIO(raw), header=skiprows, engine=engine
                 )
-                # 最初の列に 4 桁数字が含まれていれば正しいシートとみなす
-                if len(df) > 10:
-                    sample = str(df.iloc[0, 0]).replace(".0", "").strip()
-                    if sample.isdigit() and len(sample) == 4:
-                        return df
+                if _validate_jpx_df(df):
+                    return df
             except Exception:
                 continue
-    raise ValueError("Excel エンジン xlrd/openpyxl いずれでも読み込めませんでした")
+
+    # ── 2. HTML テーブルとして読み込み（偽装 XLS 対策） ─────────────
+    try:
+        tables = pd.read_html(io.BytesIO(raw), encoding="utf-8", flavor="lxml")
+        for df in tables:
+            if _validate_jpx_df(df):
+                return df
+    except Exception:
+        pass
+
+    # ── 3. Shift_JIS エンコーディングで HTML 再試行 ─────────────────
+    try:
+        tables = pd.read_html(io.BytesIO(raw), encoding="cp932", flavor="lxml")
+        for df in tables:
+            if _validate_jpx_df(df):
+                return df
+    except Exception:
+        pass
+
+    raise ValueError(
+        f"xlrd/openpyxl/HTML いずれでも読み込めませんでした "
+        f"(先頭 {raw[:4]} bytes={raw[:4].hex()})"
+    )
 
 
 def _detect_col(headers: list[str], keywords: list[str], default: int) -> int:
