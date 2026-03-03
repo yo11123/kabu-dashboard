@@ -14,12 +14,14 @@ from modules.indicators import calc_sma, calc_ema, calc_bollinger_bands, calc_vo
 from modules.chart import create_candlestick_chart
 from modules.events import fetch_earnings_events, fetch_news_events
 from modules.market_hours import is_tse_open, get_refresh_interval_ms, market_status_label
+from modules.styles import apply_theme
 
 st.set_page_config(
     page_title="日本株ダッシュボード",
     page_icon="📊",
     layout="wide",
 )
+apply_theme()
 
 TICKERS_PATH = os.path.join(os.path.dirname(__file__), "data", "nikkei225_tickers.txt")
 

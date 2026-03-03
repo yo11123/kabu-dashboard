@@ -14,6 +14,9 @@ from streamlit_autorefresh import st_autorefresh
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from modules.chart import create_candlestick_chart
 from modules.market_hours import market_status_label
+from modules.styles import apply_theme
+
+apply_theme()
 
 JST = pytz.timezone("Asia/Tokyo")
 

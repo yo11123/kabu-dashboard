@@ -14,6 +14,9 @@ import yfinance as yf
 # modules パッケージを参照できるようにパスを追加
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from modules.data_loader import load_tickers
+from modules.styles import apply_theme
+
+apply_theme()
 
 TICKERS_PATH = os.path.join(os.path.dirname(__file__), "..", "data", "nikkei225_tickers.txt")
 

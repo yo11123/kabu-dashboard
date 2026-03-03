@@ -1,8 +1,9 @@
 import pandas as pd
 import plotly.graph_objects as go
 from plotly.subplots import make_subplots
+from modules.styles import BG_BASE, BG_PANEL, GRID_COLOR, TEXT_MUTED
 
-_MA_COLORS = ["#2196F3", "#FF9800", "#4CAF50", "#E91E63", "#9C27B0"]
+_MA_COLORS = ["#3b9ddd", "#e6a817", "#4ade80", "#f472b6", "#a78bfa"]
 
 
 def _fmt(index: pd.Index) -> list[str]:
@@ -254,14 +255,29 @@ def create_candlestick_chart(
     end_idx = view_end_idx if view_end_idx is not None else len(df) - 1
 
     fig.update_layout(
-        title=dict(text=title, font=dict(size=16)),
+        title=dict(
+            text=title,
+            font=dict(
+                family="'IBM Plex Mono', monospace",
+                size=14,
+                color="#1db8a0",
+            ),
+        ),
         xaxis_rangeslider_visible=False,
         height=chart_height,
-        legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1),
+        legend=dict(
+            orientation="h",
+            yanchor="bottom",
+            y=1.02,
+            xanchor="right",
+            x=1,
+            font=dict(family="'IBM Plex Mono', monospace", size=11, color=TEXT_MUTED),
+            bgcolor="rgba(0,0,0,0)",
+        ),
         margin=dict(l=60, r=20, t=60, b=40),
-        plot_bgcolor="#0e1117",
-        paper_bgcolor="#0e1117",
-        font=dict(color="#fafafa"),
+        plot_bgcolor=BG_BASE,
+        paper_bgcolor=BG_PANEL,
+        font=dict(family="'IBM Plex Mono', monospace", color=TEXT_MUTED, size=11),
         dragmode="pan",
         # clickmode="event+select" にすることで、dragmode="pan" のままでも
         # マーカーを単クリックすると Streamlit の on_select イベントが発火する
@@ -272,11 +288,16 @@ def create_candlestick_chart(
     fig.update_xaxes(
         type="category",
         showgrid=True,
-        gridcolor="#2a2a2a",
+        gridcolor=GRID_COLOR,
         tickangle=-45,
         nticks=20,
         range=[view_start_idx - 0.5, end_idx + 0.5],
+        tickfont=dict(family="'IBM Plex Mono', monospace", size=10),
     )
-    fig.update_yaxes(showgrid=True, gridcolor="#2a2a2a")
+    fig.update_yaxes(
+        showgrid=True,
+        gridcolor=GRID_COLOR,
+        tickfont=dict(family="'IBM Plex Mono', monospace", size=10),
+    )
 
     return fig, earnings_trace_idx, news_trace_idx
