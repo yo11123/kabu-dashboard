@@ -300,4 +300,20 @@ def create_candlestick_chart(
         tickfont=dict(family="'IBM Plex Mono', monospace", size=10),
     )
 
+    # ─── Y軸を表示期間の価格レンジにスコープ ─────────────────────────
+    # x軸の category range は全データが対象になるため、y軸は表示スライスから計算する
+    visible_df = df.iloc[view_start_idx : end_idx + 1]
+    y_low  = float(visible_df["Low"].min())
+    y_high = float(visible_df["High"].max())
+    price_range = y_high - y_low
+    # 上側：決算★・ニュース● マーカー（High×1.05）とラベル分の余白を確保
+    # 下側：価格レンジの 5% 分のパディング
+    fig.update_yaxes(
+        range=[
+            y_low  - price_range * 0.05,
+            y_high * 1.15,
+        ],
+        row=1, col=1,
+    )
+
     return fig, earnings_trace_idx, news_trace_idx

@@ -361,9 +361,9 @@ def main() -> None:
 
     # ─── チャートの高さ調整（チャート直上に配置）────────────────────
     chart_height = st.slider(
-        "チャートの高さ", min_value=400, max_value=1200, value=630, step=50,
+        "チャートの高さ", min_value=400, max_value=800, value=580, step=20,
         label_visibility="collapsed",
-        help="チャートの高さを調整（400〜1200px）",
+        help="チャートの高さを調整（400〜800px）",
     )
 
     # ─── チャート描画 ────────────────────────────────────────────────

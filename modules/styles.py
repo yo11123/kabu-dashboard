@@ -230,6 +230,16 @@ hr {
     font-size: 0.68rem;
     color: #4a7a8a;
 }
+
+/* ════════════════════════════════════
+   Plotly チャート — viewport 収まり保証
+   高さスライダーで大きくしても出来高バー
+   が画面外に出ないよう上限を設ける
+════════════════════════════════════ */
+[data-testid="stPlotlyChart"] {
+    max-height: calc(100vh - 320px);
+    overflow: hidden;
+}
 </style>
 """
 
