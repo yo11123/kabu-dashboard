@@ -212,14 +212,21 @@ def _call_openai(prompt: str, api_key: str) -> str:
 
 
 def _call_gemini(prompt: str, api_key: str) -> str:
-    """Gemini (Google) を呼び出す。"""
-    from google import genai
-    client = genai.Client(api_key=api_key)
-    response = client.models.generate_content(
-        model="gemini-2.0-flash",
-        contents=prompt,
+    """Gemini (Google) を REST API で直接呼び出す（SDK の文字コード問題を回避）。"""
+    import json as _json
+    import requests as _req
+
+    url = "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent"
+    payload = {"contents": [{"role": "user", "parts": [{"text": prompt}]}]}
+    resp = _req.post(
+        url,
+        params={"key": api_key},
+        headers={"Content-Type": "application/json; charset=utf-8"},
+        data=_json.dumps(payload, ensure_ascii=False).encode("utf-8"),
+        timeout=60,
     )
-    return response.text
+    resp.raise_for_status()
+    return resp.json()["candidates"][0]["content"]["parts"][0]["text"]
 
 
 def _classify_error(err_str: str, provider: str) -> str:
