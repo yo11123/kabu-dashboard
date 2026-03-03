@@ -216,7 +216,7 @@ def _call_gemini(prompt: str, api_key: str) -> str:
     import json as _json
     import requests as _req
 
-    url = "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent"
+    url = "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent"
     payload = {"contents": [{"role": "user", "parts": [{"text": prompt}]}]}
     resp = _req.post(
         url,
