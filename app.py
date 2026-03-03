@@ -187,22 +187,53 @@ def main() -> None:
     with st.sidebar:
         st.header("銘柄設定")
 
-        ticker_labels = [f"{t['code']}  {t['name']}" for t in tickers]
+        # ── 銘柄検索（コード / 名称どちらでも可）──
+        search_query = st.text_input(
+            "銘柄検索",
+            placeholder="例: トヨタ・7203・ソニー",
+            key="ticker_search",
+        )
+
+        # 検索クエリでフィルタリング（前方・部分一致、大文字小文字無視）
+        q = search_query.strip().lower()
+        if q:
+            filtered = [
+                t for t in tickers
+                if q in t["code"].lower() or q in t["name"].lower()
+            ]
+            if not filtered:
+                st.caption("該当なし — 全銘柄を表示中")
+                filtered = tickers
+            else:
+                st.caption(f"{len(filtered)} 件ヒット")
+        else:
+            filtered = tickers
+
+        ticker_labels = [f"{t['code']}  {t['name']}" for t in filtered]
 
         # カレンダーページから遷移してきた場合はその銘柄をデフォルト選択
         cal_ticker = st.session_state.pop("calendar_selected_ticker", None)
         if cal_ticker:
             default_idx = next(
-                (i for i, t in enumerate(tickers) if t["code"] == cal_ticker), 0
+                (i for i, t in enumerate(filtered) if t["code"] == cal_ticker), 0
             )
+        elif q:
+            default_idx = 0  # 検索時は先頭候補を選択
         else:
             default_idx = next(
-                (i for i, t in enumerate(tickers) if t["code"] == "7203.T"), 0
+                (i for i, t in enumerate(filtered) if t["code"] == "7203.T"), 0
             )
 
-        selected_label = st.selectbox("銘柄を選択", ticker_labels, index=default_idx)
+        selected_label = st.selectbox(
+            "銘柄を選択",
+            ticker_labels,
+            index=min(default_idx, len(ticker_labels) - 1),
+            label_visibility="collapsed",
+        )
         selected_ticker = selected_label.split()[0]
-        manual = st.text_input("直接入力（例: 6758.T）", value="")
+
+        # 日経225以外のコードを直接入力する場合（省略可）
+        manual = st.text_input("日経225外の銘柄（例: 6758.T）", value="")
         ticker = manual.strip() if manual.strip() else selected_ticker
 
         period = st.select_slider(
