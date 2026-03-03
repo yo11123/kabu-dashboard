@@ -424,7 +424,12 @@ def main() -> None:
             # ページ遷移後にウィジェット状態がリセットされていたら永続化辞書から復元する
             _widget_key = f"ai_key_{ai_provider}"
             if _widget_key not in st.session_state:
-                st.session_state[_widget_key] = st.session_state.ai_api_keys.get(ai_provider, "")
+                _saved = st.session_state.ai_api_keys.get(ai_provider, "")
+                # 非ASCII文字（日本語エラーメッセージ等）が混入していたら無効とみなしクリア
+                if not _saved.isascii():
+                    _saved = ""
+                    st.session_state.ai_api_keys[ai_provider] = ""
+                st.session_state[_widget_key] = _saved
 
             ai_api_key = st.text_input(
                 "API キー",

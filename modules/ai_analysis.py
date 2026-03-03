@@ -290,6 +290,14 @@ def get_comprehensive_analysis(
         tech = json.loads(tech_json)
         prompt = _build_prompt(ticker, company_name, tech, fund_text, news_titles)
 
+        # API キーに非ASCII文字が含まれる場合は即座に無効と判断（エラーメッセージ混入対策）
+        if api_key and not api_key.isascii():
+            return {
+                **_default,
+                "overall_detail": "🔑 APIキーが無効です。正しいAPIキーを入力してください（セッションをリロードしてもう一度入力）。",
+                "error": True,
+            }
+
         if provider == "claude":
             # Claude は secrets の共用キー or ユーザー入力キーを使用
             key = api_key.strip() or st.secrets.get("ANTHROPIC_API_KEY", "")
@@ -303,7 +311,7 @@ def get_comprehensive_analysis(
 
         elif provider == "openai":
             key = api_key.strip()
-            if not key:
+            if not key or not key.isascii():
                 return {
                     **_default,
                     "overall_detail": "OpenAI API キーが入力されていません。サイドバーの「AI 分析設定」にキーを入力してください。",
@@ -313,7 +321,7 @@ def get_comprehensive_analysis(
 
         elif provider == "gemini":
             key = api_key.strip()
-            if not key:
+            if not key or not key.isascii():
                 return {
                     **_default,
                     "overall_detail": "Google AI (Gemini) API キーが入力されていません。サイドバーの「AI 分析設定」にキーを入力してください。",
