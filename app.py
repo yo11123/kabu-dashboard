@@ -406,6 +406,10 @@ def main() -> None:
             key="ai_provider_select",
         )
 
+        # ページをまたいで API キーを保持するための永続化辞書
+        if "ai_api_keys" not in st.session_state:
+            st.session_state.ai_api_keys = {}
+
         _has_owner_claude_key = bool(st.secrets.get("ANTHROPIC_API_KEY", ""))
         if ai_provider == "claude" and _has_owner_claude_key:
             st.caption("✅ Anthropic キー設定済み（共用）")
@@ -416,13 +420,23 @@ def main() -> None:
                 "openai": "sk-...",
                 "gemini": "AIza...",
             }[ai_provider]
+
+            # ページ遷移後にウィジェット状態がリセットされていたら永続化辞書から復元する
+            _widget_key = f"ai_key_{ai_provider}"
+            if _widget_key not in st.session_state:
+                st.session_state[_widget_key] = st.session_state.ai_api_keys.get(ai_provider, "")
+
             ai_api_key = st.text_input(
                 "API キー",
                 type="password",
                 placeholder=_placeholder,
                 help="入力したキーはこのブラウザセッション中のみ保持されます",
-                key=f"ai_key_{ai_provider}",
+                key=_widget_key,
             )
+
+            # 永続化辞書に保存（次回ページ遷移後の復元用）
+            st.session_state.ai_api_keys[ai_provider] = ai_api_key
+
             if ai_api_key:
                 st.caption("✅ キー入力済み（セッション中のみ保持）")
             else:
