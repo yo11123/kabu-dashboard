@@ -12,7 +12,7 @@ from modules.data_loader import (
 )
 from modules.indicators import calc_sma, calc_ema, calc_bollinger_bands, calc_volume_ma
 from modules.chart import create_candlestick_chart
-from modules.events import fetch_earnings_events, fetch_news_events
+from modules.events import fetch_earnings_events, fetch_news_events, is_nikkei_publisher
 from modules.market_hours import is_tse_open, get_refresh_interval_ms, market_status_label
 
 st.set_page_config(
@@ -151,10 +151,17 @@ def show_news_dialog(
     all_items = ev.get("all_items", [{"title": ev["title"], "publisher": ev["publisher"],
                                       "link": ev["link"], "uuid": ev["uuid"]}])
 
-    # ── ニュース一覧 ──
+    # ── 日経電子版の銘柄ニュースページへの直リンク ──
+    code_4 = ticker.replace(".T", "").strip()
+    nikkei_url = f"https://www.nikkei.com/nkd/company/news/?scode={code_4}&ba=1"
+    st.link_button("🗞️ 日経電子版で関連ニュースを探す", nikkei_url, use_container_width=True)
+
+    # ── ニュース一覧（日経記事が先頭に並ぶ）──
     st.subheader(f"{company_name}　{ev['date']} のニュース（{len(all_items)} 件）")
     for item in all_items:
         with st.container(border=True):
+            if is_nikkei_publisher(item.get("publisher", "")):
+                st.caption("🗞️ 日本経済新聞")
             st.markdown(f"**{item['title']}**")
             st.caption(f"出典: {item['publisher']}")
             if item.get("link"):
@@ -261,9 +268,12 @@ def main() -> None:
     chart_end = df.index[-1].strftime("%Y-%m-%d")
 
     with st.spinner("イベントデータを取得中..."):
-        earnings_events = fetch_earnings_events(ticker, chart_start, chart_end) if show_earnings else []
-        news_events = fetch_news_events(ticker, chart_start, chart_end) if show_news else []
         ticker_info = fetch_ticker_info(ticker)
+        earnings_events = fetch_earnings_events(ticker, chart_start, chart_end) if show_earnings else []
+        # company_name を渡すことで Google News RSS の日経検索精度を高める
+        news_events = fetch_news_events(
+            ticker, chart_start, chart_end, ticker_info.get("name", "")
+        ) if show_news else []
 
     # ─── 指標サマリ行（表示範囲の値を使用）─────────────────────────
     df_view = df.iloc[view_start_idx:]
