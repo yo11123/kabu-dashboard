@@ -9,6 +9,7 @@ from modules.fundamental import (
     fetch_fundamental_yfinance,
     format_fundamental_text,
 )
+from modules.margin import fetch_margin_data, format_margin_text
 
 
 # ─── テクニカル指標計算 ──────────────────────────────────────────────────
@@ -45,6 +46,35 @@ def _calc_macd(close: pd.Series) -> dict:
     }
 
 
+def _calc_stochastic(df: pd.DataFrame, k: int = 14, d: int = 3) -> dict:
+    """ストキャスティクス（%K・%D）を計算して直近値を返す。"""
+    if len(df) < k:
+        return {}
+    low_min = df["Low"].rolling(k).min()
+    high_max = df["High"].rolling(k).max()
+    denom = (high_max - low_min).replace(0, float("nan"))
+    stoch_k = (df["Close"] - low_min) / denom * 100
+    stoch_d = stoch_k.rolling(d).mean()
+    kv = stoch_k.iloc[-1]
+    dv = stoch_d.iloc[-1]
+    return {
+        "k": round(float(kv), 1) if kv == kv else None,
+        "d": round(float(dv), 1) if dv == dv else None,
+    }
+
+
+def _calc_cci(df: pd.DataFrame, period: int = 20) -> float | None:
+    """CCI（商品チャンネル指数）の直近値を返す。"""
+    if len(df) < period:
+        return None
+    tp = (df["High"] + df["Low"] + df["Close"]) / 3
+    sma_tp = tp.rolling(period).mean()
+    mean_dev = tp.rolling(period).apply(lambda x: abs(x - x.mean()).mean())
+    cci = (tp - sma_tp) / (0.015 * mean_dev.replace(0, float("nan")))
+    val = cci.iloc[-1]
+    return round(float(val), 1) if val == val else None
+
+
 def calc_technical_summary(df: pd.DataFrame) -> dict:
     """価格データからテクニカル指標のサマリーを生成する。"""
     close = df["Close"]
@@ -52,6 +82,8 @@ def calc_technical_summary(df: pd.DataFrame) -> dict:
 
     rsi = _calc_rsi(close, 14)
     macd_data = _calc_macd(close)
+    stoch_data = _calc_stochastic(df)
+    cci = _calc_cci(df)
 
     sma25 = float(close.rolling(25).mean().iloc[-1]) if len(close) >= 25 else None
     sma75 = float(close.rolling(75).mean().iloc[-1]) if len(close) >= 75 else None
@@ -83,6 +115,8 @@ def calc_technical_summary(df: pd.DataFrame) -> dict:
         "current_price": round(last, 1),
         "rsi": rsi,
         "macd": macd_data,
+        "stochastic": stoch_data,
+        "cci": cci,
         "above_sma25": bool(last > sma25) if sma25 is not None else None,
         "above_sma75": bool(last > sma75) if sma75 is not None else None,
         "pct_from_52w_high": pct_from_high,
@@ -101,6 +135,7 @@ def _build_prompt(
     tech: dict,
     fund_text: str,
     news_titles: tuple[str, ...],
+    margin_text: str = "",
 ) -> str:
     """分析用プロンプトを生成する。"""
     news_text = (
@@ -131,8 +166,34 @@ def _build_prompt(
     else:
         rsi_str = f"{rsi}（中立圏）"
 
+    stoch = tech.get("stochastic", {})
+    sk = stoch.get("k")
+    sd = stoch.get("d")
+    if sk is not None:
+        if sk > 80:
+            stoch_str = f"%K={sk}・%D={sd}（買われ過ぎ圏）"
+        elif sk < 20:
+            stoch_str = f"%K={sk}・%D={sd}（売られ過ぎ圏）"
+        else:
+            stoch_str = f"%K={sk}・%D={sd}（中立圏）"
+    else:
+        stoch_str = "N/A"
+
+    cci = tech.get("cci")
+    if cci is not None:
+        if cci > 100:
+            cci_str = f"{cci}（買われ過ぎ圏）"
+        elif cci < -100:
+            cci_str = f"{cci}（売られ過ぎ圏）"
+        else:
+            cci_str = f"{cci}（中立圏）"
+    else:
+        cci_str = "N/A"
+
     above25 = tech.get("above_sma25")
     above75 = tech.get("above_sma75")
+
+    margin_section = f"\n## 信用取引情報\n{margin_text}" if margin_text else ""
 
     return f"""あなたは日本株の総合アナリストです。以下のデータをもとに銘柄を多角的に分析し、JSONのみで回答してください。
 
@@ -143,6 +204,8 @@ def _build_prompt(
 - 現在値: ¥{tech.get('current_price', 'N/A'):,}
 - RSI(14): {rsi_str}
 - MACD: {macd_str}
+- ストキャスティクス(14,3): {stoch_str}
+- CCI(20): {cci_str}
 - SMA25より: {'上方' if above25 else '下方' if above25 is False else 'N/A'}
 - SMA75より: {'上方' if above75 else '下方' if above75 is False else 'N/A'}
 - 52週高値比: {tech.get('pct_from_52w_high', 'N/A')}%
@@ -151,7 +214,7 @@ def _build_prompt(
 - ボリンジャー位置: {tech.get('bb_sigma', 'N/A')}σ
 
 ## ファンダメンタル
-{fund_text}
+{fund_text}{margin_section}
 
 ## 最近のニュース（直近30日）
 {news_text}
@@ -253,6 +316,7 @@ def get_comprehensive_analysis(
     tech_json: str,            # calc_technical_summary の結果を JSON 化したもの
     fund_text: str,            # format_fundamental_text の結果
     news_titles: tuple[str, ...],
+    margin_text: str = "",     # format_margin_text の結果（信用残・貸借倍率）
     provider: str = "claude",  # "claude" | "openai" | "gemini"
     api_key: str = "",         # ユーザー入力キー（空なら secrets から Claude キーを使用）
 ) -> dict:
@@ -288,7 +352,7 @@ def get_comprehensive_analysis(
 
     try:
         tech = json.loads(tech_json)
-        prompt = _build_prompt(ticker, company_name, tech, fund_text, news_titles)
+        prompt = _build_prompt(ticker, company_name, tech, fund_text, news_titles, margin_text)
 
         # API キーに非ASCII文字が含まれる場合は即座に無効と判断（エラーメッセージ混入対策）
         if api_key and not api_key.isascii():
@@ -356,10 +420,10 @@ def prepare_analysis_inputs(
     company_name: str,
     df: pd.DataFrame,
     news_events: list[dict],
-) -> tuple[str, str, tuple[str, ...]]:
+) -> tuple[str, str, tuple[str, ...], str]:
     """
     分析に必要な入力データをまとめて準備する。
-    Returns: (tech_json, fund_text, news_titles)
+    Returns: (tech_json, fund_text, news_titles, margin_text)
     """
     tech_summary = calc_technical_summary(df)
     tech_json = json.dumps(tech_summary, ensure_ascii=False)
@@ -375,4 +439,7 @@ def prepare_analysis_inputs(
         if item.get("title")
     )[:20]
 
-    return tech_json, fund_text, news_titles
+    margin_data = fetch_margin_data(ticker)
+    margin_text = format_margin_text(margin_data)
+
+    return tech_json, fund_text, news_titles, margin_text

@@ -5,6 +5,16 @@ from modules.styles import BG_BASE, BG_PANEL, GRID_COLOR, TEXT_MUTED
 
 _MA_COLORS = ["#3b9ddd", "#e6a817", "#4ade80", "#f472b6", "#a78bfa"]
 
+# サブプロット行数に応じた高さ比率
+_ROW_HEIGHTS = {
+    # rows: (price, volume, extra...)
+    1: [1.0],
+    2: [0.78, 0.22],
+    3: [0.60, 0.17, 0.23],
+    4: [0.52, 0.14, 0.17, 0.17],
+    5: [0.46, 0.12, 0.14, 0.14, 0.14],
+}
+
 
 def _fmt(index: pd.Index) -> list[str]:
     """DatetimeIndex を 'YYYY-MM-DD' 文字列リストに変換する。"""
@@ -30,6 +40,18 @@ def _snap_to_trading_day(date_str: str, trading_dates: list[str]) -> str | None:
     return None
 
 
+def _osc_hline(fig, y: float, row: int, color: str, dash: str = "dash") -> None:
+    """オシレーター基準線を追加するヘルパー。"""
+    fig.add_hline(
+        y=y,
+        line_dash=dash,
+        line_color=color,
+        line_width=1,
+        row=row,
+        col=1,
+    )
+
+
 def create_candlestick_chart(
     df: pd.DataFrame,
     earnings_events: list[dict] | None = None,
@@ -38,6 +60,9 @@ def create_candlestick_chart(
     show_sma: list[int] | None = None,
     show_ema: list[int] | None = None,
     show_bb: bool = False,
+    show_rsi: bool = False,
+    show_macd: bool = False,
+    show_stoch: bool = False,
     view_start_idx: int = 0,
     view_end_idx: int | None = None,
     chart_height: int = 630,
@@ -60,12 +85,40 @@ def create_candlestick_chart(
     has_volume = "Volume" in df.columns
     trading_dates = _fmt(df.index)
 
+    # ─── サブプロット構成を動的に決定 ──────────────────────────────
+    # extra_rows: RSI / MACD / Stochastic の有効なもの
+    extra_panels: list[str] = []
+    if show_rsi and "RSI_14" in df.columns:
+        extra_panels.append("rsi")
+    if show_stoch and "Stoch_K" in df.columns:
+        extra_panels.append("stoch")
+    if show_macd and "MACD" in df.columns:
+        extra_panels.append("macd")
+
+    total_rows = 1 + int(has_volume) + len(extra_panels)
+    row_heights = _ROW_HEIGHTS.get(total_rows, _ROW_HEIGHTS[5])[:total_rows]
+    # 合計が 1.0 になるよう正規化
+    s = sum(row_heights)
+    row_heights = [h / s for h in row_heights]
+
+    # 各サブプロットが何行目に入るかを計算
+    vol_row    = 2 if has_volume else None
+    panel_rows = {}
+    cur = 1 + int(has_volume)
+    for name in extra_panels:
+        cur += 1
+        panel_rows[name] = cur
+
+    specs = [[{"secondary_y": False}]] * total_rows
+    subplot_titles = [""] * total_rows  # 空タイトル（後からアノテーション）
+
     fig = make_subplots(
-        rows=2 if has_volume else 1,
+        rows=total_rows,
         cols=1,
         shared_xaxes=True,
         vertical_spacing=0.03,
-        row_heights=[0.75, 0.25] if has_volume else [1.0],
+        row_heights=row_heights,
+        specs=specs,
     )
 
     trace_idx = 0
@@ -148,7 +201,7 @@ def create_candlestick_chart(
         )
         trace_idx += 1
 
-    # ─── 出来高バー（row=2 だがグローバル番号はカウント） ─────────────
+    # ─── 出来高バー ─────────────────────────────────────────────────
     if has_volume:
         colors = [
             "#26a69a" if c >= o else "#ef5350"
@@ -170,11 +223,93 @@ def create_candlestick_chart(
                 go.Scatter(
                     x=trading_dates, y=df[vol_col],
                     line=dict(color="#FF9800", width=1),
-                    name=f"出来高MA",
+                    name="出来高MA",
                 ),
                 row=2, col=1,
             )
             trace_idx += 1
+
+    # ─── RSI サブプロット ────────────────────────────────────────────
+    if "rsi" in panel_rows:
+        r = panel_rows["rsi"]
+        fig.add_trace(
+            go.Scatter(
+                x=trading_dates, y=df["RSI_14"],
+                line=dict(color="#9C27B0", width=1.5),
+                name="RSI(14)",
+            ),
+            row=r, col=1,
+        )
+        trace_idx += 1
+        _osc_hline(fig, 70, r, "rgba(239,83,80,0.5)")
+        _osc_hline(fig, 30, r, "rgba(38,166,154,0.5)")
+        _osc_hline(fig, 50, r, "rgba(150,150,150,0.3)", dash="dot")
+        fig.update_yaxes(range=[0, 100], row=r, col=1,
+                         title_text="RSI", title_font_size=10)
+
+    # ─── ストキャスティクス サブプロット ─────────────────────────────
+    if "stoch" in panel_rows:
+        r = panel_rows["stoch"]
+        fig.add_trace(
+            go.Scatter(
+                x=trading_dates, y=df["Stoch_K"],
+                line=dict(color="#2196F3", width=1.5),
+                name="%K(14)",
+            ),
+            row=r, col=1,
+        )
+        trace_idx += 1
+        fig.add_trace(
+            go.Scatter(
+                x=trading_dates, y=df["Stoch_D"],
+                line=dict(color="#FF9800", width=1.5),
+                name="%D(3)",
+            ),
+            row=r, col=1,
+        )
+        trace_idx += 1
+        _osc_hline(fig, 80, r, "rgba(239,83,80,0.5)")
+        _osc_hline(fig, 20, r, "rgba(38,166,154,0.5)")
+        fig.update_yaxes(range=[0, 100], row=r, col=1,
+                         title_text="Stoch", title_font_size=10)
+
+    # ─── MACD サブプロット ───────────────────────────────────────────
+    if "macd" in panel_rows:
+        r = panel_rows["macd"]
+        hist_colors = [
+            "#26a69a" if v >= 0 else "#ef5350"
+            for v in df["MACD_Hist"].fillna(0)
+        ]
+        fig.add_trace(
+            go.Bar(
+                x=trading_dates, y=df["MACD_Hist"],
+                marker_color=hist_colors,
+                name="MACD Hist",
+                showlegend=False,
+            ),
+            row=r, col=1,
+        )
+        trace_idx += 1
+        fig.add_trace(
+            go.Scatter(
+                x=trading_dates, y=df["MACD"],
+                line=dict(color="#2196F3", width=1.5),
+                name="MACD",
+            ),
+            row=r, col=1,
+        )
+        trace_idx += 1
+        fig.add_trace(
+            go.Scatter(
+                x=trading_dates, y=df["MACD_Signal"],
+                line=dict(color="#FF9800", width=1.5),
+                name="Signal",
+            ),
+            row=r, col=1,
+        )
+        trace_idx += 1
+        _osc_hline(fig, 0, r, "rgba(150,150,150,0.4)", dash="dot")
+        fig.update_yaxes(row=r, col=1, title_text="MACD", title_font_size=10)
 
     # ─── 決算マーカー（★）- 常に末尾から 2 番目 ─────────────────────
     earn_x, earn_y, earn_custom = [], [], []
@@ -199,7 +334,6 @@ def create_candlestick_chart(
                 opacity=1.0,
                 line=dict(color="#FF8C00", width=2),
             ),
-            # 他の点が選択されても透明にならないよう opacity を固定
             unselected=dict(marker=dict(opacity=1.0, color="#FFD700")),
             selected=dict(marker=dict(opacity=1.0, size=26, color="#FFD700")),
             text=["決算"] * len(earn_x),
@@ -220,10 +354,8 @@ def create_candlestick_chart(
         if snapped:
             idx_pos = trading_dates.index(snapped)
             news_x.append(snapped)
-            # 決算マーカーと重ならないよう少し上にオフセット
             news_y.append(float(df["High"].iloc[idx_pos]) * 1.048)
             news_custom.append(ev["date"])
-            # ホバーに見出しの先頭を表示
             title_short = ev["title"][:40] + "…" if len(ev["title"]) > 40 else ev["title"]
             news_hover.append(title_short)
 
@@ -240,7 +372,6 @@ def create_candlestick_chart(
                 opacity=1.0,
                 line=dict(color="#0097A7", width=2),
             ),
-            # 他の点が選択されても透明にならないよう opacity を固定
             unselected=dict(marker=dict(opacity=1.0, color="#00BCD4")),
             selected=dict(marker=dict(opacity=1.0, size=18, color="#00BCD4")),
             name="ニュース",
@@ -249,7 +380,6 @@ def create_candlestick_chart(
         ),
         row=1, col=1,
     )
-    # trace_idx += 1  (最後のトレースなので不要)
 
     # ─── レイアウト ──────────────────────────────────────────────────
     end_idx = view_end_idx if view_end_idx is not None else len(df) - 1
@@ -279,12 +409,10 @@ def create_candlestick_chart(
         paper_bgcolor=BG_PANEL,
         font=dict(family="'IBM Plex Mono', monospace", color=TEXT_MUTED, size=11),
         dragmode="pan",
-        # clickmode="event+select" にすることで、dragmode="pan" のままでも
-        # マーカーを単クリックすると Streamlit の on_select イベントが発火する
         clickmode="event+select",
     )
-    # category 軸では range をインデックス値（±0.5 オフセット）で指定する。
-    # 初期表示を選択期間に限定しつつ、パンで全期間を参照できる。
+
+    # 全 x 軸に category 設定を適用（shared_xaxes でも明示的に設定）
     fig.update_xaxes(
         type="category",
         showgrid=True,
@@ -300,19 +428,13 @@ def create_candlestick_chart(
         tickfont=dict(family="'IBM Plex Mono', monospace", size=10),
     )
 
-    # ─── Y軸を表示期間の価格レンジにスコープ ─────────────────────────
-    # x軸の category range は全データが対象になるため、y軸は表示スライスから計算する
+    # Y 軸を表示期間の価格レンジにスコープ
     visible_df = df.iloc[view_start_idx : end_idx + 1]
     y_low  = float(visible_df["Low"].min())
     y_high = float(visible_df["High"].max())
     price_range = y_high - y_low
-    # 上側：決算★・ニュース● マーカー（High×1.05）とラベル分の余白を確保
-    # 下側：価格レンジの 5% 分のパディング
     fig.update_yaxes(
-        range=[
-            y_low  - price_range * 0.05,
-            y_high * 1.15,
-        ],
+        range=[y_low - price_range * 0.05, y_high * 1.15],
         row=1, col=1,
     )
 

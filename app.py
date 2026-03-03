@@ -12,7 +12,11 @@ from modules.data_loader import (
     load_all_tse_stocks,
     clear_tse_cache,
 )
-from modules.indicators import calc_sma, calc_ema, calc_bollinger_bands, calc_volume_ma
+from modules.indicators import (
+    calc_sma, calc_ema, calc_bollinger_bands, calc_volume_ma,
+    calc_rsi, calc_macd, calc_stochastic, calc_cci,
+)
+from modules.margin import fetch_margin_data, format_margin_text
 from modules.chart import create_candlestick_chart
 from modules.events import fetch_earnings_events, fetch_news_events
 from modules.market_hours import is_tse_open, get_refresh_interval_ms, market_status_label
@@ -387,6 +391,12 @@ def main() -> None:
 
         show_bb = st.checkbox("ボリンジャーバンド（20日）", value=False)
 
+        st.caption("── オシレーター（サブプロット）──")
+        show_rsi   = st.checkbox("RSI（14日）", value=False)
+        show_macd  = st.checkbox("MACD（12/26/9）", value=False)
+        show_stoch = st.checkbox("ストキャスティクス（14/3）", value=False)
+        show_cci   = st.checkbox("CCI（20日）※AI分析のみ", value=False, help="CCI はチャートに描画せず AI 分析に使用します")
+
         st.divider()
         st.subheader("イベント表示")
         show_earnings = st.checkbox("★ 決算マーカー", value=True)
@@ -483,6 +493,14 @@ def main() -> None:
     if show_bb:
         df = calc_bollinger_bands(df)
     df = calc_volume_ma(df)
+    if show_rsi:
+        df = calc_rsi(df)
+    if show_macd:
+        df = calc_macd(df)
+    if show_stoch:
+        df = calc_stochastic(df)
+    if show_cci:
+        df = calc_cci(df)
 
     # ─── イベントデータ取得 ──────────────────────────────────────────
     chart_start = df.index[0].strftime("%Y-%m-%d")
@@ -537,6 +555,9 @@ def main() -> None:
         show_sma=sma_periods,
         show_ema=ema_periods,
         show_bb=show_bb,
+        show_rsi=show_rsi,
+        show_macd=show_macd,
+        show_stoch=show_stoch,
         view_start_idx=view_start_idx,
         view_end_idx=view_end_idx,
         chart_height=chart_height,
@@ -575,6 +596,29 @@ def main() -> None:
             raw_cd = pt.get("customdata")
             original_date = raw_cd[0] if isinstance(raw_cd, list) else (raw_cd or clicked_date)
             show_news_dialog(str(original_date), news_events, ticker, ticker_info)
+
+    # ─── 信用取引情報 ───────────────────────────────────────────────
+    st.divider()
+    with st.spinner("信用残データを取得中..."):
+        _margin = fetch_margin_data(ticker)
+
+    if _margin:
+        st.subheader("📊 信用取引情報")
+        _mcols = st.columns(4)
+        if _margin.get("buy_margin") is not None:
+            _mcols[0].metric("信用買い残", f"{_margin['buy_margin']:,.0f} 株")
+        if _margin.get("sell_margin") is not None:
+            _mcols[1].metric("信用売り残", f"{_margin['sell_margin']:,.0f} 株")
+        if _margin.get("lending_ratio") is not None:
+            lr = _margin["lending_ratio"]
+            lr_delta = "過熱" if lr >= 10 else ("買い多" if lr >= 3 else ("売り多" if lr <= 0.5 else "中立"))
+            _mcols[2].metric("貸借倍率", f"{lr:.2f} 倍", lr_delta)
+        if _margin.get("date"):
+            _mcols[3].metric("基準日", _margin["date"])
+        if _margin.get("source"):
+            st.caption(f"データソース: {_margin['source']}")
+    else:
+        st.caption("ℹ️ 信用残データを取得できませんでした（海外銘柄・上場廃止等）")
 
     # ─── AI 総合分析 ────────────────────────────────────────────────
     st.divider()
@@ -617,7 +661,7 @@ def main() -> None:
             _ai_end = df.index[-1].strftime("%Y-%m-%d")
             _ai_start = (df.index[-1] - pd.Timedelta(days=30)).strftime("%Y-%m-%d")
             _news_30d = fetch_news_events(ticker, _ai_start, _ai_end, company_name)
-            tech_json, fund_text, news_titles = prepare_analysis_inputs(
+            tech_json, fund_text, news_titles, _margin_text = prepare_analysis_inputs(
                 ticker, company_name, df, _news_30d
             )
             _ai_result = get_comprehensive_analysis(
@@ -626,6 +670,7 @@ def main() -> None:
                 tech_json=tech_json,
                 fund_text=fund_text,
                 news_titles=news_titles,
+                margin_text=_margin_text,
                 provider=ai_provider,
                 api_key=ai_api_key,
             )

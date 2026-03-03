@@ -34,3 +34,50 @@ def calc_volume_ma(df: pd.DataFrame, period: int = 25) -> pd.DataFrame:
     if "Volume" in df.columns:
         df[f"Vol_MA_{period}"] = df["Volume"].rolling(window=period).mean()
     return df
+
+
+def calc_rsi(df: pd.DataFrame, period: int = 14) -> pd.DataFrame:
+    """RSI（相対力指数）を計算して列を追加する。"""
+    df = df.copy()
+    delta = df["Close"].diff()
+    gain = delta.clip(lower=0).rolling(period).mean()
+    loss = (-delta.clip(upper=0)).rolling(period).mean()
+    rs = gain / loss.replace(0, float("nan"))
+    df[f"RSI_{period}"] = 100 - 100 / (1 + rs)
+    return df
+
+
+def calc_macd(
+    df: pd.DataFrame, fast: int = 12, slow: int = 26, signal: int = 9
+) -> pd.DataFrame:
+    """MACD・シグナル・ヒストグラムを計算して列を追加する。"""
+    df = df.copy()
+    ema_fast = df["Close"].ewm(span=fast, adjust=False).mean()
+    ema_slow = df["Close"].ewm(span=slow, adjust=False).mean()
+    df["MACD"] = ema_fast - ema_slow
+    df["MACD_Signal"] = df["MACD"].ewm(span=signal, adjust=False).mean()
+    df["MACD_Hist"] = df["MACD"] - df["MACD_Signal"]
+    return df
+
+
+def calc_stochastic(
+    df: pd.DataFrame, k_period: int = 14, d_period: int = 3
+) -> pd.DataFrame:
+    """ストキャスティクス（%K・%D）を計算して列を追加する。"""
+    df = df.copy()
+    low_min = df["Low"].rolling(k_period).min()
+    high_max = df["High"].rolling(k_period).max()
+    denom = (high_max - low_min).replace(0, float("nan"))
+    df["Stoch_K"] = (df["Close"] - low_min) / denom * 100
+    df["Stoch_D"] = df["Stoch_K"].rolling(d_period).mean()
+    return df
+
+
+def calc_cci(df: pd.DataFrame, period: int = 20) -> pd.DataFrame:
+    """CCI（商品チャンネル指数）を計算して列を追加する。"""
+    df = df.copy()
+    tp = (df["High"] + df["Low"] + df["Close"]) / 3
+    sma_tp = tp.rolling(period).mean()
+    mean_dev = tp.rolling(period).apply(lambda x: abs(x - x.mean()).mean())
+    df["CCI"] = (tp - sma_tp) / (0.015 * mean_dev.replace(0, float("nan")))
+    return df
