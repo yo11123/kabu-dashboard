@@ -428,8 +428,10 @@ def create_candlestick_chart(
         tickfont=dict(family="'IBM Plex Mono', monospace", size=10),
     )
 
-    # Y 軸を表示期間の価格レンジにスコープ
+    # ─── Y 軸を表示期間のデータにスコープ ────────────────────────────
     visible_df = df.iloc[view_start_idx : end_idx + 1]
+
+    # 価格 (row=1)
     y_low  = float(visible_df["Low"].min())
     y_high = float(visible_df["High"].max())
     price_range = y_high - y_low
@@ -437,5 +439,24 @@ def create_candlestick_chart(
         range=[y_low - price_range * 0.05, y_high * 1.15],
         row=1, col=1,
     )
+
+    # 出来高 (row=2): 95パーセンタイルを上限にして極端なスパイクを抑える
+    if has_volume and "Volume" in visible_df.columns:
+        vol_95 = float(visible_df["Volume"].quantile(0.95))
+        if vol_95 > 0:
+            fig.update_yaxes(range=[0, vol_95 * 2.0], row=2, col=1)
+
+    # MACD: 表示期間の最大絶対値でシンメトリック範囲に
+    if "macd" in panel_rows:
+        r = panel_rows["macd"]
+        macd_visible = pd.concat([
+            visible_df[c].dropna()
+            for c in ("MACD", "MACD_Signal", "MACD_Hist")
+            if c in visible_df.columns
+        ])
+        if len(macd_visible) > 0:
+            mabs = float(macd_visible.abs().max())
+            if mabs > 0:
+                fig.update_yaxes(range=[-mabs * 1.3, mabs * 1.3], row=r, col=1)
 
     return fig, earnings_trace_idx, news_trace_idx
