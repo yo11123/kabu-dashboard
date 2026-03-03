@@ -218,7 +218,11 @@ def get_comprehensive_analysis(
     try:
         api_key = st.secrets.get("ANTHROPIC_API_KEY", "")
         if not api_key or len(api_key) < 20:
-            return {**_default, "overall_detail": "ANTHROPIC_API_KEY が未設定です。"}
+            return {
+                **_default,
+                "overall_detail": "ANTHROPIC_API_KEY が設定されていません。.streamlit/secrets.toml を確認してください。",
+                "error": True,
+            }
 
         tech = json.loads(tech_json)
         prompt = _build_prompt(ticker, company_name, tech, fund_text, news_titles)
@@ -238,10 +242,17 @@ def get_comprehensive_analysis(
         return result
 
     except Exception as e:
-        return {
-            **_default,
-            "overall_detail": f"分析エラー: {type(e).__name__}: {e}",
-        }
+        err_str = str(e)
+        if "credit balance is too low" in err_str or "upgrade or purchase credits" in err_str:
+            detail = (
+                "💳 APIクレジットが不足しています。\n"
+                "Anthropic コンソール（Plans & Billing）でクレジットを追加してください。"
+            )
+        elif "invalid_api_key" in err_str or "authentication" in err_str.lower():
+            detail = "🔑 APIキーが無効です。secrets.toml の ANTHROPIC_API_KEY を確認してください。"
+        else:
+            detail = f"分析エラー ({type(e).__name__}): {err_str[:300]}"
+        return {**_default, "overall_detail": detail, "error": True}
 
 
 def prepare_analysis_inputs(

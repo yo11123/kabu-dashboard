@@ -17,6 +17,7 @@ from modules.chart import create_candlestick_chart
 from modules.events import fetch_earnings_events, fetch_news_events
 from modules.market_hours import is_tse_open, get_refresh_interval_ms, market_status_label
 from modules.styles import apply_theme
+from modules.ai_analysis import get_comprehensive_analysis, prepare_analysis_inputs
 
 st.set_page_config(
     page_title="日本株ダッシュボード",
@@ -171,6 +172,85 @@ def show_news_dialog(
             st.caption(f"出典: {item['publisher']}")
             if item.get("link"):
                 st.link_button("🔗 記事を読む", item["link"])
+
+
+# ─── AI 分析 描画ヘルパー ──────────────────────────────────────────
+
+def _ai_score_card(col, label: str, score: int) -> None:
+    color = "🟢" if score >= 65 else ("🔴" if score <= 40 else "🟡")
+    with col:
+        with st.container(border=True):
+            st.markdown(f"**{label}**")
+            st.markdown(
+                f"### {color} {score}"
+                f"<span style='font-size:0.6em;color:gray;'> / 100</span>",
+                unsafe_allow_html=True,
+            )
+            st.progress(score / 100)
+
+
+def _ai_judgment_banner(judgment: str, detail: str) -> None:
+    config = {
+        "強気買い": ("success", "🚀 強気買い"),
+        "買い":     ("success", "📈 買い"),
+        "中立":     ("info",    "➡️ 中立"),
+        "売り":     ("warning", "📉 売り"),
+        "強気売り": ("error",   "🚨 強気売り"),
+    }
+    style, label = config.get(judgment, ("info", f"➡️ {judgment}"))
+    msg = f"**総合判断: {label}**\n\n{detail}"
+    if style == "success":
+        st.success(msg)
+    elif style == "warning":
+        st.warning(msg)
+    elif style == "error":
+        st.error(msg)
+    else:
+        st.info(msg)
+
+
+def _render_ai_results(result: dict) -> None:
+    # エラー時は専用バナーのみ表示
+    if result.get("error"):
+        detail = result.get("overall_detail", "不明なエラー")
+        if "クレジット" in detail:
+            st.warning(detail)
+        else:
+            st.error(detail)
+        return
+
+    # スコアカード 4列
+    cols = st.columns(4)
+    _ai_score_card(cols[0], "📈 テクニカル",       result["technical_score"])
+    _ai_score_card(cols[1], "📊 ファンダメンタル", result["fundamental_score"])
+    _ai_score_card(cols[2], "📰 ニュース",          result["news_score"])
+    _ai_score_card(cols[3], "🎯 総合スコア",        result["overall_score"])
+
+    st.divider()
+    _ai_judgment_banner(result.get("judgment", "中立"), result.get("overall_detail", ""))
+    st.divider()
+
+    col_opp, col_risk = st.columns(2)
+    with col_opp:
+        st.subheader("💚 チャンス・強み")
+        for item in result.get("opportunities", []):
+            st.markdown(f"- {item}")
+    with col_risk:
+        st.subheader("🔴 リスク・注意点")
+        for item in result.get("risks", []):
+            st.markdown(f"- {item}")
+
+    st.divider()
+    c1, c2, c3 = st.columns(3)
+    with c1:
+        with st.expander("📈 テクニカル詳細"):
+            st.write(result.get("technical_detail") or "データなし")
+    with c2:
+        with st.expander("📊 ファンダメンタル詳細"):
+            st.write(result.get("fundamental_detail") or "データなし")
+    with c3:
+        with st.expander("📰 ニュース詳細"):
+            st.write(result.get("news_detail") or "データなし")
 
 
 # ─── メイン ────────────────────────────────────────────────────────
@@ -433,6 +513,45 @@ def main() -> None:
             raw_cd = pt.get("customdata")
             original_date = raw_cd[0] if isinstance(raw_cd, list) else (raw_cd or clicked_date)
             show_news_dialog(str(original_date), news_events, ticker, ticker_info)
+
+    # ─── AI 総合分析 ────────────────────────────────────────────────
+    st.divider()
+    st.subheader("🤖 AI 総合分析")
+
+    if "analyzed_tickers" not in st.session_state:
+        st.session_state.analyzed_tickers = set()
+
+    already_analyzed = ticker in st.session_state.analyzed_tickers
+
+    btn_col, note_col = st.columns([2, 5])
+    if btn_col.button("🤖 AI総合分析を実行", type="primary", key="main_ai_btn", use_container_width=True):
+        st.session_state.analyzed_tickers.add(ticker)
+        already_analyzed = True
+
+    if already_analyzed:
+        note_col.caption("✅ 分析済み（結果は24時間キャッシュされます）")
+    else:
+        note_col.caption(
+            "テクニカル・ファンダメンタル・ニュースを総合した AI 分析レポートを生成します。"
+            "（Claude API の利用料が発生します）"
+        )
+
+    if already_analyzed:
+        with st.spinner("AI 分析を実行中..."):
+            _ai_end = df.index[-1].strftime("%Y-%m-%d")
+            _ai_start = (df.index[-1] - pd.Timedelta(days=30)).strftime("%Y-%m-%d")
+            _news_30d = fetch_news_events(ticker, _ai_start, _ai_end, ticker_info.get("name", ""))
+            tech_json, fund_text, news_titles = prepare_analysis_inputs(
+                ticker, ticker_info.get("name", ticker), df, _news_30d
+            )
+            _ai_result = get_comprehensive_analysis(
+                ticker=ticker,
+                company_name=ticker_info.get("name", ticker),
+                tech_json=tech_json,
+                fund_text=fund_text,
+                news_titles=news_titles,
+            )
+        _render_ai_results(_ai_result)
 
 
 if __name__ == "__main__":
