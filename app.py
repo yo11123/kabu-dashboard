@@ -585,10 +585,17 @@ def main() -> None:
     _analyzed_key = f"{ticker}::{ai_provider}"
     already_analyzed = _analyzed_key in st.session_state.analyzed_tickers
 
-    btn_col, note_col = st.columns([2, 5])
+    btn_col, clear_col, note_col = st.columns([2, 1, 4])
     if btn_col.button("🤖 AI総合分析を実行", type="primary", key="main_ai_btn", use_container_width=True):
         st.session_state.analyzed_tickers.add(_analyzed_key)
         already_analyzed = True
+
+    if clear_col.button("🗑️ キャッシュ", key="main_ai_clear_btn", use_container_width=True,
+                        help="前回の分析結果キャッシュを削除して再実行します"):
+        get_comprehensive_analysis.clear()
+        st.session_state.analyzed_tickers.discard(_analyzed_key)
+        already_analyzed = False
+        st.rerun()
 
     if already_analyzed:
         note_col.caption("✅ 分析済み（結果は24時間キャッシュされます）")
