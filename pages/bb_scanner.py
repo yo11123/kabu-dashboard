@@ -305,26 +305,34 @@ def main() -> None:
         hide_index=True,
     )
 
-    # ── チャート確認ナビ ───────────────────────────────────────────
+    # ── チャート確認ナビ（銘柄ごとにボタンを配置）──────────────────
     st.divider()
     st.subheader("チャートで詳細確認")
+    st.caption("ボタンをクリックするとメインチャートに移動します。")
 
-    code_options = results["コード"].tolist()
-    label_map    = {
-        row["コード"]: f"{row['コード']}  {row['銘柄名']}"
-        for _, row in results.iterrows()
-    }
-
-    col_sel, col_btn = st.columns([4, 1])
-    selected_code = col_sel.selectbox(
-        "銘柄を選択",
-        options=code_options,
-        format_func=lambda c: label_map.get(c, c),
-        label_visibility="collapsed",
-    )
-    if col_btn.button("📊 表示", type="primary", use_container_width=True):
-        st.session_state["calendar_selected_ticker"] = selected_code
-        st.switch_page("app.py")
+    COLS = 4
+    for chunk_start in range(0, len(results), COLS):
+        chunk = results.iloc[chunk_start : chunk_start + COLS]
+        btn_cols = st.columns(COLS)
+        for col_idx, (_, row) in enumerate(chunk.iterrows()):
+            change_sign = "▲" if row["前日比%"] >= 0 else "▼"
+            btn_label = (
+                f"**{row['コード']}**  {row['銘柄名']}  \n"
+                f"¥{row['現在値']:,}  {change_sign}{abs(row['前日比%']):.2f}%"
+            )
+            with btn_cols[col_idx]:
+                if st.button(
+                    btn_label,
+                    key=f"nav_{row['コード']}",
+                    use_container_width=True,
+                    help=(
+                        f"継続 {row['継続日数']} 日　"
+                        f"BB 乖離 {row['BB乖離%']:+.2f}%　"
+                        f"出来高比 {row['出来高比'] or '-'}×"
+                    ),
+                ):
+                    st.session_state["calendar_selected_ticker"] = row["コード"]
+                    st.switch_page("app.py")
 
 
 if __name__ == "__main__":

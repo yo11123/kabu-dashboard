@@ -241,10 +241,16 @@ def main() -> None:
                 return f"{t['code']}  {t['name']}  [{market}]"
             return f"{t['code']}  {t['name']}"
 
+        # スキャナー・カレンダー等から遷移してきた場合はその銘柄をデフォルト選択
+        # filtered（日経225）に含まれない銘柄は search_pool から探して先頭に挿入する
+        cal_ticker = st.session_state.pop("calendar_selected_ticker", None)
+        if cal_ticker and not any(t["code"] == cal_ticker for t in filtered):
+            _found = next((t for t in search_pool if t["code"] == cal_ticker), None)
+            if _found:
+                filtered = [_found] + filtered[:MAX_DISPLAY - 1]
+
         ticker_labels = [_label(t) for t in filtered]
 
-        # カレンダーページから遷移してきた場合はその銘柄をデフォルト選択
-        cal_ticker = st.session_state.pop("calendar_selected_ticker", None)
         if cal_ticker:
             default_idx = next(
                 (i for i, t in enumerate(filtered) if t["code"] == cal_ticker), 0
