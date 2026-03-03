@@ -496,6 +496,13 @@ def main() -> None:
             ticker, chart_start, chart_end, ticker_info.get("name", "")
         ) if show_news else []
 
+    # 銘柄名: JPXリスト(filtered)に日本語名があれば優先、なければ yfinance の名前を使用
+    company_name = next((t["name"] for t in filtered if t["code"] == ticker), "")
+    company_name = company_name or ticker_info.get("name", ticker)
+
+    # ─── 銘柄名ヘッダー ─────────────────────────────────────────────
+    st.subheader(f"🏢 {company_name}　（{ticker}）")
+
     # ─── 指標サマリ行（表示範囲の値を使用）─────────────────────────
     df_view = df.iloc[view_start_idx:]
     last_close = float(df["Close"].iloc[-1])
@@ -526,7 +533,7 @@ def main() -> None:
         df=df,
         earnings_events=earnings_events,
         news_events=news_events,
-        title=f"{ticker}  {ticker_info.get('name', '')}",
+        title=f"{ticker}  {company_name}",
         show_sma=sma_periods,
         show_ema=ema_periods,
         show_bb=show_bb,
@@ -609,13 +616,13 @@ def main() -> None:
         with st.spinner("AI 分析を実行中..."):
             _ai_end = df.index[-1].strftime("%Y-%m-%d")
             _ai_start = (df.index[-1] - pd.Timedelta(days=30)).strftime("%Y-%m-%d")
-            _news_30d = fetch_news_events(ticker, _ai_start, _ai_end, ticker_info.get("name", ""))
+            _news_30d = fetch_news_events(ticker, _ai_start, _ai_end, company_name)
             tech_json, fund_text, news_titles = prepare_analysis_inputs(
-                ticker, ticker_info.get("name", ticker), df, _news_30d
+                ticker, company_name, df, _news_30d
             )
             _ai_result = get_comprehensive_analysis(
                 ticker=ticker,
-                company_name=ticker_info.get("name", ticker),
+                company_name=company_name,
                 tech_json=tech_json,
                 fund_text=fund_text,
                 news_titles=news_titles,
