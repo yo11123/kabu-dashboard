@@ -122,10 +122,10 @@ def _fetch_jquants_margin(code4: str, refresh_token: str) -> dict:
     return result
 
 
-@st.cache_data(ttl=3600 * 6)  # 信用残は週次更新なので6時間キャッシュ
+@st.cache_data(ttl=3600)  # 1時間キャッシュ（週次データだが公開後すぐ反映させるため）
 def fetch_margin_data(ticker: str) -> dict:
     """
-    信用残高・貸借倍率を取得する（6時間キャッシュ）。
+    信用残高・貸借倍率を取得する（1時間キャッシュ）。
 
     返却キー:
         buy_margin   : 信用買い残（株数）
