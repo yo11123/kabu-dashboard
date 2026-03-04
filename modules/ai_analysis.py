@@ -350,17 +350,12 @@ def get_comprehensive_analysis(
     }
     label = _provider_labels.get(provider, provider)
 
+    def _is_valid_key(k: str, prefix: str) -> bool:
+        return bool(k) and k.isascii() and k.startswith(prefix)
+
     try:
         tech = json.loads(tech_json)
         prompt = _build_prompt(ticker, company_name, tech, fund_text, news_titles, margin_text)
-
-        # API キーに非ASCII文字が含まれる場合は即座に無効と判断（エラーメッセージ混入対策）
-        if api_key and not api_key.isascii():
-            return {
-                **_default,
-                "overall_detail": "🔑 APIキーが無効です。正しいAPIキーを入力してください（セッションをリロードしてもう一度入力）。",
-                "error": True,
-            }
 
         if provider == "claude":
             # Claude は secrets の共用キー or ユーザー入力キーを使用
@@ -375,20 +370,20 @@ def get_comprehensive_analysis(
 
         elif provider == "openai":
             key = api_key.strip()
-            if not key or not key.isascii():
+            if not _is_valid_key(key, "sk-"):
                 return {
                     **_default,
-                    "overall_detail": "OpenAI API キーが入力されていません。サイドバーの「AI 分析設定」にキーを入力してください。",
+                    "overall_detail": "🔑 OpenAI API キーが無効です（'sk-' で始まるキーを入力してください）。",
                     "error": True,
                 }
             text = _call_openai(prompt, key)
 
         elif provider == "gemini":
             key = api_key.strip()
-            if not key or not key.isascii():
+            if not _is_valid_key(key, "AIza"):
                 return {
                     **_default,
-                    "overall_detail": "Google AI (Gemini) API キーが入力されていません。サイドバーの「AI 分析設定」にキーを入力してください。",
+                    "overall_detail": "🔑 Gemini API キーが無効です（'AIza' で始まるキーを入力してください）。",
                     "error": True,
                 }
             text = _call_gemini(prompt, key)
@@ -413,6 +408,128 @@ def get_comprehensive_analysis(
     except Exception as e:
         detail = _classify_error(str(e), label)
         return {**_default, "overall_detail": detail, "error": True}
+
+
+# ─── AI チャット ──────────────────────────────────────────────────────────
+
+
+def build_chat_system_prompt(
+    ticker: str,
+    company_name: str,
+    tech_json: str,
+    fund_text: str,
+    margin_text: str = "",
+) -> str:
+    """チャット用のシステムプロンプトを生成する（銘柄コンテキスト付き）。"""
+    try:
+        tech = json.loads(tech_json) if tech_json else {}
+    except Exception:
+        tech = {}
+
+    margin_section = f"\n\n## 信用取引情報\n{margin_text}" if margin_text else ""
+
+    return f"""あなたは日本株の専門アナリストアシスタントです。
+ユーザーから {company_name}（{ticker}）についての質問を受けています。
+以下のデータを参考に、具体的で分かりやすい日本語で回答してください。
+
+## 銘柄情報
+銘柄: {company_name}（{ticker}）
+
+## テクニカルデータ（最新値）
+{json.dumps(tech, ensure_ascii=False, indent=2)}
+
+## ファンダメンタルデータ
+{fund_text}{margin_section}
+
+回答は簡潔で具体的にしてください。不明な点は正直に不明と答えてください。"""
+
+
+def get_chat_response(
+    messages: list[dict],
+    system_prompt: str,
+    provider: str = "claude",
+    api_key: str = "",
+) -> str:
+    """
+    チャット形式で LLM に問い合わせる（キャッシュなし、マルチターン対応）。
+
+    Args:
+        messages: [{"role": "user"|"assistant", "content": str}, ...]
+        system_prompt: 銘柄コンテキスト付きシステムプロンプト
+        provider: "claude" | "openai" | "gemini"
+        api_key: ユーザー入力 API キー
+
+    Returns:
+        AI の応答テキスト（エラー時はエラーメッセージ）
+    """
+    _provider_labels = {
+        "claude": "Claude (Anthropic)",
+        "openai": "ChatGPT (OpenAI)",
+        "gemini": "Gemini (Google)",
+    }
+    label = _provider_labels.get(provider, provider)
+
+    def _ok(k: str, prefix: str) -> bool:
+        return bool(k) and k.isascii() and k.startswith(prefix)
+
+    try:
+        if provider == "claude":
+            key = api_key.strip() or st.secrets.get("ANTHROPIC_API_KEY", "")
+            if not key or len(key) < 20:
+                return "❌ Anthropic API キーが設定されていません。サイドバーで API キーを入力してください。"
+            client = anthropic.Anthropic(api_key=key)
+            response = client.messages.create(
+                model="claude-haiku-4-5-20251001",
+                max_tokens=1000,
+                system=system_prompt,
+                messages=messages,
+            )
+            return response.content[0].text
+
+        elif provider == "openai":
+            from openai import OpenAI
+            key = api_key.strip()
+            if not _ok(key, "sk-"):
+                return "❌ OpenAI API キーが無効です（'sk-' で始まるキーを入力してください）。サイドバーで API キーを確認してください。"
+            client = OpenAI(api_key=key)
+            openai_messages = [{"role": "system", "content": system_prompt}] + messages
+            response = client.chat.completions.create(
+                model="gpt-4o-mini",
+                max_tokens=1000,
+                messages=openai_messages,
+            )
+            return response.choices[0].message.content
+
+        elif provider == "gemini":
+            import json as _json
+            import requests as _req
+            key = api_key.strip()
+            if not _ok(key, "AIza"):
+                return "❌ Gemini API キーが無効です（'AIza' で始まるキーを入力してください）。サイドバーで API キーを確認してください。"
+            url = "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent"
+            contents = []
+            for msg in messages:
+                role = "user" if msg["role"] == "user" else "model"
+                contents.append({"role": role, "parts": [{"text": msg["content"]}]})
+            payload = {
+                "system_instruction": {"parts": [{"text": system_prompt}]},
+                "contents": contents,
+            }
+            resp = _req.post(
+                url,
+                params={"key": key},
+                headers={"Content-Type": "application/json; charset=utf-8"},
+                data=_json.dumps(payload, ensure_ascii=False).encode("utf-8"),
+                timeout=60,
+            )
+            resp.raise_for_status()
+            return resp.json()["candidates"][0]["content"]["parts"][0]["text"]
+
+        else:
+            return f"❌ 不明なプロバイダー: {provider}"
+
+    except Exception as e:
+        return f"❌ {_classify_error(str(e), label)}"
 
 
 def prepare_analysis_inputs(

@@ -21,7 +21,12 @@ from modules.chart import create_candlestick_chart
 from modules.events import fetch_earnings_events, fetch_news_events
 from modules.market_hours import is_tse_open, get_refresh_interval_ms, market_status_label
 from modules.styles import apply_theme
-from modules.ai_analysis import get_comprehensive_analysis, prepare_analysis_inputs
+from modules.ai_analysis import (
+    get_comprehensive_analysis,
+    prepare_analysis_inputs,
+    build_chat_system_prompt,
+    get_chat_response,
+)
 
 st.set_page_config(
     page_title="日本株ダッシュボード",
@@ -433,10 +438,12 @@ def main() -> None:
 
             # ページ遷移後にウィジェット状態がリセットされていたら永続化辞書から復元する
             _widget_key = f"ai_key_{ai_provider}"
+            _valid_prefixes = {"claude": "sk-ant-", "openai": "sk-", "gemini": "AIza"}
             if _widget_key not in st.session_state:
                 _saved = st.session_state.ai_api_keys.get(ai_provider, "")
-                # 非ASCII文字（日本語エラーメッセージ等）が混入していたら無効とみなしクリア
-                if not _saved.isascii():
+                # 非ASCII文字または期待するプレフィックスと不一致のキーは無効とみなしクリア
+                _prefix = _valid_prefixes.get(ai_provider, "")
+                if not _saved.isascii() or (_saved and _prefix and not _saved.startswith(_prefix)):
                     _saved = ""
                     st.session_state.ai_api_keys[ai_provider] = ""
                 st.session_state[_widget_key] = _saved
@@ -449,8 +456,10 @@ def main() -> None:
                 key=_widget_key,
             )
 
-            # 永続化辞書に保存（次回ページ遷移後の復元用）
-            st.session_state.ai_api_keys[ai_provider] = ai_api_key
+            # 永続化辞書に保存（形式が正しいキーのみ）
+            _prefix = _valid_prefixes.get(ai_provider, "")
+            if not ai_api_key or not _prefix or ai_api_key.startswith(_prefix):
+                st.session_state.ai_api_keys[ai_provider] = ai_api_key
 
             if ai_api_key:
                 st.caption("✅ キー入力済み（セッション中のみ保持）")
@@ -620,6 +629,14 @@ def main() -> None:
     else:
         st.caption("ℹ️ 信用残データを取得できませんでした（海外銘柄・上場廃止等）")
 
+    # ─── AI コンテキストデータ準備（分析・チャット共用、キャッシュ済み関数を使用）──
+    _ai_end = df.index[-1].strftime("%Y-%m-%d")
+    _ai_start = (df.index[-1] - pd.Timedelta(days=30)).strftime("%Y-%m-%d")
+    _news_30d = fetch_news_events(ticker, _ai_start, _ai_end, company_name)
+    tech_json, fund_text, news_titles, _margin_text = prepare_analysis_inputs(
+        ticker, company_name, df, _news_30d
+    )
+
     # ─── AI 総合分析 ────────────────────────────────────────────────
     st.divider()
     _provider_label = {
@@ -632,7 +649,6 @@ def main() -> None:
     if "analyzed_tickers" not in st.session_state:
         st.session_state.analyzed_tickers = set()
 
-    # プロバイダーが変わったら別の分析扱いにする
     _analyzed_key = f"{ticker}::{ai_provider}"
     already_analyzed = _analyzed_key in st.session_state.analyzed_tickers
 
@@ -658,12 +674,6 @@ def main() -> None:
 
     if already_analyzed:
         with st.spinner("AI 分析を実行中..."):
-            _ai_end = df.index[-1].strftime("%Y-%m-%d")
-            _ai_start = (df.index[-1] - pd.Timedelta(days=30)).strftime("%Y-%m-%d")
-            _news_30d = fetch_news_events(ticker, _ai_start, _ai_end, company_name)
-            tech_json, fund_text, news_titles, _margin_text = prepare_analysis_inputs(
-                ticker, company_name, df, _news_30d
-            )
             _ai_result = get_comprehensive_analysis(
                 ticker=ticker,
                 company_name=company_name,
@@ -675,6 +685,62 @@ def main() -> None:
                 api_key=ai_api_key,
             )
         _render_ai_results(_ai_result)
+
+    # ─── AI チャット（常に表示）──────────────────────────────────────
+    st.divider()
+    _chat_title_col, _chat_clear_col = st.columns([5, 1])
+    _chat_title_col.subheader("💬 AI に質問する")
+    _chat_key = f"chat_{ticker}_{ai_provider}"
+    if _chat_key not in st.session_state:
+        st.session_state[_chat_key] = []
+
+    if _chat_clear_col.button("🗑️ 履歴クリア", key="chat_clear_btn", use_container_width=True):
+        st.session_state[_chat_key] = []
+        st.rerun()
+
+    st.caption(
+        f"**{company_name}（{ticker}）** について {_provider_label} に自由に質問できます。"
+        "　テクニカル・ファンダメンタル・信用残データをコンテキストとして渡しています。"
+    )
+
+    # 固定高さのチャット履歴ウィンドウ
+    _chat_window = st.container(height=420, border=True)
+    with _chat_window:
+        if not st.session_state[_chat_key]:
+            st.markdown(
+                "<div style='text-align:center;color:gray;padding:3em 1em;'>"
+                "まだ会話がありません。<br>下の入力欄から質問してください。<br><br>"
+                "例：「今買い時ですか？」「RSIの数値をどう見ますか？」「貸借倍率はどう見る？」"
+                "</div>",
+                unsafe_allow_html=True,
+            )
+        for _msg in st.session_state[_chat_key]:
+            with st.chat_message(_msg["role"]):
+                st.markdown(_msg["content"])
+
+    if _user_input := st.chat_input(
+        f"{company_name} について質問してください...", key="stock_chat_input"
+    ):
+        st.session_state[_chat_key].append({"role": "user", "content": _user_input})
+
+        with _chat_window:
+            with st.chat_message("user"):
+                st.markdown(_user_input)
+
+            with st.chat_message("assistant"):
+                with st.spinner("回答を生成中..."):
+                    _sys_prompt = build_chat_system_prompt(
+                        ticker, company_name, tech_json, fund_text, _margin_text
+                    )
+                    _response = get_chat_response(
+                        messages=st.session_state[_chat_key],
+                        system_prompt=_sys_prompt,
+                        provider=ai_provider,
+                        api_key=ai_api_key,
+                    )
+                st.markdown(_response)
+
+        st.session_state[_chat_key].append({"role": "assistant", "content": _response})
 
 
 if __name__ == "__main__":
