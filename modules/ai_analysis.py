@@ -6,6 +6,7 @@ import streamlit as st
 
 from modules.fundamental import (
     fetch_financial_statements_jquants,
+    fetch_fundamental_kabutan,
     fetch_fundamental_yfinance,
     format_fundamental_text,
 )
@@ -547,7 +548,8 @@ def prepare_analysis_inputs(
 
     fund_data = fetch_fundamental_yfinance(ticker)
     jquants_data = fetch_financial_statements_jquants(ticker)
-    fund_text = format_fundamental_text(fund_data, jquants_data)
+    kabutan_data = fetch_fundamental_kabutan(ticker)
+    fund_text = format_fundamental_text(fund_data, jquants_data, kabutan=kabutan_data)
 
     news_titles = tuple(
         item["title"]
