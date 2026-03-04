@@ -23,8 +23,9 @@ def _parse_number(text: str) -> float | None:
 
 
 def _scrape_kabutan(code4: str) -> dict:
-    """Kabutan の信用残ページからデータをスクレイピングする。"""
-    url = f"https://kabutan.jp/stock/merit?code={code4}"
+    """Kabutan の銘柄ページから信用取引データをスクレイピングする。"""
+    # 旧URLは廃止。メインの銘柄ページから取得する
+    url = f"https://kabutan.jp/stock/?code={code4}"
     headers = {
         "User-Agent": (
             "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
@@ -38,65 +39,36 @@ def _scrape_kabutan(code4: str) -> dict:
 
     result: dict = {}
 
-    # --- 貸借倍率テーブルを探す ---
-    # 「貸借倍率」を含むテーブルを検索
-    tables = tree.xpath("//table[.//*[contains(text(),'貸借倍率') or contains(text(),'信用買')]]")
-    for table in tables:
-        rows = table.xpath(".//tr")
-        for row in rows:
+    # kobetsu_left div の「信用取引」h2 直後のテーブルを取得
+    # 列順: [日付, 売り残(千株), 買い残(千株), 倍率]
+    margin_table = tree.xpath(
+        '//div[@id="kobetsu_left"]'
+        '//h2[contains(text(),"信用取引")]'
+        '/following-sibling::table[1]'
+    )
+
+    if margin_table:
+        rows = margin_table[0].xpath(".//tr")
+        # 1行目はヘッダー、2行目が最新データ
+        for row in rows[1:2]:
             cells = row.xpath(".//th|.//td")
             texts = [c.text_content().strip() for c in cells]
-            for i, t in enumerate(texts):
-                if ("信用買い残" in t or "買い残" in t) and i + 1 < len(texts):
-                    v = _parse_number(texts[i + 1])
-                    if v is not None:
-                        result["buy_margin"] = v
-                if ("信用売り残" in t or "売り残" in t) and i + 1 < len(texts):
-                    v = _parse_number(texts[i + 1])
-                    if v is not None:
-                        result["sell_margin"] = v
-                if "貸借倍率" in t and i + 1 < len(texts):
-                    v = _parse_number(texts[i + 1])
-                    if v is not None:
-                        result["lending_ratio"] = v
+            if len(texts) >= 4:
+                date_str = texts[0]
+                sell = _parse_number(texts[1])   # 売り残（千株）
+                buy  = _parse_number(texts[2])   # 買い残（千株）
+                ratio = _parse_number(texts[3])  # 倍率
 
-    # --- 表形式（ヘッダー行 + データ行）のパターンにも対応 ---
-    if not result:
-        headers_found = tree.xpath(
-            "//th[contains(text(),'貸借倍率')]"
-            "| //td[contains(@class,'credit') and contains(text(),'貸借倍率')]"
-        )
-        for h in headers_found:
-            parent_row = h.getparent()
-            if parent_row is None:
-                continue
-            parent_table = parent_row.getparent()
-            if parent_table is None:
-                continue
-            data_rows = parent_table.xpath(".//tbody/tr")
-            if not data_rows:
-                data_rows = parent_table.xpath(".//tr")[1:]
-            if data_rows:
-                cells = data_rows[0].xpath(".//td")
-                all_headers = parent_row.xpath(".//th|.//td")
-                header_texts = [c.text_content().strip() for c in all_headers]
-                cell_texts = [c.text_content().strip() for c in cells]
-                for j, ht in enumerate(header_texts):
-                    if j < len(cell_texts):
-                        if "買い残" in ht:
-                            v = _parse_number(cell_texts[j])
-                            if v:
-                                result["buy_margin"] = v
-                        elif "売り残" in ht:
-                            v = _parse_number(cell_texts[j])
-                            if v:
-                                result["sell_margin"] = v
-                        elif "貸借倍率" in ht:
-                            v = _parse_number(cell_texts[j])
-                            if v:
-                                result["lending_ratio"] = v
+                if sell is not None:
+                    result["sell_margin"] = sell * 1000  # 千株→株
+                if buy is not None:
+                    result["buy_margin"] = buy * 1000    # 千株→株
+                if ratio is not None:
+                    result["lending_ratio"] = ratio
+                if date_str:
+                    result["date"] = date_str
 
-    # 貸借倍率が未取得でも買い・売り残があれば計算
+    # 倍率が取れなくても買い・売り残から計算
     if (
         "lending_ratio" not in result
         and result.get("buy_margin")
