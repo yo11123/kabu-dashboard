@@ -21,6 +21,7 @@ from modules.chart import create_candlestick_chart
 from modules.events import fetch_earnings_events, fetch_news_events
 from modules.market_hours import is_tse_open, get_refresh_interval_ms, market_status_label
 from modules.styles import apply_theme
+from streamlit_cookies_controller import CookieController
 from modules.ai_analysis import (
     get_comprehensive_analysis,
     prepare_analysis_inputs,
@@ -265,6 +266,9 @@ def _render_ai_results(result: dict) -> None:
 # ─── メイン ────────────────────────────────────────────────────────
 
 def main() -> None:
+    # ── Cookie（ブラウザ永続化）──
+    _cookies = CookieController()
+
     # ── リアルタイム自動更新（東証開場中のみ）──
     refresh_ms = get_refresh_interval_ms()
     if refresh_ms:
@@ -436,13 +440,18 @@ def main() -> None:
                 "gemini": "AIza...",
             }[ai_provider]
 
-            # ページ遷移後にウィジェット状態がリセットされていたら永続化辞書から復元する
+            # APIキーの復元（優先順位: セッション → Cookie → 空）
             _widget_key = f"ai_key_{ai_provider}"
             _valid_prefixes = {"claude": "sk-ant-", "openai": "sk-", "gemini": "AIza"}
+            _prefix = _valid_prefixes.get(ai_provider, "")
+            _cookie_key = f"apikey_{ai_provider}"
+
             if _widget_key not in st.session_state:
+                # まずセッション内辞書から、なければCookieから復元
                 _saved = st.session_state.ai_api_keys.get(ai_provider, "")
-                # 非ASCII文字または期待するプレフィックスと不一致のキーは無効とみなしクリア
-                _prefix = _valid_prefixes.get(ai_provider, "")
+                if not _saved:
+                    _saved = _cookies.get(_cookie_key) or ""
+                # 形式不正なキーは無効とみなしクリア
                 if not _saved.isascii() or (_saved and _prefix and not _saved.startswith(_prefix)):
                     _saved = ""
                     st.session_state.ai_api_keys[ai_provider] = ""
@@ -452,17 +461,23 @@ def main() -> None:
                 "API キー",
                 type="password",
                 placeholder=_placeholder,
-                help="入力したキーはこのブラウザセッション中のみ保持されます",
+                help="入力したキーはブラウザに1日間保存されます（同じブラウザなら再入力不要）",
                 key=_widget_key,
             )
 
-            # 永続化辞書に保存（形式が正しいキーのみ）
-            _prefix = _valid_prefixes.get(ai_provider, "")
-            if not ai_api_key or not _prefix or ai_api_key.startswith(_prefix):
+            # 形式が正しいキーのみ保存（セッション辞書 + Cookie）
+            if not ai_api_key or (_prefix and ai_api_key.startswith(_prefix)):
                 st.session_state.ai_api_keys[ai_provider] = ai_api_key
+                if ai_api_key:
+                    _cookies.set(_cookie_key, ai_api_key, max_age=86400)  # 1日
+                else:
+                    try:
+                        _cookies.remove(_cookie_key)
+                    except Exception:
+                        pass
 
             if ai_api_key:
-                st.caption("✅ キー入力済み（セッション中のみ保持）")
+                st.caption("✅ キー保存済み（ブラウザに1日間保持）")
             else:
                 st.caption("⬜ API キーを入力してください")
 
