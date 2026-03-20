@@ -587,47 +587,36 @@ def main() -> None:
         unsafe_allow_html=True,
     )
 
-    # ─── 表示範囲スライダー ─────────────────────────────────────────
-    # 日付ラベルを作成（スライダーの目盛り用）
-    _dates_fmt = df.index.strftime("%Y-%m-%d").tolist()
-    _first_date = _dates_fmt[0]
-    _last_date = _dates_fmt[-1]
+    # ─── 期間切替ボタン（チャート直上）─────────────────────────────
+    _period_options = {
+        "1M": ("1ヶ月", 21),
+        "3M": ("3ヶ月", 63),
+        "6M": ("6ヶ月", 132),
+        "1Y": ("1年", 260),
+        "2Y": ("2年", 520),
+        "ALL": ("全期間", _total_bars),
+    }
 
-    st.markdown(
-        f"<div style='font-family:IBM Plex Mono,monospace;font-size:0.7em;color:#4a7a8a;margin-bottom:-10px;'>"
-        f"表示範囲　{_first_date} 〜 {_last_date}（全 {_total_bars} 日足）</div>",
-        unsafe_allow_html=True,
-    )
-    _range_col, _height_col = st.columns([5, 1])
-    with _range_col:
-        _range = st.slider(
-            "表示範囲",
-            min_value=0,
-            max_value=_total_bars - 1,
-            value=(_default_start, _total_bars - 1),
-            format=f"",
-            label_visibility="collapsed",
-            help="左端・右端をドラッグして表示期間を自由に調整。日足を詰めて長期間を表示できます。",
-        )
-    with _height_col:
-        chart_height = st.number_input(
-            "高さ", min_value=350, max_value=900, value=580, step=30,
-            label_visibility="collapsed",
-            help="チャートの高さ（px）",
-        )
+    # セッション内で期間を保持
+    if "chart_period" not in st.session_state:
+        st.session_state.chart_period = period  # サイドバーの初期値を使用
 
-    view_start_idx = _range[0]
-    view_end_idx = _range[1]
+    _btn_cols = st.columns(len(_period_options))
+    for i, (key, (label, _)) in enumerate(_period_options.items()):
+        _is_active = st.session_state.chart_period == key
+        if _btn_cols[i].button(
+            label,
+            key=f"period_btn_{key}",
+            use_container_width=True,
+            type="primary" if _is_active else "secondary",
+        ):
+            st.session_state.chart_period = key
 
-    # 選択範囲の日付表示
-    _sel_start = _dates_fmt[view_start_idx]
-    _sel_end = _dates_fmt[view_end_idx]
-    _sel_bars = view_end_idx - view_start_idx + 1
-    st.markdown(
-        f"<div style='font-family:IBM Plex Mono,monospace;font-size:0.68em;color:#3a5a6a;margin-top:-8px;'>"
-        f"{_sel_start} → {_sel_end}　（{_sel_bars} 本）</div>",
-        unsafe_allow_html=True,
-    )
+    _selected_period = st.session_state.chart_period
+    _bars = _period_options.get(_selected_period, ("", 132))[1]
+    view_start_idx = max(0, _total_bars - _bars)
+    view_end_idx = _total_bars - 1
+    chart_height = 580
 
     # ─── チャート描画 ────────────────────────────────────────────────
     fig, earnings_trace_idx, news_trace_idx = create_candlestick_chart(
