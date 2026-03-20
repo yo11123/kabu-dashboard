@@ -11,6 +11,8 @@ from modules.market_context import (
     INDICATORS,
     calc_derived_indicators,
     fetch_indicator_history,
+    fetch_fred_indicators,
+    fetch_fred_series_history,
     fetch_market_snapshot,
 )
 from modules.market_hours import market_status_label
@@ -277,13 +279,18 @@ def main() -> None:
                     with st.container(border=True):
                         _render_live_indicator(name, data, period)
                 col_idx += 1
-        # 外部データ
-        st.divider()
-        st.caption("以下の指標は外部データソースが必要です")
-        cols = st.columns(2)
-        for i, item in enumerate(_EXTERNAL_INDICATORS.get("bond", [])):
-            with cols[i % 2]:
-                _render_info_indicator(item)
+        # FRED: ハイイールドスプレッド
+        _fred = fetch_fred_indicators()
+        _hy = _fred.get("ハイイールドスプレッド")
+        if _hy:
+            st.divider()
+            with st.container(border=True):
+                st.metric("ハイイールドスプレッド（FRED）", f"{_hy['value']}%", help=_hy["description"])
+                st.caption(f"データ日: {_hy['date']}　※{_hy['description']}")
+                _hy_hist = fetch_fred_series_history("BAMLH0A0HYM2", 252)
+                if _hy_hist is not None:
+                    fig = _make_chart(pd.DataFrame({"Close": _hy_hist}), color="#ff9800")
+                    st.plotly_chart(fig, use_container_width=True, key="fred_hy_spread")
 
     # ── 4. 資金フロー ─────────────────────────────────────────
     with tabs[3]:
@@ -311,11 +318,36 @@ def main() -> None:
     # ── 6. マクロ経済 ─────────────────────────────────────────
     with tabs[5]:
         st.subheader("マクロ経済・先行指標")
-        st.caption("マクロ経済指標は定期発表データのため、リアルタイム取得はできません。以下は参照先のガイドです。")
-        cols = st.columns(2)
-        for i, item in enumerate(_EXTERNAL_INDICATORS.get("macro", [])):
-            with cols[i % 2]:
-                _render_info_indicator(item)
+
+        _fred = fetch_fred_indicators()
+        if _fred:
+            # FREDデータをカードで表示
+            _fred_items = list(_fred.items())
+            # ハイイールドスプレッドは債券タブに表示済みなので除外
+            _fred_items = [(n, d) for n, d in _fred_items if n != "ハイイールドスプレッド"]
+
+            cols = st.columns(2)
+            for i, (name, info) in enumerate(_fred_items):
+                with cols[i % 2]:
+                    with st.container(border=True):
+                        val = info["value"]
+                        unit = info.get("unit", "")
+                        st.metric(name, f"{val}{unit}")
+                        st.caption(f"{info['description']}　（{info['date']}）")
+                        # チャート表示
+                        sid = info.get("series_id")
+                        if sid:
+                            hist = fetch_fred_series_history(sid, 60)
+                            if hist is not None:
+                                fig = _make_chart(pd.DataFrame({"Close": hist}), color="#4caf50")
+                                st.plotly_chart(fig, use_container_width=True, key=f"fred_{sid}")
+        else:
+            st.warning(
+                "FRED APIキーが設定されていません。マクロ経済指標を表示するには:\n\n"
+                "1. https://fred.stlouisfed.org でアカウント作成\n"
+                "2. https://fredaccount.stlouisfed.org/apikeys でAPIキー取得\n"
+                "3. secrets.toml に `FRED_API_KEY = \"あなたのキー\"` を追加"
+            )
 
     # ── 7. コモディティ・為替 ─────────────────────────────────
     with tabs[6]:

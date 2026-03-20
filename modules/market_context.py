@@ -1,7 +1,7 @@
 """
 市場全体の指標・マクロデータの取得・整形モジュール
 
-yfinance で取得可能な主要指標をカバーし、
+yfinance で取得可能な主要指標 + FRED API のマクロ経済指標をカバーし、
 AI 分析用テキストおよびダッシュボード表示用データを提供する。
 """
 
@@ -272,11 +272,133 @@ def fetch_market_context_text() -> str:
     if nt:
         lines.append(f"- NT倍率: {nt['value']:.2f}倍  ※拡大は値がさ株集中、市場の裾野が狭い状態")
 
+    # ─── マクロ経済指標（FRED）──────────────────────────────
+    fred_data = fetch_fred_indicators()
+    if fred_data:
+        lines.append("\n### マクロ経済指標（FRED）")
+        for name, info in fred_data.items():
+            val = info["value"]
+            unit = info.get("unit", "")
+            desc = info.get("description", "")
+            date = info.get("date", "")
+            lines.append(f"- {name}: {val}{unit}（{date}）  ※{desc}")
+
     # ─── 分析ガイド ──────────────────────────────────────────
     lines.append(
         "\n上記のマーケット環境データをもとに、対象銘柄への影響を分析に必ず反映してください。"
         "例: VIX高水準→リスクオフ環境、逆イールド→景気後退リスク、"
-        "円安→輸出企業に有利、金利上昇→グロース株に逆風、SOX好調→半導体関連に追い風、など。"
+        "円安→輸出企業に有利、金利上昇→グロース株に逆風、SOX好調→半導体関連に追い風、"
+        "CPI上昇→利上げ懸念、PMI50割れ→景気縮小懸念、など。"
     )
 
     return "\n".join(lines)
+
+
+# ─── FRED API（マクロ経済指標）──────────────────────────────────────
+
+# (series_id, display_name, unit, description, transform)
+# transform: "raw"=そのまま, "yoy_pct"=前年同月比%, "mom_pct"=前月比%
+FRED_SERIES: list[tuple[str, str, str, str, str]] = [
+    ("CPIAUCSL",         "CPI（総合）",           "",  "消費者物価指数。インフレの代表指標", "yoy_pct"),
+    ("CPILFESL",         "CPI（コア）",           "",  "食品・エネルギー除く。FRBが重視", "yoy_pct"),
+    ("PAYEMS",           "非農業部門雇用者数",     "千人", "雇用統計NFP。FRB政策に直結", "mom_diff"),
+    ("UMCSENT",          "ミシガン大消費者信頼感", "",  "消費者心理。インフレ期待も含む", "raw"),
+    ("A191RL1Q225SBEA",  "実質GDP成長率",         "%",  "四半期年率。2期連続マイナスで景気後退", "raw"),
+    ("USSLIND",          "景気先行指数（LEI）",    "%",  "フィラデルフィア連銀。3ヶ月連続低下で警告", "raw"),
+    ("BAMLH0A0HYM2",     "ハイイールドスプレッド", "%",  "ジャンク債と国債の利回り差。拡大=リスクオフ", "raw"),
+    ("CSCICP03USM665S",  "消費者信頼感（OECD）",  "",   "OECD消費者信頼感指数。100超で楽観", "raw"),
+]
+
+
+@st.cache_data(ttl=3600 * 6)  # 6時間キャッシュ（マクロ指標は更新頻度が低い）
+def fetch_fred_indicators() -> dict[str, dict]:
+    """
+    FRED API からマクロ経済指標の最新値を取得する。
+    FRED_API_KEY が secrets に未設定の場合は空辞書を返す。
+    """
+    try:
+        api_key = st.secrets.get("FRED_API_KEY", "")
+    except Exception:
+        api_key = ""
+    if not api_key or len(api_key) < 10:
+        return {}
+
+    try:
+        from fredapi import Fred
+        fred = Fred(api_key=api_key)
+    except Exception:
+        return {}
+
+    result: dict[str, dict] = {}
+
+    for series_id, name, unit, desc, transform in FRED_SERIES:
+        try:
+            series = fred.get_series(series_id)
+            if series is None or series.empty:
+                continue
+
+            series = series.dropna()
+            if series.empty:
+                continue
+
+            latest_val = float(series.iloc[-1])
+            latest_date = series.index[-1].strftime("%Y-%m-%d")
+
+            if transform == "yoy_pct" and len(series) >= 13:
+                # 前年同月比 %
+                prev_year = float(series.iloc[-13])
+                if prev_year != 0:
+                    val = round((latest_val - prev_year) / prev_year * 100, 1)
+                    result[name] = {
+                        "value": val,
+                        "unit": "%",
+                        "description": desc,
+                        "date": latest_date,
+                        "series_id": series_id,
+                    }
+            elif transform == "mom_diff" and len(series) >= 2:
+                # 前月差（千人）
+                prev = float(series.iloc[-2])
+                diff = round(latest_val - prev, 0)
+                result[name] = {
+                    "value": f"{diff:+,.0f}",
+                    "unit": unit,
+                    "description": desc,
+                    "date": latest_date,
+                    "series_id": series_id,
+                    "raw_value": diff,
+                }
+            else:
+                result[name] = {
+                    "value": round(latest_val, 2) if abs(latest_val) < 1000 else round(latest_val, 0),
+                    "unit": unit,
+                    "description": desc,
+                    "date": latest_date,
+                    "series_id": series_id,
+                }
+
+        except Exception:
+            continue
+
+    return result
+
+
+@st.cache_data(ttl=3600 * 6)
+def fetch_fred_series_history(series_id: str, periods: int = 60) -> pd.Series | None:
+    """FRED の時系列データを取得（チャート用）。"""
+    try:
+        api_key = st.secrets.get("FRED_API_KEY", "")
+    except Exception:
+        api_key = ""
+    if not api_key or len(api_key) < 10:
+        return None
+
+    try:
+        from fredapi import Fred
+        fred = Fred(api_key=api_key)
+        series = fred.get_series(series_id)
+        if series is not None and not series.empty:
+            return series.dropna().tail(periods)
+    except Exception:
+        pass
+    return None
