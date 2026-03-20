@@ -417,9 +417,11 @@ def _classify_error(err_str: str, provider: str) -> str:
         return "⏱️ APIレート制限またはクォータ超過です。しばらく待ってから再試行してください。"
     if "invalid_api_key" in s or "incorrect api key" in s or "api_key_invalid" in s:
         return f"🔑 APIキーが無効です（{provider}）。入力した API キーを確認してください。"
-    if "authentication" in s or "unauthorized" in s or "permission" in s:
-        return f"🔑 認証エラーです（{provider}）。APIキーを確認してください。"
-    return f"分析エラー ({provider}): {err_str[:300]}"
+    if "authentication" in s or "unauthorized" in s:
+        return f"🔑 認証エラーです（{provider}）。APIキーを確認してください。\n\n詳細: {err_str[:300]}"
+    if "permission" in s and "denied" in s:
+        return f"🔑 権限エラーです（{provider}）。APIキーの権限を確認してください。\n\n詳細: {err_str[:300]}"
+    return f"分析エラー ({provider}): {err_str[:500]}"
 
 
 @st.cache_data(ttl=86400)
@@ -473,7 +475,12 @@ def get_comprehensive_analysis(
 
         if provider == "claude":
             # Claude は secrets の共用キー or ユーザー入力キーを使用
-            key = api_key.strip() or st.secrets.get("ANTHROPIC_API_KEY", "")
+            key = api_key.strip()
+            if not key:
+                try:
+                    key = st.secrets.get("ANTHROPIC_API_KEY", "")
+                except Exception:
+                    key = ""
             if not key or len(key) < 20:
                 return {
                     **_default,
@@ -590,7 +597,12 @@ def get_chat_response(
 
     try:
         if provider == "claude":
-            key = api_key.strip() or st.secrets.get("ANTHROPIC_API_KEY", "")
+            key = api_key.strip()
+            if not key:
+                try:
+                    key = st.secrets.get("ANTHROPIC_API_KEY", "")
+                except Exception:
+                    key = ""
             if not key or len(key) < 20:
                 return "❌ Anthropic API キーが設定されていません。サイドバーで API キーを入力してください。"
             client = anthropic.Anthropic(api_key=key)
