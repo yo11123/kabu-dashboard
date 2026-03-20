@@ -8,7 +8,13 @@ from modules.data_loader import load_all_tse_stocks, load_tickers
 from modules.indicators import calc_bollinger_bands, calc_volume_ma
 from modules.market_hours import market_status_label
 from modules.styles import apply_theme
-from modules.lstm_predictor import is_model_available, predict_proba as _lstm_predict
+try:
+    from modules.lstm_predictor import is_model_available, predict_proba as _lstm_predict
+except ImportError:
+    def is_model_available() -> bool:
+        return False
+    def _lstm_predict(*_a, **_kw):
+        return None
 
 st.set_page_config(
     page_title="BBスキャナー | 日本株ダッシュボード",
