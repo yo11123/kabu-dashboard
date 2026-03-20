@@ -15,6 +15,7 @@ from streamlit_cookies_controller import CookieController
 from modules.ai_analysis import get_comprehensive_analysis, prepare_analysis_inputs
 from modules.data_loader import fetch_stock_data_max, load_all_tse_stocks, load_tickers
 from modules.events import fetch_news_events
+from modules.market_context import fetch_market_context_text, fetch_market_snapshot, calc_derived_indicators
 from modules.market_hours import market_status_label
 from modules.styles import apply_theme
 
@@ -359,6 +360,181 @@ def _render_card(rank: int, item: dict) -> None:
     st.write("")  # カード間の余白
 
 
+# ─── 日本株全体の相場観 AI 分析 ──────────────────────────────────────
+
+def _build_market_outlook_prompt(market_text: str, snapshot: dict, derived: dict) -> str:
+    """日本株市場全体の売買判断プロンプトを生成する。"""
+    # 主要指数の変動をまとめる
+    indices = []
+    for name in ["日経平均", "TOPIX（ETF）", "S&P 500", "ナスダック総合"]:
+        d = snapshot.get(name)
+        if d:
+            indices.append(f"- {name}: {d['value']:,.0f}（前日比{d['change_pct']:+.1f}%）")
+    indices_text = "\n".join(indices) if indices else "データなし"
+
+    return f"""あなたは日本株市場の上級ストラテジストです。
+以下の市場データを分析し、**今、日本株全体として買い時か・売り時か・現状維持か** を判断してください。
+
+## 主要指数
+{indices_text}
+
+{market_text}
+
+## 分析の視点
+1. VIXとSKEWから市場のリスク選好度を判断
+2. イールドカーブ（長短金利差）から景気サイクルの位置を判断
+3. ドル円の動向が日本株に与える影響
+4. SOX・ラッセル2000からグローバルなリスクオン/オフを判断
+5. コモディティ（金・原油・銅）からインフレ/景気の方向性を判断
+6. マクロ経済指標（CPI・雇用・GDP等）があればそれも考慮
+
+## 出力形式（このJSONのみ出力）
+```json
+{{
+  "market_judgment": "積極買い" | "買い優勢" | "中立・様子見" | "売り優勢" | "リスク回避",
+  "score": 0〜100の整数（50=中立、高い=強気、低い=弱気）,
+  "summary": "3〜4文の相場観サマリー。具体的な数値を引用して根拠を示す",
+  "bull_factors": ["強気要因1", "強気要因2", "強気要因3"],
+  "bear_factors": ["弱気要因1", "弱気要因2", "弱気要因3"],
+  "strategy": "今週〜今月の投資戦略を2〜3文で具体的に提案"
+}}
+```"""
+
+
+@st.cache_data(ttl=3600 * 4)  # 4時間キャッシュ
+def _get_market_outlook(market_text: str, provider: str, api_key: str) -> dict:
+    """日本株全体の相場観をAIで分析する。"""
+    import json
+    import re
+
+    snapshot = fetch_market_snapshot()
+    derived = calc_derived_indicators(snapshot)
+    prompt = _build_market_outlook_prompt(market_text, snapshot, derived)
+
+    try:
+        if provider == "claude":
+            import anthropic
+            key = api_key.strip()
+            if not key:
+                try:
+                    key = st.secrets.get("ANTHROPIC_API_KEY", "")
+                except Exception:
+                    key = ""
+            if not key:
+                return {"error": "APIキーが設定されていません"}
+            client = anthropic.Anthropic(api_key=key)
+            resp = client.messages.create(
+                model="claude-haiku-4-5-20251001",
+                max_tokens=2000,
+                messages=[{"role": "user", "content": prompt}],
+            )
+            text = resp.content[0].text
+        elif provider == "openai":
+            from openai import OpenAI
+            client = OpenAI(api_key=api_key.strip())
+            resp = client.chat.completions.create(
+                model="gpt-4o-mini",
+                max_tokens=2000,
+                messages=[{"role": "user", "content": prompt}],
+            )
+            text = resp.choices[0].message.content
+        elif provider == "gemini":
+            import requests as _req
+            url = "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent"
+            payload = {"contents": [{"role": "user", "parts": [{"text": prompt}]}]}
+            resp = _req.post(
+                url,
+                params={"key": api_key.strip()},
+                headers={"Content-Type": "application/json; charset=utf-8"},
+                data=json.dumps(payload, ensure_ascii=False).encode("utf-8"),
+                timeout=60,
+            )
+            resp.raise_for_status()
+            text = resp.json()["candidates"][0]["content"]["parts"][0]["text"]
+        else:
+            return {"error": f"不明なプロバイダー: {provider}"}
+
+        # JSONパース
+        text = text.strip()
+        if "```" in text:
+            for part in text.split("```"):
+                part = part.strip().lstrip("json").strip()
+                try:
+                    return json.loads(part)
+                except json.JSONDecodeError:
+                    continue
+        match = re.search(r"\{[\s\S]*\}", text)
+        if match:
+            return json.loads(match.group())
+        return json.loads(text)
+
+    except Exception as e:
+        return {"error": str(e)[:300]}
+
+
+_MARKET_JUDGMENT_CONFIG = {
+    "積極買い":   ("#00c853", "🔥"),
+    "買い優勢":   ("#4caf50", "📈"),
+    "中立・様子見": ("#9e9e9e", "➡️"),
+    "売り優勢":   ("#ff9800", "📉"),
+    "リスク回避": ("#f44336", "🛡️"),
+}
+
+
+def _render_market_outlook(result: dict) -> None:
+    """日本株全体の相場観を描画する。"""
+    if result.get("error"):
+        st.error(f"相場分析エラー: {result['error']}")
+        return
+
+    judgment = result.get("market_judgment", "中立・様子見")
+    score = result.get("score", 50)
+    summary = result.get("summary", "")
+    strategy = result.get("strategy", "")
+    bulls = result.get("bull_factors", [])
+    bears = result.get("bear_factors", [])
+    color, emoji = _MARKET_JUDGMENT_CONFIG.get(judgment, ("#9e9e9e", "➡️"))
+
+    # ヘッダーバナー
+    st.markdown(
+        f"""<div style="
+            background: linear-gradient(135deg, #101c30 0%, #0d1929 100%);
+            border: 1px solid #1e2d40; border-left: 4px solid {color};
+            border-radius: 8px; padding: 18px 24px; margin-bottom: 12px;
+        ">
+            <div style="display:flex; align-items:center; gap:16px; flex-wrap:wrap;">
+                <span style="font-size:2em;">{emoji}</span>
+                <div>
+                    <div style="font-family:'IBM Plex Mono',monospace; font-size:1.2em; font-weight:700; color:{color};">
+                        日本株全体: {judgment}
+                    </div>
+                    <div style="font-family:'IBM Plex Mono',monospace; font-size:0.8em; color:#4a7a8a; margin-top:4px;">
+                        市場スコア: {score} / 100
+                    </div>
+                </div>
+                <div style="margin-left:auto; max-width:55%; font-family:'IBM Plex Sans JP',sans-serif; font-size:0.88em; color:#c9d6e3; line-height:1.6;">
+                    {summary}
+                </div>
+            </div>
+        </div>""",
+        unsafe_allow_html=True,
+    )
+
+    # 強気・弱気要因 + 戦略
+    c1, c2, c3 = st.columns(3)
+    with c1:
+        st.markdown("**📈 強気要因**")
+        for b in bulls:
+            st.markdown(f"<span style='color:#4caf50'>✅</span> {b}", unsafe_allow_html=True)
+    with c2:
+        st.markdown("**📉 弱気要因**")
+        for b in bears:
+            st.markdown(f"<span style='color:#f44336'>⚠️</span> {b}", unsafe_allow_html=True)
+    with c3:
+        st.markdown("**🎯 投資戦略**")
+        st.markdown(f"<div style='font-size:0.9em;line-height:1.6;'>{strategy}</div>", unsafe_allow_html=True)
+
+
 # ─── メイン ─────────────────────────────────────────────────────────────
 
 def main() -> None:
@@ -369,6 +545,22 @@ def main() -> None:
     )
 
     _cookies = CookieController()
+
+    # ─── 日本株全体の相場観（ページ最上部）──────────────────────
+    _market_text = fetch_market_context_text()
+    if _market_text:
+        # APIキー取得（secrets優先）
+        try:
+            _outlook_key = st.secrets.get("ANTHROPIC_API_KEY", "")
+        except Exception:
+            _outlook_key = ""
+        _outlook_provider = "claude" if _outlook_key else ""
+
+        if _outlook_provider:
+            with st.spinner("市場全体の相場観を分析中..."):
+                _outlook = _get_market_outlook(_market_text, _outlook_provider, _outlook_key)
+            _render_market_outlook(_outlook)
+            st.divider()
 
     nikkei225    = load_tickers(TICKERS_PATH)
     all_tse, _   = load_all_tse_stocks()
