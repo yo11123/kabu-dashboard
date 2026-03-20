@@ -4,6 +4,7 @@
 テクニカル・ファンダメンタルズ・センチメント・マクロ経済まで網羅した
 全58指標をカテゴリ別に表示。チャートデータが取得可能な指標はリアルタイム表示。
 """
+import pandas as pd
 import plotly.graph_objects as go
 import streamlit as st
 
