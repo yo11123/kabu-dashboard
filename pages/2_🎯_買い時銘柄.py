@@ -828,7 +828,9 @@ def main() -> None:
 
     nikkei225    = load_tickers(TICKERS_PATH)
     all_tse, _   = load_all_tse_stocks()
-    prime_stocks = [t for t in all_tse if "プライム" in t.get("market", "")] if all_tse else []
+    prime_stocks    = [t for t in all_tse if "プライム" in t.get("market", "")]    if all_tse else []
+    standard_stocks = [t for t in all_tse if "スタンダード" in t.get("market", "")] if all_tse else []
+    growth_stocks   = [t for t in all_tse if "グロース" in t.get("market", "")]    if all_tse else []
 
     # ─── サイドバー ─────────────────────────────────────────────
     with st.sidebar:
@@ -838,9 +840,21 @@ def main() -> None:
         universe_opts = ["日経225"]
         if prime_stocks:
             universe_opts.append(f"東証プライム（{len(prime_stocks):,}銘柄）")
+        if standard_stocks:
+            universe_opts.append(f"東証スタンダード（{len(standard_stocks):,}銘柄）")
+        if growth_stocks:
+            universe_opts.append(f"東証グロース（{len(growth_stocks):,}銘柄）")
+        if all_tse:
+            universe_opts.append(f"東証全銘柄（{len(all_tse):,}銘柄）")
         universe_choice = st.selectbox("スキャン対象", universe_opts)
 
-        if "プライム" in universe_choice:
+        if "全銘柄" in universe_choice:
+            scan_items = all_tse
+        elif "グロース" in universe_choice:
+            scan_items = growth_stocks
+        elif "スタンダード" in universe_choice:
+            scan_items = standard_stocks
+        elif "プライム" in universe_choice:
             scan_items = prime_stocks
         else:
             scan_items = nikkei225
