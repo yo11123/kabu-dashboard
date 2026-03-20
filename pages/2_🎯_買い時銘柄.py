@@ -52,8 +52,9 @@ _JUDGMENT_EMOJI = {
 
 def _score_stock(df: pd.DataFrame) -> tuple[float, dict]:
     """
-    ルールベース買いスコア（0〜100）と根拠テキストを返す。
-    RSI・MACD・BB・52週安値比・SMA25上抜け・出来高急増 の6指標。
+    ルールベース買いスコア（0〜200）と根拠テキストを返す。
+    テクニカル6指標 + トレンド転換 + 出来高の質 = 最大200点。
+    Phase 1 では純テクニカルのみ（ファンダ・信用残は Phase 1.5 で加減点）。
     """
     close  = df["Close"]
     volume = df["Volume"] if "Volume" in df.columns else pd.Series(dtype=float)
@@ -103,7 +104,7 @@ def _score_stock(df: pd.DataFrame) -> tuple[float, dict]:
             elif sigma < -1:
                 score += 12; breakdown["BB"] = f"{sigma:.1f}σ（下限付近, +12）"
 
-    # ── 52週安値比（データが1年未満の場合は全期間の安値を代替使用）──────
+    # ── 52週安値比 ───────────────────────────────────────────────────
     last  = float(close.iloc[-1])
     low52 = float(close.tail(min(len(close), 252)).min())
     pct_from_low = (last - low52) / low52 * 100 if low52 > 0 else 999.0
@@ -119,17 +120,198 @@ def _score_stock(df: pd.DataFrame) -> tuple[float, dict]:
                 and float(close.iloc[-2]) <= float(sma25.iloc[-2])):
             score += 10; breakdown["SMA25"] = "本日上抜け（+10）"
 
-    # ── 出来高急増（5日/30日平均）───────────────────────────────────
-    if len(volume) >= 30:
+    # ══════════════════════════════════════════════════════════════════
+    # 新規追加: トレンド転換の確認
+    # ══════════════════════════════════════════════════════════════════
+    if len(close) >= 30:
+        sma25_series = close.rolling(25).mean()
+        # SMA25の傾き（5日間の変化率）
+        sma25_now  = float(sma25_series.iloc[-1])
+        sma25_5ago = float(sma25_series.iloc[-6]) if len(sma25_series) >= 6 else sma25_now
+        if sma25_5ago > 0:
+            sma25_slope = (sma25_now - sma25_5ago) / sma25_5ago * 100
+            if sma25_slope > 0.5:
+                score += 15; breakdown["トレンド転換"] = f"SMA25上昇転換（傾き+{sma25_slope:.1f}%, +15）"
+            elif sma25_slope > 0:
+                score += 8;  breakdown["トレンド転換"] = f"SMA25横ばい→上昇（+{sma25_slope:.2f}%, +8）"
+            elif sma25_slope < -1.0:
+                score -= 10; breakdown["下降トレンド"] = f"SMA25下降中（{sma25_slope:.1f}%, -10）⚠️"
+
+    # SMA75上昇でさらにボーナス（中期トレンド確認）
+    if len(close) >= 80:
+        sma75_series = close.rolling(75).mean()
+        sma75_now  = float(sma75_series.iloc[-1])
+        sma75_5ago = float(sma75_series.iloc[-6])
+        if sma75_5ago > 0 and (sma75_now - sma75_5ago) / sma75_5ago * 100 > 0.3:
+            score += 8; breakdown["中期トレンド"] = "SMA75も上昇中（+8）"
+
+    # ══════════════════════════════════════════════════════════════════
+    # 新規追加: 出来高の質（上昇日の出来高増のみ加点）
+    # ══════════════════════════════════════════════════════════════════
+    if len(volume) >= 30 and len(close) >= 30:
         v30 = float(volume.tail(30).mean())
         if v30 > 0:
+            # 直近5日の上昇日出来高 vs 下落日出来高
+            recent = df.tail(10)
+            up_days   = recent[recent["Close"] >= recent["Open"]]
+            down_days = recent[recent["Close"] < recent["Open"]]
+            up_vol   = float(up_days["Volume"].mean()) if len(up_days) > 0 else 0
+            down_vol = float(down_days["Volume"].mean()) if len(down_days) > 0 else 0
+
+            if up_vol > 0 and down_vol > 0:
+                vol_quality = up_vol / down_vol
+                if vol_quality > 1.5 and up_vol / v30 > 1.2:
+                    score += 12; breakdown["出来高の質"] = f"上昇日出来高÷下落日出来高={vol_quality:.1f}倍（+12）"
+                elif vol_quality > 1.2:
+                    score += 6;  breakdown["出来高の質"] = f"上昇日出来高÷下落日出来高={vol_quality:.1f}倍（+6）"
+
+            # 従来の出来高急増も残す
             vr = float(volume.tail(5).mean()) / v30
             if vr > 2.0:
-                score += 10; breakdown["出来高"] = f"{vr:.1f}倍（急増, +10）"
+                score += 8; breakdown["出来高急増"] = f"{vr:.1f}倍（+8）"
             elif vr > 1.5:
-                score += 5;  breakdown["出来高"] = f"{vr:.1f}倍（増加, +5）"
+                score += 4; breakdown["出来高増加"] = f"{vr:.1f}倍（+4）"
 
-    return min(score, 100.0), breakdown
+    return max(score, 0.0), breakdown
+
+
+# ─── Phase 1.5: ファンダメンタル＋信用残で加減点 ──────────────────────
+
+def _adjust_score_fundamental(item: dict, ticker: str) -> dict:
+    """ファンダメンタル・信用残データでスコアを加減点する。"""
+    from modules.fundamental import fetch_fundamental_yfinance, fetch_fundamental_kabutan
+    from modules.margin import fetch_margin_data
+
+    score = item["score"]
+    breakdown = item["breakdown"].copy()
+
+    # ── ファンダメンタル ─────────────────────────────────────────
+    try:
+        fund_yf = fetch_fundamental_yfinance(ticker)
+        fund_kb = fetch_fundamental_kabutan(ticker)
+    except Exception:
+        fund_yf, fund_kb = {}, {}
+
+    per = fund_kb.get("per") or fund_yf.get("per")
+    pbr = fund_kb.get("pbr") or fund_yf.get("pbr")
+    div_kb = fund_kb.get("dividend_yield")
+    div_yf = fund_yf.get("dividend_yield")
+    div_yield = div_kb if div_kb is not None else ((div_yf * 100) if div_yf else None)
+    roe = fund_yf.get("roe")
+
+    if per is not None:
+        if 0 < per <= 10:
+            score += 15; breakdown["PER割安"] = f"PER {per:.1f}倍（+15）"
+        elif 0 < per <= 15:
+            score += 8;  breakdown["PER割安"] = f"PER {per:.1f}倍（+8）"
+        elif per > 50:
+            score -= 8;  breakdown["PER割高"] = f"PER {per:.1f}倍（-8）⚠️"
+        elif per < 0:
+            score -= 15; breakdown["赤字"] = f"PER {per:.1f}倍（赤字, -15）⚠️"
+
+    if pbr is not None:
+        if 0 < pbr < 0.8:
+            score += 10; breakdown["PBR割安"] = f"PBR {pbr:.2f}倍（+10）"
+        elif 0 < pbr < 1.0:
+            score += 5;  breakdown["PBR割安"] = f"PBR {pbr:.2f}倍（+5）"
+
+    if div_yield is not None and div_yield > 0:
+        if div_yield >= 4.0:
+            score += 12; breakdown["高配当"] = f"配当 {div_yield:.1f}%（+12）"
+        elif div_yield >= 3.0:
+            score += 6;  breakdown["好配当"] = f"配当 {div_yield:.1f}%（+6）"
+
+    if roe is not None:
+        if roe >= 0.15:
+            score += 8; breakdown["高ROE"] = f"ROE {roe*100:.1f}%（+8）"
+        elif roe >= 0.08:
+            score += 4; breakdown["ROE合格"] = f"ROE {roe*100:.1f}%（+4）"
+        elif roe < 0:
+            score -= 5; breakdown["ROEマイナス"] = f"ROE {roe*100:.1f}%（-5）⚠️"
+
+    item["per"] = per
+    item["pbr"] = pbr
+    item["div_yield"] = div_yield
+
+    # ── 信用残フィルター ─────────────────────────────────────────
+    try:
+        margin = fetch_margin_data(ticker)
+    except Exception:
+        margin = {}
+
+    if margin:
+        lr = margin.get("lending_ratio")
+        buy_margin = margin.get("buy_margin")
+        sell_margin = margin.get("sell_margin")
+
+        if lr is not None:
+            if lr < 1.0 and sell_margin and sell_margin > 0:
+                # 売り残 > 買い残 → ショートカバー期待
+                score += 10; breakdown["信用売り超"] = f"貸借倍率 {lr:.2f}倍（売り超, +10）"
+            elif lr > 5.0:
+                # 買い残過多 → 将来の売り圧力
+                score -= 8; breakdown["買い残過多"] = f"貸借倍率 {lr:.1f}倍（-8）⚠️"
+
+    item["score"] = max(score, 0.0)
+    item["breakdown"] = breakdown
+    return item
+
+
+# ─── セクター強弱の計算 ───────────────────────────────────────────
+
+@st.cache_data(ttl=3600 * 4, show_spinner=False)
+def _calc_sector_strength(
+    ticker_codes: tuple, ticker_names: tuple, ticker_markets: tuple,
+) -> dict[str, float]:
+    """
+    セクター別の直近5日間平均騰落率を計算する。
+    強いセクターに属する銘柄にボーナス、弱いセクターに減点。
+    """
+    from modules.data_loader import load_all_tse_stocks
+    all_tse, _ = load_all_tse_stocks()
+    if not all_tse:
+        return {}
+
+    # セクター別に代表5銘柄の5日リターンを平均
+    sector_tickers: dict[str, list[str]] = {}
+    for t in all_tse:
+        sec = t.get("sector", "")
+        if sec:
+            sector_tickers.setdefault(sec, []).append(t["code"])
+
+    sector_scores: dict[str, float] = {}
+    for sec, codes in sector_tickers.items():
+        sample = codes[:5]  # 先頭5銘柄をサンプル
+        try:
+            raw = yf.download(sample, period="10d", interval="1d",
+                              progress=False, auto_adjust=True, threads=True)
+            if raw is None or raw.empty:
+                continue
+            returns = []
+            single = len(sample) == 1
+            for code in sample:
+                try:
+                    df = raw.copy() if single else raw[code].copy()
+                    if df is None or df.empty:
+                        continue
+                    if isinstance(df.columns, pd.MultiIndex):
+                        df.columns = [str(c[0]).capitalize() for c in df.columns]
+                    else:
+                        df.columns = [str(c).capitalize() for c in df.columns]
+                    if "Close" not in df.columns:
+                        continue
+                    df.dropna(subset=["Close"], inplace=True)
+                    if len(df) >= 2:
+                        ret = (float(df["Close"].iloc[-1]) - float(df["Close"].iloc[-6])) / float(df["Close"].iloc[-6]) * 100
+                        returns.append(ret)
+                except Exception:
+                    continue
+            if returns:
+                sector_scores[sec] = round(sum(returns) / len(returns), 2)
+        except Exception:
+            continue
+
+    return sector_scores
 
 
 def _get_rsi(close: pd.Series) -> float | None:
@@ -596,8 +778,9 @@ def _render_market_outlook(result: dict) -> None:
 def main() -> None:
     st.title("🎯 買い時・仕込み時銘柄スクリーナー")
     st.caption(
-        "テクニカル指標（RSI・MACD・BB・出来高）で全銘柄をスクリーニングし、"
-        "上位候補をAIが総合分析。今最も仕込みどきの銘柄を理由とともに提示します。"
+        "テクニカル（RSI・MACD・BB・トレンド転換・出来高の質）+"
+        "ファンダメンタル（PER・PBR・配当・ROE）+"
+        "信用残・セクター強弱で全銘柄をスコアリングし、上位候補をAIが総合分析。"
     )
 
     _cookies = CookieController()
@@ -724,7 +907,38 @@ def main() -> None:
             except Exception as e:
                 st.error(f"スキャン失敗: {e}")
                 return
-            st.write(f"✅ {len(candidates)} 候補銘柄を発見（スコア上位）")
+            st.write(f"✅ {len(candidates)} 候補銘柄を発見（テクニカルスコア上位）")
+
+            # Phase 1.5: ファンダメンタル + 信用残 + セクター強弱で加減点
+            st.write(f"📊 Phase 1.5: ファンダメンタル・信用残・セクター強弱で加減点中...")
+            _sector_scores = _calc_sector_strength(ticker_codes, ticker_names, ticker_markets)
+            _p15_prog = st.progress(0, text="ファンダ取得中...")
+            for i, item in enumerate(candidates):
+                item = _adjust_score_fundamental(item, item["ticker"])
+                # セクター強弱ボーナス
+                _sec = item.get("market", "")
+                # scan_items からセクター情報を取得
+                _item_sector = next(
+                    (t.get("sector", "") for t in scan_items if t["code"] == item["ticker"]),
+                    "",
+                )
+                if _item_sector and _item_sector in _sector_scores:
+                    _sec_score = _sector_scores[_item_sector]
+                    if _sec_score > 2.0:
+                        item["score"] += 10
+                        item["breakdown"]["強セクター"] = f"{_item_sector}（セクター騰落率+{_sec_score:.1f}%, +10）"
+                    elif _sec_score > 0.5:
+                        item["score"] += 5
+                        item["breakdown"]["好セクター"] = f"{_item_sector}（+{_sec_score:.1f}%, +5）"
+                    elif _sec_score < -2.0:
+                        item["score"] -= 5
+                        item["breakdown"]["弱セクター"] = f"{_item_sector}（{_sec_score:.1f}%, -5）⚠️"
+                candidates[i] = item
+                _p15_prog.progress((i + 1) / max(len(candidates), 1), text=f"({i+1}/{len(candidates)}) {item['name']}")
+
+            # ファンダ加味後に再ソート
+            candidates.sort(key=lambda x: x["score"], reverse=True)
+            st.write(f"✅ ファンダメンタル・信用残・セクター加味完了")
 
             # Phase 2: AI詳細分析
             st.write(f"🤖 Phase 2: 上位 {len(candidates)} 銘柄をAI分析中...")
