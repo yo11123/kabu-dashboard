@@ -232,6 +232,80 @@ hr {
 }
 
 /* ════════════════════════════════════
+   タブ
+════════════════════════════════════ */
+.stTabs [data-baseweb="tab-list"] {
+    gap: 0;
+    background: #0b1220;
+    border-radius: 8px 8px 0 0;
+    border: 1px solid #1e2d40;
+    border-bottom: none;
+    padding: 0 4px;
+}
+.stTabs [data-baseweb="tab"] {
+    font-family: 'IBM Plex Mono', monospace !important;
+    font-size: 0.78rem;
+    font-weight: 500;
+    letter-spacing: 0.02em;
+    color: #4a7a8a;
+    border-radius: 6px 6px 0 0;
+    padding: 10px 20px;
+    transition: all 0.15s ease;
+}
+.stTabs [data-baseweb="tab"]:hover {
+    color: #e0eaf5;
+    background: rgba(29, 184, 160, 0.06);
+}
+.stTabs [aria-selected="true"] {
+    color: #1db8a0 !important;
+    font-weight: 600 !important;
+    border-bottom: 2px solid #1db8a0 !important;
+    background: rgba(29, 184, 160, 0.04) !important;
+}
+.stTabs [data-baseweb="tab-panel"] {
+    border: 1px solid #1e2d40;
+    border-top: none;
+    border-radius: 0 0 8px 8px;
+    padding: 16px;
+    background: rgba(13, 25, 41, 0.5);
+}
+
+/* ════════════════════════════════════
+   エクスパンダー
+════════════════════════════════════ */
+[data-testid="stExpander"] {
+    border: 1px solid #1e2d40 !important;
+    border-radius: 6px !important;
+    background: #0d1929 !important;
+}
+[data-testid="stExpander"] summary {
+    font-family: 'IBM Plex Mono', monospace !important;
+    font-size: 0.78rem !important;
+    font-weight: 500;
+    color: #4a7a8a;
+}
+[data-testid="stExpander"] summary:hover {
+    color: #1db8a0;
+}
+
+/* ════════════════════════════════════
+   チャットメッセージ
+════════════════════════════════════ */
+[data-testid="stChatMessage"] {
+    font-family: 'IBM Plex Sans JP', sans-serif !important;
+    font-size: 0.88rem;
+    border-radius: 8px;
+}
+
+/* ════════════════════════════════════
+   プログレスバー
+════════════════════════════════════ */
+[data-testid="stProgress"] > div > div > div {
+    background: linear-gradient(90deg, #1db8a0, #25d4b8) !important;
+    border-radius: 4px;
+}
+
+/* ════════════════════════════════════
    Plotly チャート — viewport 収まり保証
    高さスライダーで大きくしても出来高バー
    が画面外に出ないよう上限を設ける

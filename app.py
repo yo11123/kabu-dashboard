@@ -546,26 +546,46 @@ def main() -> None:
     company_name = next((t["name"] for t in filtered if t["code"] == ticker), "")
     company_name = company_name or ticker_info.get("name", ticker)
 
-    # ─── 銘柄名ヘッダー ─────────────────────────────────────────────
-    st.subheader(f"🏢 {company_name}　（{ticker}）")
-
-    # ─── 指標サマリ行（表示範囲の値を使用）─────────────────────────
+    # ─── ティッカーバナー ───────────────────────────────────────────
     df_view = df.iloc[view_start_idx:]
     last_close = float(df["Close"].iloc[-1])
     prev_close = float(df["Close"].iloc[-2]) if len(df) >= 2 else last_close
-    change_pct = (last_close - prev_close) / prev_close * 100
+    change_val = last_close - prev_close
+    change_pct = change_val / prev_close * 100
+    _chg_color = "#26a69a" if change_pct >= 0 else "#ef5350"
+    _chg_arrow = "▲" if change_pct >= 0 else "▼"
+    _period_high = float(df_view["High"].max())
+    _period_low = float(df_view["Low"].min())
 
-    c1, c2, c3, c4, c5 = st.columns(5)
-    c1.metric(
-        "現在値",
-        f"¥{last_close:,.0f}",
-        f"{change_pct:+.2f}%",
-        delta_color="normal" if change_pct >= 0 else "inverse",
+    st.markdown(
+        f"""<div style="
+            background: linear-gradient(135deg, #101c30 0%, #0d1929 100%);
+            border: 1px solid #1e2d40; border-left: 4px solid {_chg_color};
+            border-radius: 8px; padding: 16px 24px; margin-bottom: 12px;
+        ">
+            <div style="display:flex; align-items:baseline; gap:16px; flex-wrap:wrap;">
+                <span style="font-family:'IBM Plex Mono',monospace; font-size:1.3em; font-weight:700; color:#e0eaf5;">
+                    {company_name}
+                </span>
+                <span style="font-family:'IBM Plex Mono',monospace; font-size:0.85em; color:#4a7a8a;">
+                    {ticker}
+                </span>
+                <span style="font-family:'IBM Plex Mono',monospace; font-size:1.6em; font-weight:700; color:#e0eaf5; margin-left:auto;">
+                    ¥{last_close:,.0f}
+                </span>
+                <span style="font-family:'IBM Plex Mono',monospace; font-size:1.0em; font-weight:600; color:{_chg_color};">
+                    {_chg_arrow} {abs(change_val):,.0f}（{change_pct:+.2f}%）
+                </span>
+            </div>
+            <div style="display:flex; gap:24px; margin-top:8px; font-family:'IBM Plex Mono',monospace; font-size:0.72em; color:#4a7a8a;">
+                <span>{PERIOD_LABELS[period]}高値 <b style="color:#e0eaf5;">¥{_period_high:,.0f}</b></span>
+                <span>{PERIOD_LABELS[period]}安値 <b style="color:#e0eaf5;">¥{_period_low:,.0f}</b></span>
+                <span>★ 決算 <b style="color:#FFD700;">{len(earnings_events)}</b>件</span>
+                <span>● ニュース <b style="color:#00BCD4;">{len(news_events)}</b>件</span>
+            </div>
+        </div>""",
+        unsafe_allow_html=True,
     )
-    c2.metric(f"期間高値（{PERIOD_LABELS[period]}）", f"¥{df_view['High'].max():,.0f}")
-    c3.metric(f"期間安値（{PERIOD_LABELS[period]}）", f"¥{df_view['Low'].min():,.0f}")
-    c4.metric("決算マーカー", f"{len(earnings_events)} 件")
-    c5.metric("ニュースマーカー", f"{len(news_events)} 件")
 
     # ─── チャートの高さ調整（チャート直上に配置）────────────────────
     chart_height = st.slider(
@@ -626,97 +646,12 @@ def main() -> None:
             original_date = raw_cd[0] if isinstance(raw_cd, list) else (raw_cd or clicked_date)
             show_news_dialog(str(original_date), news_events, ticker, ticker_info)
 
-    # ─── 信用取引情報 ───────────────────────────────────────────────
-    st.divider()
-    with st.spinner("信用残データを取得中..."):
+    # ─── データ事前取得（タブ共用）──────────────────────────────────
+    with st.spinner("データを取得中..."):
         _margin = fetch_margin_data(ticker)
+        _fund_yf = fetch_fundamental_yfinance(ticker)
+        _fund_kb = fetch_fundamental_kabutan(ticker)
 
-    if _margin:
-        st.subheader("📊 信用取引情報")
-        _mcols = st.columns(4)
-        if _margin.get("buy_margin") is not None:
-            _mcols[0].metric("信用買い残", f"{_margin['buy_margin']:,.0f} 株")
-        if _margin.get("sell_margin") is not None:
-            _mcols[1].metric("信用売り残", f"{_margin['sell_margin']:,.0f} 株")
-        if _margin.get("lending_ratio") is not None:
-            lr = _margin["lending_ratio"]
-            lr_delta = "過熱" if lr >= 10 else ("買い多" if lr >= 3 else ("売り多" if lr <= 0.5 else "中立"))
-            _mcols[2].metric("貸借倍率", f"{lr:.2f} 倍", lr_delta)
-        if _margin.get("date"):
-            _mcols[3].metric("基準日", _margin["date"])
-        if _margin.get("source"):
-            st.caption(f"データソース: {_margin['source']}")
-    else:
-        st.caption("ℹ️ 信用残データを取得できませんでした（海外銘柄・上場廃止等）")
-
-    # ─── ファンダメンタルズ指標 ──────────────────────────────────────
-    st.divider()
-    st.subheader("📊 ファンダメンタルズ")
-    _fund_yf = fetch_fundamental_yfinance(ticker)
-    _fund_kb = fetch_fundamental_kabutan(ticker)
-
-    # メトリクス行1: PER / PBR / ROE / ROA
-    _fc1, _fc2, _fc3, _fc4 = st.columns(4)
-    _per = _fund_kb.get("per") or _fund_yf.get("per")
-    _pbr = _fund_kb.get("pbr") or _fund_yf.get("pbr")
-    _roe = _fund_yf.get("roe")
-    _roa = _fund_yf.get("roa")
-    _fc1.metric("PER", f"{_per:.1f} 倍" if _per else "—")
-    _fc2.metric("PBR", f"{_pbr:.2f} 倍" if _pbr else "—")
-    _fc3.metric("ROE", f"{_roe * 100:.1f}%" if _roe else "—")
-    _fc4.metric("ROA", f"{_roa * 100:.1f}%" if _roa else "—")
-
-    # メトリクス行2: EPS / 配当利回り / 時価総額 / FCF
-    _fc5, _fc6, _fc7, _fc8 = st.columns(4)
-    _eps = _fund_yf.get("eps_trailing")
-    _div_kb = _fund_kb.get("dividend_yield")
-    _div_yf = _fund_yf.get("dividend_yield")
-    _mktcap = _fund_kb.get("market_cap") or _fund_yf.get("market_cap")
-    _fcf = _fund_yf.get("free_cashflow")
-
-    _fc5.metric("EPS（実績）", f"¥{_eps:,.1f}" if _eps else "—")
-    if _div_kb is not None:
-        _fc6.metric("配当利回り", f"{_div_kb:.2f}%")
-    elif _div_yf is not None:
-        _fc6.metric("配当利回り", f"{_div_yf * 100:.2f}%")
-    else:
-        _fc6.metric("配当利回り", "—")
-    if _mktcap:
-        if _mktcap >= 1e12:
-            _fc7.metric("時価総額", f"¥{_mktcap / 1e12:.2f}兆")
-        else:
-            _fc7.metric("時価総額", f"¥{_mktcap / 1e8:,.0f}億")
-    else:
-        _fc7.metric("時価総額", "—")
-    if _fcf:
-        if abs(_fcf) >= 1e12:
-            _fc8.metric("FCF", f"¥{_fcf / 1e12:.2f}兆")
-        elif abs(_fcf) >= 1e8:
-            _fc8.metric("FCF", f"¥{_fcf / 1e8:,.0f}億")
-        else:
-            _fc8.metric("FCF", f"¥{_fcf:,.0f}")
-    else:
-        _fc8.metric("FCF", "—")
-
-    # 補足情報
-    _sector = _fund_yf.get("sector", "")
-    _industry = _fund_yf.get("industry", "")
-    _beta = _fund_yf.get("beta")
-    _rev_growth = _fund_yf.get("revenue_growth")
-    _op_margin = _fund_yf.get("operating_margins")
-    _extra = []
-    if _sector:
-        _extra.append(f"セクター: {_sector}" + (f" / {_industry}" if _industry else ""))
-    if _beta is not None:
-        _extra.append(f"β: {_beta:.2f}")
-    if _rev_growth is not None:
-        _extra.append(f"売上成長率: {_rev_growth * 100:+.1f}%")
-    if _op_margin is not None:
-        _extra.append(f"営業利益率: {_op_margin * 100:.1f}%")
-    if _extra:
-        st.caption("　".join(_extra))
-
-    # ─── AI コンテキストデータ準備（分析・チャット共用、キャッシュ済み関数を使用）──
     _ai_end = df.index[-1].strftime("%Y-%m-%d")
     _ai_start = (df.index[-1] - pd.Timedelta(days=30)).strftime("%Y-%m-%d")
     _news_30d = fetch_news_events(ticker, _ai_start, _ai_end, company_name)
@@ -724,111 +659,196 @@ def main() -> None:
         ticker, company_name, df, _news_30d
     )
 
-    # ─── AI 総合分析 ────────────────────────────────────────────────
-    st.divider()
     _provider_label = {
         "claude": "Claude (Anthropic)",
         "openai": "ChatGPT (OpenAI)",
         "gemini": "Gemini (Google)",
     }.get(ai_provider, ai_provider)
-    st.subheader(f"🤖 AI 総合分析　({_provider_label})")
 
-    if "analyzed_tickers" not in st.session_state:
-        st.session_state.analyzed_tickers = set()
+    # ─── タブレイアウト ───────────────────────────────────────────
+    tab_fund, tab_ai, tab_chat = st.tabs([
+        "📊 ファンダメンタルズ",
+        f"🤖 AI分析（{_provider_label}）",
+        "💬 AIチャット",
+    ])
 
-    _analyzed_key = f"{ticker}::{ai_provider}"
-    already_analyzed = _analyzed_key in st.session_state.analyzed_tickers
+    # ════════════════════════════════════════════════════════════════
+    # TAB 1: ファンダメンタルズ + 信用残
+    # ════════════════════════════════════════════════════════════════
+    with tab_fund:
+        # ── ファンダメンタルズ ──────────────────────────────────────
+        _per = _fund_kb.get("per") or _fund_yf.get("per")
+        _pbr = _fund_kb.get("pbr") or _fund_yf.get("pbr")
+        _roe = _fund_yf.get("roe")
+        _roa = _fund_yf.get("roa")
+        _eps = _fund_yf.get("eps_trailing")
+        _div_kb = _fund_kb.get("dividend_yield")
+        _div_yf = _fund_yf.get("dividend_yield")
+        _mktcap = _fund_kb.get("market_cap") or _fund_yf.get("market_cap")
+        _fcf = _fund_yf.get("free_cashflow")
 
-    btn_col, clear_col, note_col = st.columns([2, 1, 4])
-    if btn_col.button("🤖 AI総合分析を実行", type="primary", key="main_ai_btn", use_container_width=True):
-        st.session_state.analyzed_tickers.add(_analyzed_key)
-        already_analyzed = True
+        # バリュエーション行
+        _fc1, _fc2, _fc3, _fc4 = st.columns(4)
+        _fc1.metric("PER", f"{_per:.1f} 倍" if _per else "—")
+        _fc2.metric("PBR", f"{_pbr:.2f} 倍" if _pbr else "—")
+        _fc3.metric("ROE", f"{_roe * 100:.1f}%" if _roe else "—")
+        _fc4.metric("ROA", f"{_roa * 100:.1f}%" if _roa else "—")
 
-    if clear_col.button("🗑️ キャッシュ", key="main_ai_clear_btn", use_container_width=True,
-                        help="前回の分析結果キャッシュを削除して再実行します"):
-        get_comprehensive_analysis.clear()
-        st.session_state.analyzed_tickers.discard(_analyzed_key)
-        already_analyzed = False
-        st.rerun()
+        # 財務行
+        _fc5, _fc6, _fc7, _fc8 = st.columns(4)
+        _fc5.metric("EPS（実績）", f"¥{_eps:,.1f}" if _eps else "—")
+        if _div_kb is not None:
+            _fc6.metric("配当利回り", f"{_div_kb:.2f}%")
+        elif _div_yf is not None:
+            _fc6.metric("配当利回り", f"{_div_yf * 100:.2f}%")
+        else:
+            _fc6.metric("配当利回り", "—")
+        if _mktcap:
+            _fc7.metric("時価総額", f"¥{_mktcap / 1e12:.2f}兆" if _mktcap >= 1e12 else f"¥{_mktcap / 1e8:,.0f}億")
+        else:
+            _fc7.metric("時価総額", "—")
+        if _fcf:
+            if abs(_fcf) >= 1e12:
+                _fc8.metric("FCF", f"¥{_fcf / 1e12:.2f}兆")
+            elif abs(_fcf) >= 1e8:
+                _fc8.metric("FCF", f"¥{_fcf / 1e8:,.0f}億")
+            else:
+                _fc8.metric("FCF", f"¥{_fcf:,.0f}")
+        else:
+            _fc8.metric("FCF", "—")
 
-    if already_analyzed:
-        note_col.caption("✅ 分析済み（結果は24時間キャッシュされます）")
-    else:
-        note_col.caption(
-            f"テクニカル・ファンダメンタル・ニュースを総合した AI 分析レポートを生成します。"
-            f"（{_provider_label} API の利用料が発生します）"
+        # 補足情報
+        _sector = _fund_yf.get("sector", "")
+        _industry = _fund_yf.get("industry", "")
+        _beta = _fund_yf.get("beta")
+        _rev_growth = _fund_yf.get("revenue_growth")
+        _op_margin = _fund_yf.get("operating_margins")
+        _extra_parts = []
+        if _sector:
+            _extra_parts.append(f"セクター: {_sector}" + (f" / {_industry}" if _industry else ""))
+        if _beta is not None:
+            _extra_parts.append(f"β: {_beta:.2f}")
+        if _rev_growth is not None:
+            _extra_parts.append(f"売上成長率: {_rev_growth * 100:+.1f}%")
+        if _op_margin is not None:
+            _extra_parts.append(f"営業利益率: {_op_margin * 100:.1f}%")
+        if _extra_parts:
+            st.caption("　".join(_extra_parts))
+
+        # ── 信用取引情報 ──────────────────────────────────────────
+        st.divider()
+        if _margin:
+            st.markdown("**信用取引情報**")
+            _mcols = st.columns(4)
+            if _margin.get("buy_margin") is not None:
+                _mcols[0].metric("信用買い残", f"{_margin['buy_margin']:,.0f} 株")
+            if _margin.get("sell_margin") is not None:
+                _mcols[1].metric("信用売り残", f"{_margin['sell_margin']:,.0f} 株")
+            if _margin.get("lending_ratio") is not None:
+                lr = _margin["lending_ratio"]
+                lr_delta = "過熱" if lr >= 10 else ("買い多" if lr >= 3 else ("売り多" if lr <= 0.5 else "中立"))
+                _mcols[2].metric("貸借倍率", f"{lr:.2f} 倍", lr_delta)
+            if _margin.get("date"):
+                _mcols[3].metric("基準日", _margin["date"])
+        else:
+            st.caption("信用残データなし（海外銘柄・上場廃止等）")
+
+    # ════════════════════════════════════════════════════════════════
+    # TAB 2: AI 総合分析
+    # ════════════════════════════════════════════════════════════════
+    with tab_ai:
+        if "analyzed_tickers" not in st.session_state:
+            st.session_state.analyzed_tickers = set()
+
+        _analyzed_key = f"{ticker}::{ai_provider}"
+        already_analyzed = _analyzed_key in st.session_state.analyzed_tickers
+
+        btn_col, clear_col = st.columns([3, 1])
+        if btn_col.button("🤖 AI総合分析を実行", type="primary", key="main_ai_btn", use_container_width=True):
+            st.session_state.analyzed_tickers.add(_analyzed_key)
+            already_analyzed = True
+
+        if clear_col.button("🗑️ キャッシュクリア", key="main_ai_clear_btn", use_container_width=True,
+                            help="前回の分析結果を削除して再実行します"):
+            get_comprehensive_analysis.clear()
+            st.session_state.analyzed_tickers.discard(_analyzed_key)
+            already_analyzed = False
+            st.rerun()
+
+        if not already_analyzed:
+            st.info(
+                "**AI総合分析を実行** ボタンを押すと、テクニカル・ファンダメンタル・ニュース・マーケット環境を"
+                f"統合した分析レポートを {_provider_label} が生成します。"
+            )
+
+        if already_analyzed:
+            with st.spinner("AI 分析を実行中..."):
+                _ai_result = get_comprehensive_analysis(
+                    ticker=ticker,
+                    company_name=company_name,
+                    tech_json=tech_json,
+                    fund_text=fund_text,
+                    news_titles=news_titles,
+                    margin_text=_margin_text,
+                    market_text=_market_text,
+                    provider=ai_provider,
+                    api_key=ai_api_key,
+                )
+            _render_ai_results(_ai_result)
+
+    # ════════════════════════════════════════════════════════════════
+    # TAB 3: AI チャット
+    # ════════════════════════════════════════════════════════════════
+    with tab_chat:
+        _chat_key = f"chat_{ticker}_{ai_provider}"
+        if _chat_key not in st.session_state:
+            st.session_state[_chat_key] = []
+
+        _chat_hdr, _chat_clr = st.columns([5, 1])
+        _chat_hdr.caption(
+            f"**{company_name}** について {_provider_label} に自由に質問できます。"
+            "テクニカル・ファンダメンタル・信用残・マーケット環境データを渡しています。"
         )
+        if _chat_clr.button("🗑️ 履歴", key="chat_clear_btn", use_container_width=True):
+            st.session_state[_chat_key] = []
+            st.rerun()
 
-    if already_analyzed:
-        with st.spinner("AI 分析を実行中..."):
-            _ai_result = get_comprehensive_analysis(
-                ticker=ticker,
-                company_name=company_name,
-                tech_json=tech_json,
-                fund_text=fund_text,
-                news_titles=news_titles,
-                margin_text=_margin_text,
-                market_text=_market_text,
-                provider=ai_provider,
-                api_key=ai_api_key,
-            )
-        _render_ai_results(_ai_result)
-
-    # ─── AI チャット（常に表示）──────────────────────────────────────
-    st.divider()
-    _chat_title_col, _chat_clear_col = st.columns([5, 1])
-    _chat_title_col.subheader("💬 AI に質問する")
-    _chat_key = f"chat_{ticker}_{ai_provider}"
-    if _chat_key not in st.session_state:
-        st.session_state[_chat_key] = []
-
-    if _chat_clear_col.button("🗑️ 履歴クリア", key="chat_clear_btn", use_container_width=True):
-        st.session_state[_chat_key] = []
-        st.rerun()
-
-    st.caption(
-        f"**{company_name}（{ticker}）** について {_provider_label} に自由に質問できます。"
-        "　テクニカル・ファンダメンタル・信用残データをコンテキストとして渡しています。"
-    )
-
-    # 固定高さのチャット履歴ウィンドウ
-    _chat_window = st.container(height=420, border=True)
-    with _chat_window:
-        if not st.session_state[_chat_key]:
-            st.markdown(
-                "<div style='text-align:center;color:gray;padding:3em 1em;'>"
-                "まだ会話がありません。<br>下の入力欄から質問してください。<br><br>"
-                "例：「今買い時ですか？」「RSIの数値をどう見ますか？」「貸借倍率はどう見る？」"
-                "</div>",
-                unsafe_allow_html=True,
-            )
-        for _msg in st.session_state[_chat_key]:
-            with st.chat_message(_msg["role"]):
-                st.markdown(_msg["content"])
-
-    if _user_input := st.chat_input(
-        f"{company_name} について質問してください...", key="stock_chat_input"
-    ):
-        st.session_state[_chat_key].append({"role": "user", "content": _user_input})
-
+        _chat_window = st.container(height=450, border=True)
         with _chat_window:
-            with st.chat_message("user"):
-                st.markdown(_user_input)
+            if not st.session_state[_chat_key]:
+                st.markdown(
+                    "<div style='text-align:center;color:#4a7a8a;padding:3em 1em;"
+                    "font-family:IBM Plex Mono,monospace;font-size:0.85em;'>"
+                    "まだ会話がありません<br><br>"
+                    "<span style='font-size:0.9em;color:#3a5a6a;'>"
+                    "例:「今買い時ですか？」「RSIの数値をどう見ますか？」「決算はいつ？」"
+                    "</span></div>",
+                    unsafe_allow_html=True,
+                )
+            for _msg in st.session_state[_chat_key]:
+                with st.chat_message(_msg["role"]):
+                    st.markdown(_msg["content"])
 
-            with st.chat_message("assistant"):
-                with st.spinner("回答を生成中..."):
-                    _sys_prompt = build_chat_system_prompt(
-                        ticker, company_name, tech_json, fund_text, _margin_text
-                    )
-                    _response = get_chat_response(
-                        messages=st.session_state[_chat_key],
-                        system_prompt=_sys_prompt,
-                        provider=ai_provider,
-                        api_key=ai_api_key,
-                    )
-                st.markdown(_response)
-
-        st.session_state[_chat_key].append({"role": "assistant", "content": _response})
+        if _user_input := st.chat_input(
+            f"{company_name} について質問...", key="stock_chat_input"
+        ):
+            st.session_state[_chat_key].append({"role": "user", "content": _user_input})
+            with _chat_window:
+                with st.chat_message("user"):
+                    st.markdown(_user_input)
+                with st.chat_message("assistant"):
+                    with st.spinner("回答を生成中..."):
+                        _sys_prompt = build_chat_system_prompt(
+                            ticker, company_name, tech_json, fund_text, _margin_text
+                        )
+                        _response = get_chat_response(
+                            messages=st.session_state[_chat_key],
+                            system_prompt=_sys_prompt,
+                            provider=ai_provider,
+                            api_key=ai_api_key,
+                        )
+                    st.markdown(_response)
+            st.session_state[_chat_key].append({"role": "assistant", "content": _response})
 
 
 if __name__ == "__main__":
