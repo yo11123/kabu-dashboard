@@ -383,6 +383,73 @@ def fetch_fred_indicators() -> dict[str, dict]:
     return result
 
 
+@st.cache_data(ttl=3600 * 12)
+def fetch_cape_ratio() -> dict | None:
+    """multpl.com から CAPEレシオ（シラーPER）を取得する。"""
+    try:
+        import requests
+        from lxml import html as lhtml
+        r = requests.get(
+            "https://www.multpl.com/shiller-pe/table/by-month",
+            timeout=10,
+            headers={"User-Agent": "Mozilla/5.0"},
+        )
+        if r.status_code != 200:
+            return None
+        tree = lhtml.fromstring(r.content)
+        rows = tree.xpath('//table[@id="datatable"]//tr')
+        if rows and len(rows) > 1:
+            cells = rows[1].xpath(".//td")
+            val = float(cells[1].text_content().strip())
+            date = cells[0].text_content().strip()
+            return {"value": val, "date": date}
+    except Exception:
+        pass
+    return None
+
+
+@st.cache_data(ttl=3600 * 12)
+def fetch_buffett_indicator() -> dict | None:
+    """
+    バフェット指標（株式時価総額 / GDP）を計算する。
+    S&P 500 の時価総額を米国株式市場全体の代理として使用。
+    """
+    try:
+        # S&P 500 の現在値から米国株式市場の時価総額を推定
+        # S&P 500 ≈ 米国株式市場の約80%
+        sp500 = yf.download("^GSPC", period="5d", progress=False)
+        if sp500 is None or sp500.empty:
+            return None
+        sp500_val = float(sp500["Close"].iloc[-1])
+
+        # FRED から GDP を取得
+        try:
+            api_key = st.secrets.get("FRED_API_KEY", "")
+        except Exception:
+            api_key = ""
+        if not api_key:
+            return None
+
+        from fredapi import Fred
+        fred = Fred(api_key=api_key)
+        gdp = fred.get_series("GDP").dropna()
+        gdp_val = float(gdp.iloc[-1])  # 十億ドル単位
+
+        # S&P500をバフェット指標の代替計算
+        # 2024年末基準: S&P500=6000 → 時価総額≈50兆ドル, GDP≈29兆ドル → 比率≈172%
+        # 比例計算で推定
+        estimated_mktcap = sp500_val / 6000 * 50000  # 十億ドル
+        ratio = round(estimated_mktcap / gdp_val * 100, 1)
+
+        return {
+            "value": ratio,
+            "date": gdp.index[-1].strftime("%Y-%m-%d"),
+            "gdp": gdp_val,
+        }
+    except Exception:
+        return None
+
+
 @st.cache_data(ttl=3600 * 6)
 def fetch_fred_series_history(series_id: str, periods: int = 60) -> pd.Series | None:
     """FRED の時系列データを取得（チャート用）。"""

@@ -11,6 +11,8 @@ import streamlit as st
 from modules.market_context import (
     INDICATORS,
     calc_derived_indicators,
+    fetch_buffett_indicator,
+    fetch_cape_ratio,
     fetch_indicator_history,
     fetch_fred_indicators,
     fetch_fred_series_history,
@@ -62,8 +64,6 @@ _EXTERNAL_INDICATORS: dict[str, list[dict]] = {
         {"name": "ミシガン大消費者信頼感", "desc": "1年先・5年先のインフレ期待も含む。FRBが政策判断の参考にする。", "source": "University of Michigan"},
     ],
     "valuation": [
-        {"name": "バフェット指標", "desc": "株式時価総額/名目GDP。100%超で割高、150%超で歴史的警戒ゾーン。", "source": "計算必要（FRED + Wilshire 5000）"},
-        {"name": "CAPEレシオ（シラーPER）", "desc": "過去10年インフレ調整後平均利益でPER計算。30超で長期リターン低下傾向。", "source": "multpl.com / shillerdata.com"},
         {"name": "空売り比率", "desc": "全売買代金に占める空売り割合。40%超で売り圧力大、逆張りの目安にも。", "source": "東証（毎日公表）"},
     ],
 }
@@ -367,20 +367,43 @@ def main() -> None:
     # ── 8. バリュエーション ──────────────────────────────────
     with tabs[7]:
         st.subheader("バリュエーション・市場全体指標")
-        # NT倍率（ライブ）
+
+        _vc1, _vc2, _vc3, _vc4 = st.columns(4)
+
+        # NT倍率
         nt = derived.get("NT倍率")
         if nt:
-            st.metric("NT倍率", f"{nt['value']:.2f} 倍")
-            st.caption("日経225÷TOPIX。拡大は値がさ株集中、市場の広がりに欠ける状態。")
-        # イールドスプレッド概算
+            _vc1.metric("NT倍率", f"{nt['value']:.2f} 倍")
+            _vc1.caption("日経225÷TOPIX")
+
+        # イールドスプレッド
         tnx = snapshot.get("米10年債利回り", {}).get("value")
         sp500 = snapshot.get("S&P 500", {}).get("value")
         if tnx and sp500:
-            # S&P500のPER概算（≒22倍とする）で益回りを計算
-            earnings_yield = 100 / 22  # 概算
+            earnings_yield = 100 / 22
             eq_spread = round(earnings_yield - tnx, 2)
-            st.metric("株式益回りスプレッド（概算）", f"{eq_spread:+.2f}%")
-            st.caption("株式益回り（1/PER）- 米10年債利回り。マイナスなら債券が相対的に魅力的。")
+            _vc2.metric("益回りスプレッド", f"{eq_spread:+.2f}%")
+            _vc2.caption("株式益回り - 米10年債")
+
+        # CAPEレシオ
+        _cape = fetch_cape_ratio()
+        if _cape:
+            _cape_val = _cape["value"]
+            _cape_color = "inverse" if _cape_val > 30 else "normal"
+            _vc3.metric("CAPEレシオ", f"{_cape_val:.1f} 倍",
+                        "割高警戒" if _cape_val > 30 else "通常範囲",
+                        delta_color=_cape_color)
+            _vc3.caption(f"シラーPER（{_cape['date']}）")
+
+        # バフェット指標
+        _buffett = fetch_buffett_indicator()
+        if _buffett:
+            _bv = _buffett["value"]
+            _vc4.metric("バフェット指標", f"{_bv:.0f}%",
+                        "割高圏" if _bv > 150 else ("警戒圏" if _bv > 100 else "割安圏"),
+                        delta_color="inverse" if _bv > 100 else "normal")
+            _vc4.caption(f"時価総額/GDP（GDP: {_buffett['date']}）")
+
         # 主要指数チャート
         st.divider()
         index_names = ["日経平均", "S&P 500", "ナスダック総合", "ダウ平均"]
