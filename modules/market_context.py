@@ -57,9 +57,15 @@ def fetch_indicator_history(ticker: str, period: str = "6mo") -> pd.DataFrame | 
                          progress=False, auto_adjust=True)
         if df is None or df.empty:
             return None
-        df.columns = [str(c).capitalize() for c in df.columns]
+        # MultiIndex columns 対応（yfinance 新バージョン）
+        if isinstance(df.columns, pd.MultiIndex):
+            df.columns = [str(c[0]).capitalize() for c in df.columns]
+        else:
+            df.columns = [str(c).capitalize() for c in df.columns]
         if df.index.tz is not None:
             df.index = df.index.tz_localize(None)
+        if "Close" not in df.columns:
+            return None
         df.dropna(subset=["Close"], inplace=True)
         return df if not df.empty else None
     except Exception:
@@ -95,7 +101,12 @@ def fetch_market_snapshot() -> dict[str, dict]:
             df = raw.copy() if single else raw[ticker].copy()
             if df is None or df.empty:
                 continue
-            df.columns = [str(c).capitalize() for c in df.columns]
+            if isinstance(df.columns, pd.MultiIndex):
+                df.columns = [str(c[0]).capitalize() for c in df.columns]
+            else:
+                df.columns = [str(c).capitalize() for c in df.columns]
+            if "Close" not in df.columns:
+                continue
             df.dropna(subset=["Close"], inplace=True)
             if len(df) < 2:
                 continue

@@ -121,10 +121,14 @@ def _render_live_indicator(name: str, data: dict, period: str) -> None:
     st.metric(name, val_str, f"{change_pct:+.2f}%")
 
     if ticker:
-        df = fetch_indicator_history(ticker, period)
+        with st.spinner("チャート読込中..."):
+            df = fetch_indicator_history(ticker, period)
         if df is not None and not df.empty:
             fig = _make_chart(df, color=color)
-            st.plotly_chart(fig, use_container_width=True, key=f"chart_{ticker}_{period}")
+            st.plotly_chart(fig, use_container_width=True,
+                           key=f"ind_{name}_{ticker}_{period}")
+        else:
+            st.caption("チャートデータを取得できませんでした")
 
     if desc:
         st.caption(desc)
