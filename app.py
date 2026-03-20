@@ -16,6 +16,7 @@ from modules.indicators import (
     calc_sma, calc_ema, calc_bollinger_bands, calc_volume_ma,
     calc_rsi, calc_macd, calc_stochastic, calc_cci, calc_ichimoku,
 )
+from modules.fundamental import fetch_fundamental_yfinance, fetch_fundamental_kabutan
 from modules.margin import fetch_margin_data, format_margin_text
 from modules.chart import create_candlestick_chart
 from modules.events import fetch_earnings_events, fetch_news_events
@@ -647,6 +648,73 @@ def main() -> None:
             st.caption(f"データソース: {_margin['source']}")
     else:
         st.caption("ℹ️ 信用残データを取得できませんでした（海外銘柄・上場廃止等）")
+
+    # ─── ファンダメンタルズ指標 ──────────────────────────────────────
+    st.divider()
+    st.subheader("📊 ファンダメンタルズ")
+    _fund_yf = fetch_fundamental_yfinance(ticker)
+    _fund_kb = fetch_fundamental_kabutan(ticker)
+
+    # メトリクス行1: PER / PBR / ROE / ROA
+    _fc1, _fc2, _fc3, _fc4 = st.columns(4)
+    _per = _fund_kb.get("per") or _fund_yf.get("per")
+    _pbr = _fund_kb.get("pbr") or _fund_yf.get("pbr")
+    _roe = _fund_yf.get("roe")
+    _roa = _fund_yf.get("roa")
+    _fc1.metric("PER", f"{_per:.1f} 倍" if _per else "—")
+    _fc2.metric("PBR", f"{_pbr:.2f} 倍" if _pbr else "—")
+    _fc3.metric("ROE", f"{_roe * 100:.1f}%" if _roe else "—")
+    _fc4.metric("ROA", f"{_roa * 100:.1f}%" if _roa else "—")
+
+    # メトリクス行2: EPS / 配当利回り / 時価総額 / FCF
+    _fc5, _fc6, _fc7, _fc8 = st.columns(4)
+    _eps = _fund_yf.get("eps_trailing")
+    _div_kb = _fund_kb.get("dividend_yield")
+    _div_yf = _fund_yf.get("dividend_yield")
+    _mktcap = _fund_kb.get("market_cap") or _fund_yf.get("market_cap")
+    _fcf = _fund_yf.get("free_cashflow")
+
+    _fc5.metric("EPS（実績）", f"¥{_eps:,.1f}" if _eps else "—")
+    if _div_kb is not None:
+        _fc6.metric("配当利回り", f"{_div_kb:.2f}%")
+    elif _div_yf is not None:
+        _fc6.metric("配当利回り", f"{_div_yf * 100:.2f}%")
+    else:
+        _fc6.metric("配当利回り", "—")
+    if _mktcap:
+        if _mktcap >= 1e12:
+            _fc7.metric("時価総額", f"¥{_mktcap / 1e12:.2f}兆")
+        else:
+            _fc7.metric("時価総額", f"¥{_mktcap / 1e8:,.0f}億")
+    else:
+        _fc7.metric("時価総額", "—")
+    if _fcf:
+        if abs(_fcf) >= 1e12:
+            _fc8.metric("FCF", f"¥{_fcf / 1e12:.2f}兆")
+        elif abs(_fcf) >= 1e8:
+            _fc8.metric("FCF", f"¥{_fcf / 1e8:,.0f}億")
+        else:
+            _fc8.metric("FCF", f"¥{_fcf:,.0f}")
+    else:
+        _fc8.metric("FCF", "—")
+
+    # 補足情報
+    _sector = _fund_yf.get("sector", "")
+    _industry = _fund_yf.get("industry", "")
+    _beta = _fund_yf.get("beta")
+    _rev_growth = _fund_yf.get("revenue_growth")
+    _op_margin = _fund_yf.get("operating_margins")
+    _extra = []
+    if _sector:
+        _extra.append(f"セクター: {_sector}" + (f" / {_industry}" if _industry else ""))
+    if _beta is not None:
+        _extra.append(f"β: {_beta:.2f}")
+    if _rev_growth is not None:
+        _extra.append(f"売上成長率: {_rev_growth * 100:+.1f}%")
+    if _op_margin is not None:
+        _extra.append(f"営業利益率: {_op_margin * 100:.1f}%")
+    if _extra:
+        st.caption("　".join(_extra))
 
     # ─── AI コンテキストデータ準備（分析・チャット共用、キャッシュ済み関数を使用）──
     _ai_end = df.index[-1].strftime("%Y-%m-%d")

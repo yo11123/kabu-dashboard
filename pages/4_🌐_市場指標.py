@@ -65,29 +65,6 @@ _EXTERNAL_INDICATORS: dict[str, list[dict]] = {
     ],
 }
 
-# テクニカル・ファンダは銘柄ページで利用
-_STOCK_LEVEL_INDICATORS: dict[str, list[dict]] = {
-    "technical": [
-        {"name": "移動平均線（SMA/EMA）", "desc": "トレンド方向の把握。ゴールデンクロス（買い）・デッドクロス（売り）。", "status": "実装済み"},
-        {"name": "MACD", "desc": "トレンド転換の検出。シグナルラインとのクロスやダイバージェンス。", "status": "実装済み"},
-        {"name": "RSI（14日）", "desc": "0〜100で推移。70超で買われ過ぎ、30未満で売られ過ぎ。", "status": "実装済み"},
-        {"name": "ボリンジャーバンド", "desc": "スクイーズからの拡大で大きなトレンド発生の可能性。", "status": "実装済み"},
-        {"name": "一目均衡表", "desc": "転換線・基準線・雲・遅行線で構成。三役好転は強い買いシグナル。", "status": "実装済み"},
-        {"name": "ストキャスティクス", "desc": "%Kと%Dのクロスで売買シグナル。逆張りに適している。", "status": "実装済み"},
-        {"name": "出来高", "desc": "価格変動の信頼性を裏付け。出来高急増は転換点の可能性。", "status": "実装済み"},
-        {"name": "VWAP", "desc": "出来高加重平均価格。機関投資家の売買基準。日中データが必要。", "status": "日中データ必要"},
-    ],
-    "fundamental": [
-        {"name": "PER（株価収益率）", "desc": "株価÷EPS。同業比較が重要。", "status": "実装済み"},
-        {"name": "PBR（株価純資産倍率）", "desc": "1倍割れは理論上解散価値以下。東証が改善要請中。", "status": "実装済み"},
-        {"name": "ROE（自己資本利益率）", "desc": "株主資本の効率性。8%以上が一般的な合格ライン。", "status": "実装済み"},
-        {"name": "ROA（総資産利益率）", "desc": "全資産の活用効率。業種別比較が基本。", "status": "yfinanceで取得"},
-        {"name": "EPS（1株当たり利益）", "desc": "稼ぐ力の指標。前年比成長率が重要。", "status": "実装済み"},
-        {"name": "配当利回り", "desc": "インカムゲインの水準。配当性向と持続性も確認。", "status": "実装済み"},
-        {"name": "FCF（フリーキャッシュフロー）", "desc": "自由に使える現金。安定的プラスは事業の健全性を示す。", "status": "yfinanceで取得"},
-    ],
-}
-
 
 # ─── スパークラインチャート生成 ────────────────────────────────────────
 
@@ -221,8 +198,6 @@ def main() -> None:
 
     # ─── カテゴリタブ ────────────────────────────────────────
     tab_names = [
-        "📊 テクニカル",
-        "📈 ファンダメンタルズ",
         "🧠 センチメント",
         "🏭 セクター",
         "💰 債券・金利",
@@ -234,26 +209,8 @@ def main() -> None:
     ]
     tabs = st.tabs(tab_names)
 
-    # ── 1. テクニカル指標 ─────────────────────────────────────
+    # ── 1. センチメント ───────────────────────────────────────
     with tabs[0]:
-        st.subheader("テクニカル指標")
-        st.info("テクニカル指標は **メインチャートページ** で個別銘柄に適用できます（SMA/EMA/BB/一目均衡表/RSI/MACD/ストキャスティクス）。")
-        cols = st.columns(2)
-        for i, item in enumerate(_STOCK_LEVEL_INDICATORS["technical"]):
-            with cols[i % 2]:
-                _render_info_indicator(item)
-
-    # ── 2. ファンダメンタルズ ─────────────────────────────────
-    with tabs[1]:
-        st.subheader("ファンダメンタルズ指標")
-        st.info("ファンダメンタルズデータは **AI分析** に自動的に組み込まれます（PER/PBR/ROE/配当利回り/EPS/財務諸表）。")
-        cols = st.columns(2)
-        for i, item in enumerate(_STOCK_LEVEL_INDICATORS["fundamental"]):
-            with cols[i % 2]:
-                _render_info_indicator(item)
-
-    # ── 3. センチメント ───────────────────────────────────────
-    with tabs[2]:
         st.subheader("センチメント指標")
         # ライブデータ
         cols = st.columns(2)
@@ -281,8 +238,8 @@ def main() -> None:
             with cols[i % 2]:
                 _render_info_indicator(item)
 
-    # ── 4. セクター ───────────────────────────────────────────
-    with tabs[3]:
+    # ── 2. セクター ───────────────────────────────────────────
+    with tabs[1]:
         st.subheader("セクター・テーマ指標")
         sector_names = ["SOX（半導体指数）", "ダウ輸送株平均", "ラッセル2000"]
         cols = st.columns(2)
@@ -295,8 +252,8 @@ def main() -> None:
                         _render_live_indicator(name, data, period)
                 col_idx += 1
 
-    # ── 5. 債券・金利 ─────────────────────────────────────────
-    with tabs[4]:
+    # ── 3. 債券・金利 ─────────────────────────────────────────
+    with tabs[2]:
         st.subheader("債券・金利指標")
         # 長短金利差（派生指標）
         yc = derived.get("長短金利差（10Y-13W）")
@@ -328,8 +285,8 @@ def main() -> None:
             with cols[i % 2]:
                 _render_info_indicator(item)
 
-    # ── 6. 資金フロー ─────────────────────────────────────────
-    with tabs[5]:
+    # ── 4. 資金フロー ─────────────────────────────────────────
+    with tabs[3]:
         st.subheader("資金フロー・ポジション指標")
         st.info("**信用買い残・売り残・貸借倍率** はメインチャートページの AI 分析に組み込まれています。")
         cols = st.columns(2)
@@ -337,8 +294,8 @@ def main() -> None:
             with cols[i % 2]:
                 _render_info_indicator(item)
 
-    # ── 7. ボラティリティ ─────────────────────────────────────
-    with tabs[6]:
+    # ── 5. ボラティリティ ─────────────────────────────────────
+    with tabs[4]:
         st.subheader("ボラティリティ・リスク指標")
         # 実現ボラティリティ
         hv = derived.get("日経HV20")
@@ -351,8 +308,8 @@ def main() -> None:
             with cols[i % 2]:
                 _render_info_indicator(item)
 
-    # ── 8. マクロ経済 ─────────────────────────────────────────
-    with tabs[7]:
+    # ── 6. マクロ経済 ─────────────────────────────────────────
+    with tabs[5]:
         st.subheader("マクロ経済・先行指標")
         st.caption("マクロ経済指標は定期発表データのため、リアルタイム取得はできません。以下は参照先のガイドです。")
         cols = st.columns(2)
@@ -360,8 +317,8 @@ def main() -> None:
             with cols[i % 2]:
                 _render_info_indicator(item)
 
-    # ── 9. コモディティ・為替 ─────────────────────────────────
-    with tabs[8]:
+    # ── 7. コモディティ・為替 ─────────────────────────────────
+    with tabs[6]:
         st.subheader("コモディティ・為替指標")
         commodity_fx = ["金（Gold）", "WTI原油", "銅（Copper）", "ドルインデックス", "ドル円（USD/JPY）", "ユーロドル"]
         cols = st.columns(2)
@@ -374,8 +331,8 @@ def main() -> None:
                         _render_live_indicator(name, data, period)
                 col_idx += 1
 
-    # ── 10. バリュエーション ──────────────────────────────────
-    with tabs[9]:
+    # ── 8. バリュエーション ──────────────────────────────────
+    with tabs[7]:
         st.subheader("バリュエーション・市場全体指標")
         # NT倍率（ライブ）
         nt = derived.get("NT倍率")
