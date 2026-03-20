@@ -616,6 +616,8 @@ def _build_market_outlook_prompt(market_text: str, snapshot: dict, derived: dict
 6. マクロ経済指標（CPI・雇用・GDP等）があればそれも考慮
 7. **地政学リスク（戦争・紛争・制裁）が原油・サプライチェーン・市場心理に与える影響を重視**
 8. **ニュースから読み取れるカタリスト（政策変更・貿易摩擦・軍事行動等）を具体的に分析**
+9. **「株は下がった時に買え」の格言を踏まえ、暴落・急落局面こそ仕込み時かどうかを判断**
+10. **投資余力がある人への具体的な資金配分アドバイスを提供**
 
 ## 出力形式（このJSONのみ出力）
 ```json
@@ -626,7 +628,8 @@ def _build_market_outlook_prompt(market_text: str, snapshot: dict, derived: dict
   "bull_factors": ["強気要因1（数値やニュース根拠付き）", "強気要因2", "強気要因3"],
   "bear_factors": ["弱気要因1（数値やニュース根拠付き）", "弱気要因2", "弱気要因3"],
   "geopolitical": "地政学リスクの現状分析（2〜3文。戦争・紛争・制裁がエネルギー価格やサプライチェーン、市場心理に与える影響を具体的に）",
-  "strategy": "今週〜今月の投資戦略を3〜4文で具体的に提案。セクター配分やリスクヘッジも含む"
+  "strategy": "今週〜今月の投資戦略を3〜4文で具体的に提案。セクター配分やリスクヘッジも含む",
+  "capital_advice": "投資余力がある人への具体的アドバイス（3〜4文）。例：市場が下落している場合は『余力の30%を使って優良株を分割で仕込む好機』、上昇が続いている場合は『利益確定を優先し余力を温存。次の押し目まで待つ』など。具体的な余力配分の割合（何%を投入すべきか）と、一括 vs 分割投入の判断、狙うべきセクターや銘柄特性（高配当/成長株/ディフェンシブ等）を含む"
 }}
 ```"""
 
@@ -722,6 +725,7 @@ def _render_market_outlook(result: dict) -> None:
     summary = result.get("summary", "")
     strategy = result.get("strategy", "")
     geopolitical = result.get("geopolitical", "")
+    capital_advice = result.get("capital_advice", "")
     bulls = result.get("bull_factors", [])
     bears = result.get("bear_factors", [])
     color, emoji = _MARKET_JUDGMENT_CONFIG.get(judgment, ("#9e9e9e", "➡️"))
@@ -771,6 +775,26 @@ def _render_market_outlook(result: dict) -> None:
     with c4:
         st.markdown("**🎯 投資戦略**")
         st.markdown(f"<div style='font-size:0.88em;line-height:1.6;'>{strategy}</div>", unsafe_allow_html=True)
+
+    # 資金配分アドバイス
+    if capital_advice:
+        _advice_color = "#1db8a0" if score >= 50 else "#ff9800"
+        st.markdown(
+            f"""<div style="
+                background: linear-gradient(135deg, #101c30 0%, #0d1929 100%);
+                border: 1px solid #1e2d40; border-left: 4px solid {_advice_color};
+                border-radius: 8px; padding: 14px 20px; margin-top: 8px;
+            ">
+                <div style="font-family:'IBM Plex Mono',monospace; font-size:0.75em; color:{_advice_color};
+                     text-transform:uppercase; letter-spacing:0.1em; margin-bottom:6px;">
+                    💰 余力がある方へのアドバイス
+                </div>
+                <div style="font-family:'IBM Plex Sans JP',sans-serif; font-size:0.9em; color:#c9d6e3; line-height:1.7;">
+                    {capital_advice}
+                </div>
+            </div>""",
+            unsafe_allow_html=True,
+        )
 
 
 # ─── メイン ─────────────────────────────────────────────────────────────
