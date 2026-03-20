@@ -182,79 +182,101 @@ def calc_derived_indicators(snapshot: dict) -> dict[str, dict]:
 
 @st.cache_data(ttl=3600)  # 1時間キャッシュ（AI分析のキャッシュキーを安定させるため）
 def fetch_market_context_text() -> str:
-    """AI分析プロンプトに追加するマーケットコンテキストテキストを生成する。"""
+    """AI分析プロンプトに追加するマーケットコンテキストテキストを生成する。
+
+    全指標の最新値・前日比を網羅的に含め、AIが市場全体の環境を
+    踏まえたうえで個別銘柄を分析できるようにする。
+    """
     snapshot = fetch_market_snapshot()
     if not snapshot:
         return ""
 
     derived = calc_derived_indicators(snapshot)
-    lines = ["## マーケット環境（直近）"]
+    lines = ["## マーケット環境（直近の全指標データ）"]
 
-    # VIX
+    # ─── センチメント ─────────────────────────────────────────
+    lines.append("\n### センチメント")
     vix = snapshot.get("VIX（恐怖指数）")
     vix_label = derived.get("VIX解釈", {}).get("label", "")
     if vix:
-        lines.append(f"- VIX: {vix['value']:.1f}（{vix_label}、前日比{vix['change_pct']:+.1f}%）")
-
-    # SKEW
+        lines.append(f"- VIX（恐怖指数）: {vix['value']:.1f}（{vix_label}、前日比{vix['change_pct']:+.1f}%）"
+                     f"  ※20超で警戒、30超で極度の恐怖")
     skew = snapshot.get("SKEW指数")
     if skew:
-        skew_note = "暴落警戒" if skew["value"] > 150 else "通常範囲"
-        lines.append(f"- SKEW: {skew['value']:.0f}（{skew_note}）")
-
-    # 長短金利差
-    yc = derived.get("長短金利差（10Y-13W）")
-    if yc:
-        lines.append(f"- 長短金利差: {yc['value']:+.3f}%（{yc['label']}）")
-
-    # 米10年債
-    tnx = snapshot.get("米10年債利回り")
-    if tnx:
-        lines.append(f"- 米10年債利回り: {tnx['value']:.2f}%（{tnx['change_pct']:+.1f}%）")
-
-    # ドル円
-    usdjpy = snapshot.get("ドル円（USD/JPY）")
-    if usdjpy:
-        lines.append(f"- ドル円: {usdjpy['value']:.1f}円（{usdjpy['change_pct']:+.1f}%）")
-
-    # 金
-    gold = snapshot.get("金（Gold）")
-    if gold:
-        lines.append(f"- 金: ${gold['value']:,.1f}（{gold['change_pct']:+.1f}%）")
-
-    # 原油
-    oil = snapshot.get("WTI原油")
-    if oil:
-        lines.append(f"- 原油: ${oil['value']:.1f}（{oil['change_pct']:+.1f}%）")
-
-    # 銅
-    copper = snapshot.get("銅（Copper）")
-    if copper:
-        lines.append(f"- 銅: ${copper['value']:.2f}（{copper['change_pct']:+.1f}%）")
-
-    # SOX
-    sox = snapshot.get("SOX（半導体指数）")
-    if sox:
-        lines.append(f"- SOX半導体指数: {sox['value']:,.0f}（{sox['change_pct']:+.1f}%）")
-
-    # ラッセル2000
-    rut = snapshot.get("ラッセル2000")
-    if rut:
-        lines.append(f"- ラッセル2000: {rut['value']:,.0f}（{rut['change_pct']:+.1f}%）")
-
-    # NT倍率
-    nt = derived.get("NT倍率")
-    if nt:
-        lines.append(f"- NT倍率: {nt['value']:.2f}倍")
-
-    # DXY
-    dxy = snapshot.get("ドルインデックス")
-    if dxy:
-        lines.append(f"- ドルインデックス: {dxy['value']:.1f}（{dxy['change_pct']:+.1f}%）")
-
-    # 実現ボラティリティ
+        skew_note = "テールリスク警戒" if skew["value"] > 150 else "通常範囲"
+        lines.append(f"- SKEW指数: {skew['value']:.0f}（{skew_note}）  ※150超で暴落警戒")
     hv = derived.get("日経HV20")
     if hv:
-        lines.append(f"- 日経HV20: {hv['value']:.1f}%")
+        lines.append(f"- 日経225 実現ボラティリティ（HV20）: {hv['value']:.1f}%")
 
-    return "\n".join(lines) if len(lines) > 1 else ""
+    # ─── 主要株価指数 ─────────────────────────────────────────
+    lines.append("\n### 主要株価指数")
+    for name in ["日経平均", "TOPIX（ETF）", "S&P 500", "ナスダック総合", "ダウ平均"]:
+        d = snapshot.get(name)
+        if d:
+            unit = d.get("unit", "")
+            val = f"{d['value']:,.0f}" if d["value"] >= 100 else f"{d['value']:,.2f}"
+            lines.append(f"- {name}: {val} {unit}（前日比{d['change_pct']:+.1f}%）")
+
+    # ─── セクター指標 ─────────────────────────────────────────
+    lines.append("\n### セクター指標")
+    for name in ["SOX（半導体指数）", "ダウ輸送株平均", "ラッセル2000"]:
+        d = snapshot.get(name)
+        if d:
+            lines.append(f"- {name}: {d['value']:,.0f}（前日比{d['change_pct']:+.1f}%）"
+                         f"  ※{d['description']}")
+
+    # ─── 債券・金利 ───────────────────────────────────────────
+    lines.append("\n### 債券・金利")
+    for name in ["米10年債利回り", "米5年債利回り", "米30年債利回り", "米13週T-Bill"]:
+        d = snapshot.get(name)
+        if d:
+            lines.append(f"- {name}: {d['value']:.2f}%（前日比{d['change_pct']:+.1f}%）")
+    yc = derived.get("長短金利差（10Y-13W）")
+    if yc:
+        lines.append(f"- 長短金利差（10Y-13W）: {yc['value']:+.3f}%（{yc['label']}）"
+                     f"  ※マイナスで逆イールド→景気後退リスク上昇")
+
+    # ─── コモディティ ─────────────────────────────────────────
+    lines.append("\n### コモディティ")
+    gold = snapshot.get("金（Gold）")
+    if gold:
+        lines.append(f"- 金（Gold）: ${gold['value']:,.1f}（前日比{gold['change_pct']:+.1f}%）"
+                     f"  ※安全資産、インフレ・地政学リスクで上昇")
+    oil = snapshot.get("WTI原油")
+    if oil:
+        lines.append(f"- WTI原油: ${oil['value']:.1f}（前日比{oil['change_pct']:+.1f}%）"
+                     f"  ※エネルギーコスト・インフレに影響")
+    copper = snapshot.get("銅（Copper）")
+    if copper:
+        lines.append(f"- 銅（ドクター・カッパー）: ${copper['value']:.2f}（前日比{copper['change_pct']:+.1f}%）"
+                     f"  ※景気の体温計、上昇は需要拡大を示唆")
+
+    # ─── 為替 ─────────────────────────────────────────────────
+    lines.append("\n### 為替")
+    dxy = snapshot.get("ドルインデックス")
+    if dxy:
+        lines.append(f"- ドルインデックス（DXY）: {dxy['value']:.1f}（前日比{dxy['change_pct']:+.1f}%）"
+                     f"  ※ドル高は新興国・コモディティに逆風")
+    usdjpy = snapshot.get("ドル円（USD/JPY）")
+    if usdjpy:
+        lines.append(f"- ドル円: {usdjpy['value']:.1f}円（前日比{usdjpy['change_pct']:+.1f}%）"
+                     f"  ※円安で日本輸出企業に追い風、円高は逆風")
+    eurusd = snapshot.get("ユーロドル")
+    if eurusd:
+        lines.append(f"- ユーロドル: {eurusd['value']:.4f}（前日比{eurusd['change_pct']:+.1f}%）")
+
+    # ─── バリュエーション・派生指標 ──────────────────────────
+    lines.append("\n### バリュエーション・派生指標")
+    nt = derived.get("NT倍率")
+    if nt:
+        lines.append(f"- NT倍率: {nt['value']:.2f}倍  ※拡大は値がさ株集中、市場の裾野が狭い状態")
+
+    # ─── 分析ガイド ──────────────────────────────────────────
+    lines.append(
+        "\n上記のマーケット環境データをもとに、対象銘柄への影響を分析に必ず反映してください。"
+        "例: VIX高水準→リスクオフ環境、逆イールド→景気後退リスク、"
+        "円安→輸出企業に有利、金利上昇→グロース株に逆風、SOX好調→半導体関連に追い風、など。"
+    )
+
+    return "\n".join(lines)
