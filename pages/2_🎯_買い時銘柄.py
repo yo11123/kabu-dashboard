@@ -12,6 +12,10 @@ import streamlit as st
 import yfinance as yf
 from streamlit_cookies_controller import CookieController
 
+import xml.etree.ElementTree as _ET
+
+import requests as _requests
+
 from modules.ai_analysis import get_comprehensive_analysis, prepare_analysis_inputs
 from modules.data_loader import fetch_stock_data_max, load_all_tse_stocks, load_tickers
 from modules.events import fetch_news_events
@@ -360,9 +364,44 @@ def _render_card(rank: int, item: dict) -> None:
     st.write("")  # カード間の余白
 
 
+# ─── 市場ニュース取得（Google News RSS）──────────────────────────────
+
+@st.cache_data(ttl=3600)  # 1時間キャッシュ
+def _fetch_market_news() -> list[str]:
+    """Google News RSSから市場・地政学・経済ニュースの見出しを取得する。"""
+    queries = [
+        "株式市場 日経平均",
+        "地政学リスク 株 影響",
+        "米国株 市場 経済",
+        "原油 金利 為替 市場",
+        "戦争 紛争 制裁 経済",
+    ]
+    titles: list[str] = []
+    seen: set[str] = set()
+
+    for q in queries:
+        try:
+            url = f"https://news.google.com/rss/search?q={q}&hl=ja&gl=JP&ceid=JP:ja"
+            r = _requests.get(url, timeout=10, headers={"User-Agent": "Mozilla/5.0"})
+            if r.status_code != 200:
+                continue
+            root = _ET.fromstring(r.content)
+            for item in root.findall(".//item")[:8]:
+                title_el = item.find("title")
+                if title_el is not None and title_el.text:
+                    t = title_el.text.strip()
+                    if t not in seen:
+                        seen.add(t)
+                        titles.append(t)
+        except Exception:
+            continue
+
+    return titles[:30]
+
+
 # ─── 日本株全体の相場観 AI 分析 ──────────────────────────────────────
 
-def _build_market_outlook_prompt(market_text: str, snapshot: dict, derived: dict) -> str:
+def _build_market_outlook_prompt(market_text: str, snapshot: dict, derived: dict, news: list[str]) -> str:
     """日本株市場全体の売買判断プロンプトを生成する。"""
     # 主要指数の変動をまとめる
     indices = []
@@ -372,13 +411,19 @@ def _build_market_outlook_prompt(market_text: str, snapshot: dict, derived: dict
             indices.append(f"- {name}: {d['value']:,.0f}（前日比{d['change_pct']:+.1f}%）")
     indices_text = "\n".join(indices) if indices else "データなし"
 
+    # ニュース
+    news_text = "\n".join(f"- {t}" for t in news[:25]) if news else "ニュース取得なし"
+
     return f"""あなたは日本株市場の上級ストラテジストです。
-以下の市場データを分析し、**今、日本株全体として買い時か・売り時か・現状維持か** を判断してください。
+以下の市場データと**最新ニュース**を分析し、**今、日本株全体として買い時か・売り時か・現状維持か** を判断してください。
 
 ## 主要指数
 {indices_text}
 
 {market_text}
+
+## 最新の市場・地政学ニュース（直近）
+{news_text}
 
 ## 分析の視点
 1. VIXとSKEWから市場のリスク選好度を判断
@@ -387,29 +432,32 @@ def _build_market_outlook_prompt(market_text: str, snapshot: dict, derived: dict
 4. SOX・ラッセル2000からグローバルなリスクオン/オフを判断
 5. コモディティ（金・原油・銅）からインフレ/景気の方向性を判断
 6. マクロ経済指標（CPI・雇用・GDP等）があればそれも考慮
+7. **地政学リスク（戦争・紛争・制裁）が原油・サプライチェーン・市場心理に与える影響を重視**
+8. **ニュースから読み取れるカタリスト（政策変更・貿易摩擦・軍事行動等）を具体的に分析**
 
 ## 出力形式（このJSONのみ出力）
 ```json
 {{
   "market_judgment": "積極買い" | "買い優勢" | "中立・様子見" | "売り優勢" | "リスク回避",
   "score": 0〜100の整数（50=中立、高い=強気、低い=弱気）,
-  "summary": "3〜4文の相場観サマリー。具体的な数値を引用して根拠を示す",
-  "bull_factors": ["強気要因1", "強気要因2", "強気要因3"],
-  "bear_factors": ["弱気要因1", "弱気要因2", "弱気要因3"],
-  "strategy": "今週〜今月の投資戦略を2〜3文で具体的に提案"
+  "summary": "4〜5文の相場観サマリー。指標の数値とニュースの具体的事実を引用して根拠を示す",
+  "bull_factors": ["強気要因1（数値やニュース根拠付き）", "強気要因2", "強気要因3"],
+  "bear_factors": ["弱気要因1（数値やニュース根拠付き）", "弱気要因2", "弱気要因3"],
+  "geopolitical": "地政学リスクの現状分析（2〜3文。戦争・紛争・制裁がエネルギー価格やサプライチェーン、市場心理に与える影響を具体的に）",
+  "strategy": "今週〜今月の投資戦略を3〜4文で具体的に提案。セクター配分やリスクヘッジも含む"
 }}
 ```"""
 
 
 @st.cache_data(ttl=3600 * 4)  # 4時間キャッシュ
-def _get_market_outlook(market_text: str, provider: str, api_key: str) -> dict:
+def _get_market_outlook(market_text: str, news_tuple: tuple, provider: str, api_key: str) -> dict:
     """日本株全体の相場観をAIで分析する。"""
     import json
     import re
 
     snapshot = fetch_market_snapshot()
     derived = calc_derived_indicators(snapshot)
-    prompt = _build_market_outlook_prompt(market_text, snapshot, derived)
+    prompt = _build_market_outlook_prompt(market_text, snapshot, derived, list(news_tuple))
 
     try:
         if provider == "claude":
@@ -491,6 +539,7 @@ def _render_market_outlook(result: dict) -> None:
     score = result.get("score", 50)
     summary = result.get("summary", "")
     strategy = result.get("strategy", "")
+    geopolitical = result.get("geopolitical", "")
     bulls = result.get("bull_factors", [])
     bears = result.get("bear_factors", [])
     color, emoji = _MARKET_JUDGMENT_CONFIG.get(judgment, ("#9e9e9e", "➡️"))
@@ -520,8 +569,8 @@ def _render_market_outlook(result: dict) -> None:
         unsafe_allow_html=True,
     )
 
-    # 強気・弱気要因 + 戦略
-    c1, c2, c3 = st.columns(3)
+    # 強気・弱気要因
+    c1, c2 = st.columns(2)
     with c1:
         st.markdown("**📈 強気要因**")
         for b in bulls:
@@ -530,9 +579,16 @@ def _render_market_outlook(result: dict) -> None:
         st.markdown("**📉 弱気要因**")
         for b in bears:
             st.markdown(f"<span style='color:#f44336'>⚠️</span> {b}", unsafe_allow_html=True)
+
+    # 地政学リスク + 投資戦略
+    c3, c4 = st.columns(2)
     with c3:
+        if geopolitical:
+            st.markdown("**🌍 地政学リスク分析**")
+            st.markdown(f"<div style='font-size:0.88em;line-height:1.6;'>{geopolitical}</div>", unsafe_allow_html=True)
+    with c4:
         st.markdown("**🎯 投資戦略**")
-        st.markdown(f"<div style='font-size:0.9em;line-height:1.6;'>{strategy}</div>", unsafe_allow_html=True)
+        st.markdown(f"<div style='font-size:0.88em;line-height:1.6;'>{strategy}</div>", unsafe_allow_html=True)
 
 
 # ─── メイン ─────────────────────────────────────────────────────────────
@@ -557,8 +613,9 @@ def main() -> None:
         _outlook_provider = "claude" if _outlook_key else ""
 
         if _outlook_provider:
-            with st.spinner("市場全体の相場観を分析中..."):
-                _outlook = _get_market_outlook(_market_text, _outlook_provider, _outlook_key)
+            _market_news = tuple(_fetch_market_news())
+            with st.spinner("市場ニュース＋指標データからAIが相場観を分析中..."):
+                _outlook = _get_market_outlook(_market_text, _market_news, _outlook_provider, _outlook_key)
             _render_market_outlook(_outlook)
             st.divider()
 
