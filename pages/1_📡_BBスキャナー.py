@@ -8,6 +8,7 @@ from modules.data_loader import load_all_tse_stocks, load_tickers
 from modules.indicators import calc_bollinger_bands, calc_volume_ma
 from modules.market_hours import market_status_label
 from modules.styles import apply_theme
+from modules.lstm_predictor import is_model_available, predict_proba as _lstm_predict
 
 st.set_page_config(
     page_title="BBスキャナー | 日本株ダッシュボード",
@@ -163,6 +164,9 @@ def _run_scan(
                 df["Close"].iloc[-20:], df["BB_upper"].iloc[-20:], threshold
             )
 
+            # ── AI 成功確率（モデルが存在する場合のみ）────────────────────
+            ai_prob = _lstm_predict(df) if is_model_available() else None
+
             results.append({
                 "コード":      code,
                 "銘柄名":      name_map.get(code, code),
@@ -175,6 +179,7 @@ def _run_scan(
                 "継続日数":    walk_days,
                 "BBポジション": round(bb_pos * 100, 1),
                 "出来高比":    round(vol_ratio, 2) if vol_ratio is not None else None,
+                "AI確率%":     ai_prob,
             })
 
         except Exception:
@@ -324,27 +329,46 @@ def main() -> None:
     # ── 結果テーブル ───────────────────────────────────────────────
     display_df = results.drop(columns=["BBポジション"], errors="ignore")
 
+    # AI モデル未学習の場合は列ごと非表示
+    if "AI確率%" in display_df.columns and display_df["AI確率%"].isna().all():
+        display_df = display_df.drop(columns=["AI確率%"])
+
+    col_config = {
+        "コード":     st.column_config.TextColumn("コード",     width="small"),
+        "銘柄名":     st.column_config.TextColumn("銘柄名",     width="medium"),
+        "市場":       st.column_config.TextColumn("市場",       width="small"),
+        "現在値":     st.column_config.NumberColumn("現在値",    format="¥%d"),
+        "前日比%":    st.column_config.NumberColumn("前日比%",   format="%.2f%%"),
+        "BB上限":     st.column_config.NumberColumn("BB 上限",   format="¥%d"),
+        "BB乖離%":    st.column_config.NumberColumn("BB 乖離%",  format="%.2f%%",
+                      help="現在値が BB 上限を何 % 上回っているか（+ は上方突破）"),
+        "BB上昇率%":  st.column_config.NumberColumn("BB 上昇率%", format="%.2f%%",
+                      help="6営業日前と比べた BB 上限の上昇率（高いほど勢いが強い）"),
+        "継続日数":   st.column_config.NumberColumn("継続日数",  format="%d 日",
+                      help="BB 上限付近に連続して滞在している日数（1 日 = 今日ブレイク）"),
+        "出来高比":   st.column_config.NumberColumn("出来高比",  format="%.2f ×",
+                      help="直近出来高 / 25 日平均出来高"),
+        "AI確率%":    st.column_config.ProgressColumn(
+                          "AI確率%",
+                          format="%.1f%%",
+                          min_value=0,
+                          max_value=100,
+                          help="LSTM が予測する「10営業日以内に +5% 上昇」の確率（train_lstm.ipynb で学習後に有効）",
+                      ),
+    }
+
     st.dataframe(
         display_df,
         use_container_width=True,
-        column_config={
-            "コード":     st.column_config.TextColumn("コード",     width="small"),
-            "銘柄名":     st.column_config.TextColumn("銘柄名",     width="medium"),
-            "市場":       st.column_config.TextColumn("市場",       width="small"),
-            "現在値":     st.column_config.NumberColumn("現在値",    format="¥%d"),
-            "前日比%":    st.column_config.NumberColumn("前日比%",   format="%.2f%%"),
-            "BB上限":     st.column_config.NumberColumn("BB 上限",   format="¥%d"),
-            "BB乖離%":    st.column_config.NumberColumn("BB 乖離%",  format="%.2f%%",
-                          help="現在値が BB 上限を何 % 上回っているか（+ は上方突破）"),
-            "BB上昇率%":  st.column_config.NumberColumn("BB 上昇率%", format="%.2f%%",
-                          help="6営業日前と比べた BB 上限の上昇率（高いほど勢いが強い）"),
-            "継続日数":   st.column_config.NumberColumn("継続日数",  format="%d 日",
-                          help="BB 上限付近に連続して滞在している日数（1 日 = 今日ブレイク）"),
-            "出来高比":   st.column_config.NumberColumn("出来高比",  format="%.2f ×",
-                          help="直近出来高 / 25 日平均出来高"),
-        },
+        column_config=col_config,
         hide_index=True,
     )
+
+    if not is_model_available():
+        st.caption(
+            "💡 **AI確率%** 列は `train_lstm.ipynb` で学習後、"
+            "`models/lstm_bb.pt` と `models/scaler_bb.pkl` を commit すると表示されます。"
+        )
 
     # ── チャート確認ナビ（銘柄ごとにボタンを配置）──────────────────
     st.divider()
