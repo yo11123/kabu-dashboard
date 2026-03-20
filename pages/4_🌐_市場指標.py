@@ -29,45 +29,6 @@ st.set_page_config(
 apply_theme()
 
 
-# ─── 外部データが必要な指標の説明 ──────────────────────────────────────
-
-_EXTERNAL_INDICATORS: dict[str, list[dict]] = {
-    "sentiment": [
-        {"name": "日経VI", "desc": "日経225オプションから算出される日本版VIX。日本市場の恐怖度を測る。", "source": "日本取引所グループ"},
-        {"name": "Put/Call Ratio", "desc": "プット/コール出来高比率。1.0超で弱気偏り、極端な値は逆張りシグナル。", "source": "CBOE / 大阪取引所"},
-        {"name": "AAII投資家センチメント", "desc": "米個人投資家の強気/弱気/中立割合。極端な偏りは逆張り指標。", "source": "aaii.com"},
-        {"name": "CNN Fear & Greed Index", "desc": "7つの市場指標を総合して0（恐怖）〜100（強欲）で表示。", "source": "CNN Business"},
-        {"name": "騰落レシオ（25日）", "desc": "値上がり/値下がり銘柄数比率。120超で過熱、70未満で底値圏。", "source": "東証データ"},
-        {"name": "新高値・新安値銘柄数", "desc": "年初来高値/安値更新銘柄の集計。市場の内部健全性を示す。", "source": "東証データ"},
-    ],
-    "bond": [
-        {"name": "ハイイールドスプレッド", "desc": "ジャンク債と国債の利回り差。拡大＝リスクオフ、縮小＝リスクオン。", "source": "FRED (BAMLH0A0HYM2)"},
-        {"name": "TEDスプレッド", "desc": "銀行間金利とT-Billの差。金融危機時に急拡大する。", "source": "FRED"},
-    ],
-    "flow": [
-        {"name": "投資主体別売買動向", "desc": "海外投資家・個人・信託銀行等の売買状況。海外投資家の動向が最重要。", "source": "東証（毎週木曜公表）"},
-        {"name": "CFTC先物ポジション（COT）", "desc": "米先物市場の参加者別ポジション。大口投機筋の偏りは反転リスク。", "source": "CFTC（毎週金曜公表）"},
-        {"name": "ETF資金フロー", "desc": "SPY・QQQ等への資金流入出。リスクオン/オフの温度計。", "source": "etf.com / Bloomberg"},
-        {"name": "裁定買い残", "desc": "先物と現物の裁定取引残高。減少後は売り圧力後退→反発しやすい。", "source": "東証"},
-    ],
-    "volatility": [
-        {"name": "MOVE Index", "desc": "債券版VIX。金融不安・金利急変動で急上昇し株式市場にも波及。", "source": "ICE BofA"},
-        {"name": "ヒンデンブルグ・オーメン", "desc": "新高値と新安値が同時に多数出現する市場内部の矛盾を検出。暴落の前兆（ダマシも多い）。", "source": "計算必要"},
-    ],
-    "macro": [
-        {"name": "PMI（購買担当者景気指数）", "desc": "50超＝拡大、50未満＝縮小。ISM製造業PMIは毎月第1営業日発表。", "source": "ISM / S&P Global"},
-        {"name": "雇用統計（NFP）", "desc": "毎月第1金曜発表。FRB政策に直結する最重要経済指標の一つ。", "source": "BLS"},
-        {"name": "CPI（消費者物価指数）", "desc": "インフレ率の代表指標。コアCPIが予想超でFRB利上げ懸念→株安。", "source": "BLS"},
-        {"name": "GDP成長率", "desc": "2四半期連続マイナスでテクニカル・リセッション。ただし市場は先読み。", "source": "BEA"},
-        {"name": "LEI（景気先行指数）", "desc": "10の先行指標の合成。3ヶ月連続低下で景気後退警告。", "source": "Conference Board"},
-        {"name": "消費者信頼感指数", "desc": "米GDPの7割は個人消費。消費者マインドは経済全体の行方を左右。", "source": "Conference Board"},
-        {"name": "ミシガン大消費者信頼感", "desc": "1年先・5年先のインフレ期待も含む。FRBが政策判断の参考にする。", "source": "University of Michigan"},
-    ],
-    "valuation": [
-        {"name": "空売り比率", "desc": "全売買代金に占める空売り割合。40%超で売り圧力大、逆張りの目安にも。", "source": "東証（毎日公表）"},
-    ],
-}
-
 
 # ─── スパークラインチャート生成 ────────────────────────────────────────
 
@@ -134,15 +95,6 @@ def _render_live_indicator(name: str, data: dict, period: str) -> None:
         st.caption(desc)
 
 
-def _render_info_indicator(item: dict) -> None:
-    """外部データ必要な指標の説明カードを描画する。"""
-    with st.container(border=True):
-        st.markdown(f"**{item['name']}**")
-        st.caption(item["desc"])
-        src = item.get("source") or item.get("status", "")
-        if src:
-            st.caption(f"📎 データソース: {src}")
-
 
 # ─── メイン ─────────────────────────────────────────────────────────────
 
@@ -208,8 +160,6 @@ def main() -> None:
         "🧠 センチメント",
         "🏭 セクター",
         "💰 債券・金利",
-        "💹 資金フロー",
-        "⚡ ボラティリティ",
         "🏛️ マクロ経済",
         "🛢️ コモディティ・為替",
         "📐 バリュエーション",
@@ -237,13 +187,6 @@ def main() -> None:
         hv = derived.get("日経HV20")
         if hv:
             st.metric("日経HV20（実現ボラティリティ）", f"{hv['value']:.1f}%")
-        # 外部データ
-        st.divider()
-        st.caption("以下の指標は外部データソースが必要です")
-        cols = st.columns(2)
-        for i, item in enumerate(_EXTERNAL_INDICATORS.get("sentiment", [])):
-            with cols[i % 2]:
-                _render_info_indicator(item)
 
     # ── 2. セクター ───────────────────────────────────────────
     with tabs[1]:
@@ -297,31 +240,8 @@ def main() -> None:
                     fig = _make_chart(pd.DataFrame({"Close": _hy_hist}), color="#ff9800")
                     st.plotly_chart(fig, use_container_width=True, key="fred_hy_spread")
 
-    # ── 4. 資金フロー ─────────────────────────────────────────
+    # ── 4. マクロ経済 ─────────────────────────────────────────
     with tabs[3]:
-        st.subheader("資金フロー・ポジション指標")
-        st.info("**信用買い残・売り残・貸借倍率** はメインチャートページの AI 分析に組み込まれています。")
-        cols = st.columns(2)
-        for i, item in enumerate(_EXTERNAL_INDICATORS.get("flow", [])):
-            with cols[i % 2]:
-                _render_info_indicator(item)
-
-    # ── 5. ボラティリティ ─────────────────────────────────────
-    with tabs[4]:
-        st.subheader("ボラティリティ・リスク指標")
-        # 実現ボラティリティ
-        hv = derived.get("日経HV20")
-        if hv:
-            st.metric("日経225 HV20（実現ボラティリティ）", f"{hv['value']:.1f}%")
-            st.caption("過去20日間の実際の価格変動率（年率換算）。VIX（予想変動率）と比較して使う。")
-        st.divider()
-        cols = st.columns(2)
-        for i, item in enumerate(_EXTERNAL_INDICATORS.get("volatility", [])):
-            with cols[i % 2]:
-                _render_info_indicator(item)
-
-    # ── 6. マクロ経済 ─────────────────────────────────────────
-    with tabs[5]:
         st.subheader("マクロ経済・先行指標")
 
         _fred = fetch_fred_indicators()
@@ -354,8 +274,8 @@ def main() -> None:
                 "3. secrets.toml に `FRED_API_KEY = \"あなたのキー\"` を追加"
             )
 
-    # ── 7. コモディティ・為替 ─────────────────────────────────
-    with tabs[6]:
+    # ── 5. コモディティ・為替 ─────────────────────────────────
+    with tabs[4]:
         st.subheader("コモディティ・為替指標")
         commodity_fx = ["金（Gold）", "WTI原油", "銅（Copper）", "ドルインデックス", "ドル円（USD/JPY）", "ユーロドル"]
         cols = st.columns(2)
@@ -368,8 +288,8 @@ def main() -> None:
                         _render_live_indicator(name, data, period)
                 col_idx += 1
 
-    # ── 8. バリュエーション ──────────────────────────────────
-    with tabs[7]:
+    # ── 6. バリュエーション ──────────────────────────────────
+    with tabs[5]:
         st.subheader("バリュエーション・市場全体指標")
 
         _vc1, _vc2, _vc3, _vc4 = st.columns(4)
@@ -420,13 +340,6 @@ def main() -> None:
                     with st.container(border=True):
                         _render_live_indicator(name, data, period)
                 col_idx += 1
-        # 外部データ
-        st.divider()
-        st.caption("以下の指標は外部データソースが必要です")
-        cols = st.columns(2)
-        for i, item in enumerate(_EXTERNAL_INDICATORS.get("valuation", [])):
-            with cols[i % 2]:
-                _render_info_indicator(item)
 
 
 if __name__ == "__main__":
