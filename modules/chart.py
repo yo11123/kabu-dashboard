@@ -467,15 +467,13 @@ def create_candlestick_chart(
     )
 
     # 全 x 軸に category 設定を適用
-    # fixedrange=True でX軸のパン/ズームを無効化し、
-    # 最新日足より右にスクロールできないようにする。
-    # 表示期間はサイドバーの期間選択で制御。
+    # fixedrange=True で右スクロール防止、表示範囲はスライダーで制御
     fig.update_xaxes(
         type="category",
         showgrid=True,
         gridcolor=GRID_COLOR,
         tickangle=-45,
-        nticks=20,
+        nticks=min(20, end_idx - view_start_idx + 1),
         range=[view_start_idx - 0.5, end_idx + 0.5],
         fixedrange=True,
         autorange=False,

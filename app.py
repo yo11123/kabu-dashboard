@@ -508,8 +508,8 @@ def main() -> None:
     df = df_raw.copy()
 
     # 初期表示範囲（選択期間に対応するインデックス）
-    view_start_idx = _calc_view_start_idx(df, period)
-    view_end_idx = len(df) - 1
+    _default_start = _calc_view_start_idx(df, period)
+    _total_bars = len(df)
 
     # ─── テクニカル指標計算 ──────────────────────────────────────────
     if sma_periods:
@@ -547,7 +547,7 @@ def main() -> None:
     company_name = company_name or ticker_info.get("name", ticker)
 
     # ─── ティッカーバナー ───────────────────────────────────────────
-    df_view = df.iloc[view_start_idx:]
+    df_view = df.iloc[_default_start:]
     last_close = float(df["Close"].iloc[-1])
     prev_close = float(df["Close"].iloc[-2]) if len(df) >= 2 else last_close
     change_val = last_close - prev_close
@@ -587,11 +587,46 @@ def main() -> None:
         unsafe_allow_html=True,
     )
 
-    # ─── チャートの高さ調整（チャート直上に配置）────────────────────
-    chart_height = st.slider(
-        "チャートの高さ", min_value=400, max_value=800, value=580, step=20,
-        label_visibility="collapsed",
-        help="チャートの高さを調整（400〜800px）",
+    # ─── 表示範囲スライダー ─────────────────────────────────────────
+    # 日付ラベルを作成（スライダーの目盛り用）
+    _dates_fmt = df.index.strftime("%Y-%m-%d").tolist()
+    _first_date = _dates_fmt[0]
+    _last_date = _dates_fmt[-1]
+
+    st.markdown(
+        f"<div style='font-family:IBM Plex Mono,monospace;font-size:0.7em;color:#4a7a8a;margin-bottom:-10px;'>"
+        f"表示範囲　{_first_date} 〜 {_last_date}（全 {_total_bars} 日足）</div>",
+        unsafe_allow_html=True,
+    )
+    _range_col, _height_col = st.columns([5, 1])
+    with _range_col:
+        _range = st.slider(
+            "表示範囲",
+            min_value=0,
+            max_value=_total_bars - 1,
+            value=(_default_start, _total_bars - 1),
+            format=f"",
+            label_visibility="collapsed",
+            help="左端・右端をドラッグして表示期間を自由に調整。日足を詰めて長期間を表示できます。",
+        )
+    with _height_col:
+        chart_height = st.number_input(
+            "高さ", min_value=350, max_value=900, value=580, step=30,
+            label_visibility="collapsed",
+            help="チャートの高さ（px）",
+        )
+
+    view_start_idx = _range[0]
+    view_end_idx = _range[1]
+
+    # 選択範囲の日付表示
+    _sel_start = _dates_fmt[view_start_idx]
+    _sel_end = _dates_fmt[view_end_idx]
+    _sel_bars = view_end_idx - view_start_idx + 1
+    st.markdown(
+        f"<div style='font-family:IBM Plex Mono,monospace;font-size:0.68em;color:#3a5a6a;margin-top:-8px;'>"
+        f"{_sel_start} → {_sel_end}　（{_sel_bars} 本）</div>",
+        unsafe_allow_html=True,
     )
 
     # ─── チャート描画 ────────────────────────────────────────────────
