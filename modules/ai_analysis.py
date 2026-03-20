@@ -113,6 +113,29 @@ def calc_technical_summary(df: pd.DataFrame) -> dict:
         if bb_std > 0:
             bb_sigma = round((last - bb_mid) / bb_std, 2)
 
+    # ── 過去リターン（騰落率）────────────────────────────────────
+    returns = {}
+    for label, days in [("1w", 5), ("1m", 21), ("3m", 63), ("6m", 126), ("1y", 252)]:
+        if len(close) > days:
+            past = float(close.iloc[-(days + 1)])
+            if past > 0:
+                returns[label] = round((last - past) / past * 100, 1)
+
+    # ── サポート・レジスタンスライン ──────────────────────────────
+    support_resistance = {}
+    lookback = close.tail(min(len(close), 120))
+    if len(lookback) >= 20:
+        # 直近120日の安値・高値をサポート・レジスタンスの目安に
+        support_resistance["support_1"] = round(float(lookback.min()), 1)
+        support_resistance["resistance_1"] = round(float(lookback.max()), 1)
+        # 25日移動平均もサポート/レジスタンスとして重要
+        if sma25 is not None:
+            support_resistance["sma25"] = round(sma25, 1)
+        if sma75 is not None:
+            support_resistance["sma75"] = round(sma75, 1)
+        # 直近20日の安値（短期サポート）
+        support_resistance["support_20d"] = round(float(close.tail(20).min()), 1)
+
     return {
         "current_price": round(last, 1),
         "rsi": rsi,
@@ -125,6 +148,8 @@ def calc_technical_summary(df: pd.DataFrame) -> dict:
         "pct_from_52w_low": pct_from_low,
         "volume_ratio_5d_30d": vol_ratio,
         "bb_sigma": bb_sigma,
+        "returns": returns,
+        "support_resistance": support_resistance,
     }
 
 
@@ -199,7 +224,32 @@ def _build_prompt(
     margin_section = f"\n## 信用取引情報\n{margin_text}" if margin_text else ""
     market_section = f"\n{market_text}" if market_text else ""
 
-    return f"""あなたは日本株の総合アナリストです。以下のデータをもとに銘柄を多角的に分析し、JSONのみで回答してください。
+    # ── 過去リターン ──────────────────────────────────────────
+    returns = tech.get("returns", {})
+    returns_lines = []
+    for label, name in [("1w", "1週間"), ("1m", "1ヶ月"), ("3m", "3ヶ月"), ("6m", "6ヶ月"), ("1y", "1年")]:
+        val = returns.get(label)
+        if val is not None:
+            returns_lines.append(f"  {name}: {val:+.1f}%")
+    returns_text = "\n".join(returns_lines) if returns_lines else "  データ不足"
+
+    # ── サポート・レジスタンス ─────────────────────────────────
+    sr = tech.get("support_resistance", {})
+    sr_lines = []
+    if sr.get("resistance_1"):
+        sr_lines.append(f"  直近120日高値（レジスタンス）: ¥{sr['resistance_1']:,.0f}")
+    if sr.get("sma25"):
+        sr_lines.append(f"  SMA25: ¥{sr['sma25']:,.0f}")
+    if sr.get("sma75"):
+        sr_lines.append(f"  SMA75: ¥{sr['sma75']:,.0f}")
+    if sr.get("support_20d"):
+        sr_lines.append(f"  直近20日安値（短期サポート）: ¥{sr['support_20d']:,.0f}")
+    if sr.get("support_1"):
+        sr_lines.append(f"  直近120日安値（サポート）: ¥{sr['support_1']:,.0f}")
+    sr_text = "\n".join(sr_lines) if sr_lines else "  データ不足"
+
+    return f"""あなたはCFA資格を持つ日本株の上級アナリストです。
+以下のデータをもとに、プロのアナリストとして段階的に深く分析してください。
 
 ## 銘柄
 {company_name} ({ticker})
@@ -217,31 +267,80 @@ def _build_prompt(
 - 出来高比(5日/30日): {tech.get('volume_ratio_5d_30d', 'N/A')}倍
 - ボリンジャー位置: {tech.get('bb_sigma', 'N/A')}σ
 
+## 過去リターン（騰落率）
+{returns_text}
+
+## サポート・レジスタンスライン
+{sr_text}
+
 ## ファンダメンタル
 {fund_text}{margin_section}{market_section}
 
 ## 最近のニュース（直近30日）
 {news_text}
 
-## 回答形式（このJSONのみ返答してください）
+## 分析手順（この順番で段階的に思考してください）
+
+### Step 1: テクニカル分析
+- RSI・MACD・ストキャスティクス・CCIの各指標が示す方向性は一致しているか？
+- 過去リターンからモメンタム（上昇/下降トレンド）の強さを判断
+- サポート/レジスタンスラインとの距離感は？ブレイクアウトの可能性は？
+- 出来高は価格変動を裏付けているか？
+- 複数の指標が矛盾する場合、どの指標を重視すべきか理由とともに判断
+
+### Step 2: ファンダメンタル分析
+- PER・PBRは同業他社や市場平均と比較してどうか？（日本市場平均: PER約15倍, PBR約1.3倍）
+- ROE 8%以上か？ 資本効率は改善傾向か？
+- 売上・利益の成長トレンドはどうか？
+- 配当利回りと配当性向のバランスは持続可能か？
+- FCFはプラスで安定しているか？
+
+### Step 3: マーケット環境の影響
+- 現在のVIX水準やイールドカーブは、この銘柄にとって有利か不利か？
+- 為替（ドル円）の動向はこの銘柄の業績にどう影響するか？
+- セクター指標（SOX、ラッセル2000等）との関連性は？
+
+### Step 4: ニュース・カタリスト分析
+- 直近のニュースにポジティブ/ネガティブなカタリストはあるか？
+- 決算発表が近い場合、市場の期待値は？
+
+### Step 5: 総合判断
+- Step 1〜4を統合し、リスク/リワード比を考慮して最終判断を下す
+- 強気/弱気の根拠を具体的な数値で裏付ける
+
+## 出力形式
+上記の思考プロセスを踏まえた上で、最終的に以下のJSON **のみ** を出力してください。
+思考過程は出力せず、結論のみをJSONに凝縮してください。
+各detailフィールドには、上記Stepの分析結果を反映した深い洞察を書いてください。
+
+```json
 {{
-  "technical_score": 0〜100の整数（テクニカル的強さ。50=中立、高=強気シグナル多数）,
-  "fundamental_score": 0〜100の整数（ファンダの良さ。50=中立。データ不足時も50）,
-  "news_score": 0〜100の整数（ニュースのポジティブ度。50=中立）,
-  "overall_score": 0〜100の整数（3要素の総合評価）,
+  "technical_score": 0〜100の整数（50=中立。指標の一致度・モメンタム・サポレジ距離を総合判断）,
+  "fundamental_score": 0〜100の整数（50=中立。同業比較・成長性・財務健全性を総合判断）,
+  "news_score": 0〜100の整数（50=中立。カタリストの有無と影響度）,
+  "overall_score": 0〜100の整数（テク40%+ファンダ35%+ニュース15%+マーケット環境10%で加重）,
   "judgment": "強気買い" | "買い" | "中立" | "売り" | "強気売り",
-  "technical_detail": "テクニカルの解説（3〜4文、具体的な数値を引用）",
-  "fundamental_detail": "ファンダの解説（3〜4文、データ不足の場合はその旨も記載）",
-  "news_detail": "ニュースの解説（2〜3文）",
-  "overall_detail": "総合判断の根拠（3〜4文）",
-  "opportunities": ["上昇要因または強み1", "上昇要因または強み2"],
-  "risks": ["リスクまたは注意点1", "リスクまたは注意点2"]
-}}"""
+  "technical_detail": "テクニカル分析の詳細（5〜6文。指標の一致/乖離、モメンタム、サポレジ、出来高の裏付けを数値付きで解説）",
+  "fundamental_detail": "ファンダメンタル分析の詳細（5〜6文。同業比較を含め、PER/PBR/ROEの水準評価、成長性、配当持続性を解説）",
+  "news_detail": "ニュース・カタリスト分析（3〜4文。マーケット環境の影響も含む）",
+  "overall_detail": "総合判断の根拠（5〜6文。リスク/リワード比、エントリーポイントの妥当性、時間軸を含む）",
+  "opportunities": ["具体的な上昇要因1（数値根拠付き）", "具体的な上昇要因2", "具体的な上昇要因3"],
+  "risks": ["具体的なリスク1（数値根拠付き）", "具体的なリスク2", "具体的なリスク3"]
+}}
+```"""
 
 
 def _parse_json(text: str) -> dict:
-    """LLM の応答テキストから JSON を抽出してパースする。"""
+    """LLM の応答テキストから JSON を抽出してパースする。
+
+    Chain of Thought で思考テキストが混在する場合でも、
+    ```json ... ``` ブロックや裸の { ... } を確実に抽出する。
+    """
+    import re as _re
+
     text = text.strip()
+
+    # 1. ```json ... ``` ブロックを優先的に探す
     if "```" in text:
         for part in text.split("```"):
             part = part.strip().lstrip("json").strip()
@@ -249,6 +348,16 @@ def _parse_json(text: str) -> dict:
                 return json.loads(part)
             except json.JSONDecodeError:
                 continue
+
+    # 2. テキスト中の最初の { ... } ブロックを抽出
+    match = _re.search(r"\{[\s\S]*\}", text)
+    if match:
+        try:
+            return json.loads(match.group())
+        except json.JSONDecodeError:
+            pass
+
+    # 3. フォールバック: そのままパース
     return json.loads(text)
 
 
@@ -260,7 +369,7 @@ def _call_claude(prompt: str, api_key: str) -> str:
     client = anthropic.Anthropic(api_key=api_key)
     response = client.messages.create(
         model="claude-haiku-4-5-20251001",
-        max_tokens=1500,
+        max_tokens=4096,
         messages=[{"role": "user", "content": prompt}],
     )
     return response.content[0].text
@@ -272,7 +381,7 @@ def _call_openai(prompt: str, api_key: str) -> str:
     client = OpenAI(api_key=api_key)
     response = client.chat.completions.create(
         model="gpt-4o-mini",
-        max_tokens=1500,
+        max_tokens=4096,
         messages=[{"role": "user", "content": prompt}],
     )
     return response.choices[0].message.content
