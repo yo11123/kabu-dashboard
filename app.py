@@ -14,7 +14,7 @@ from modules.data_loader import (
 )
 from modules.indicators import (
     calc_sma, calc_ema, calc_bollinger_bands, calc_volume_ma,
-    calc_rsi, calc_macd, calc_stochastic, calc_cci,
+    calc_rsi, calc_macd, calc_stochastic, calc_cci, calc_ichimoku,
 )
 from modules.margin import fetch_margin_data, format_margin_text
 from modules.chart import create_candlestick_chart
@@ -399,6 +399,7 @@ def main() -> None:
         ema_periods = st.multiselect("EMA 期間", [9, 12, 21, 26, 50], default=[]) if show_ema else []
 
         show_bb = st.checkbox("ボリンジャーバンド（20日）", value=False)
+        show_ichimoku = st.checkbox("一目均衡表", value=False)
 
         st.caption("── オシレーター（サブプロット）──")
         show_rsi   = st.checkbox("RSI（14日）", value=False)
@@ -516,6 +517,8 @@ def main() -> None:
         df = calc_ema(df, ema_periods)
     if show_bb:
         df = calc_bollinger_bands(df)
+    if show_ichimoku:
+        df = calc_ichimoku(df)
     df = calc_volume_ma(df)
     if show_rsi:
         df = calc_rsi(df)
@@ -579,6 +582,7 @@ def main() -> None:
         show_sma=sma_periods,
         show_ema=ema_periods,
         show_bb=show_bb,
+        show_ichimoku=show_ichimoku,
         show_rsi=show_rsi,
         show_macd=show_macd,
         show_stoch=show_stoch,
@@ -648,7 +652,7 @@ def main() -> None:
     _ai_end = df.index[-1].strftime("%Y-%m-%d")
     _ai_start = (df.index[-1] - pd.Timedelta(days=30)).strftime("%Y-%m-%d")
     _news_30d = fetch_news_events(ticker, _ai_start, _ai_end, company_name)
-    tech_json, fund_text, news_titles, _margin_text = prepare_analysis_inputs(
+    tech_json, fund_text, news_titles, _margin_text, _market_text = prepare_analysis_inputs(
         ticker, company_name, df, _news_30d
     )
 
@@ -696,6 +700,7 @@ def main() -> None:
                 fund_text=fund_text,
                 news_titles=news_titles,
                 margin_text=_margin_text,
+                market_text=_market_text,
                 provider=ai_provider,
                 api_key=ai_api_key,
             )

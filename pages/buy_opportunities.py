@@ -220,12 +220,13 @@ def _run_ai_for_candidate(item: dict, provider: str, api_key: str) -> dict:
         start = (df.index[-1] - pd.Timedelta(days=30)).strftime("%Y-%m-%d")
         news  = fetch_news_events(ticker, start, end, name)
 
-        tech_json, fund_text, news_titles, margin_text = prepare_analysis_inputs(
+        tech_json, fund_text, news_titles, margin_text, market_text = prepare_analysis_inputs(
             ticker, name, df, news
         )
         ai_result = get_comprehensive_analysis(
             ticker, name, tech_json, fund_text, news_titles,
             margin_text=margin_text,
+            market_text=market_text,
             provider=provider,
             api_key=api_key,
         )

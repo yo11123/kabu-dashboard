@@ -133,7 +133,9 @@ def fetch_fundamental_yfinance(ticker: str) -> dict:
             "per": info.get("trailingPE"),
             "pbr": info.get("priceToBook"),
             "roe": info.get("returnOnEquity"),        # 小数 (0.15 = 15%)
+            "roa": info.get("returnOnAssets"),        # 小数
             "dividend_yield": info.get("dividendYield"),  # 小数
+            "free_cashflow": info.get("freeCashflow"),   # 円
             "market_cap": info.get("marketCap"),
             "sector": info.get("sector", ""),
             "industry": info.get("industry", ""),
@@ -220,6 +222,10 @@ def format_fundamental_text(
     if roe is not None:
         lines.append(f"ROE: {roe * 100:.1f}%")
 
+    roa = fund.get("roa")
+    if roa is not None:
+        lines.append(f"ROA: {roa * 100:.1f}%")
+
     # Kabutan の 利回り は % の数値、yfinance は小数
     div_yield_kb = kb.get("dividend_yield")
     div_yield_yf = fund.get("dividend_yield")
@@ -249,6 +255,15 @@ def format_fundamental_text(
         lines.append(f"EPS（実績）: {eps_t:.1f}円")
     if eps_f is not None:
         lines.append(f"EPS（予想）: {eps_f:.1f}円")
+
+    fcf = fund.get("free_cashflow")
+    if fcf is not None:
+        if abs(fcf) >= 1e12:
+            lines.append(f"FCF: ¥{fcf / 1e12:.2f}兆円")
+        elif abs(fcf) >= 1e8:
+            lines.append(f"FCF: ¥{fcf / 1e8:.0f}億円")
+        else:
+            lines.append(f"FCF: ¥{fcf:,.0f}")
 
     beta = fund.get("beta")
     if beta is not None:

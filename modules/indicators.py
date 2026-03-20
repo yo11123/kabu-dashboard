@@ -81,3 +81,43 @@ def calc_cci(df: pd.DataFrame, period: int = 20) -> pd.DataFrame:
     mean_dev = tp.rolling(period).apply(lambda x: abs(x - x.mean()).mean())
     df["CCI"] = (tp - sma_tp) / (0.015 * mean_dev.replace(0, float("nan")))
     return df
+
+
+def calc_ichimoku(
+    df: pd.DataFrame,
+    tenkan: int = 9,
+    kijun: int = 26,
+    senkou_b_period: int = 52,
+    displacement: int = 26,
+) -> pd.DataFrame:
+    """一目均衡表を計算して列を追加する。
+
+    追加列:
+        Ichimoku_Tenkan  - 転換線
+        Ichimoku_Kijun   - 基準線
+        Ichimoku_SpanA   - 先行スパン1（displacement 日先にシフト）
+        Ichimoku_SpanB   - 先行スパン2（displacement 日先にシフト）
+        Ichimoku_Chikou  - 遅行線（displacement 日前にシフト）
+    """
+    df = df.copy()
+    high = df["High"]
+    low = df["Low"]
+
+    # 転換線: (9日最高値 + 9日最安値) / 2
+    df["Ichimoku_Tenkan"] = (high.rolling(tenkan).max() + low.rolling(tenkan).min()) / 2
+
+    # 基準線: (26日最高値 + 26日最安値) / 2
+    df["Ichimoku_Kijun"] = (high.rolling(kijun).max() + low.rolling(kijun).min()) / 2
+
+    # 先行スパン1: (転換線 + 基準線) / 2 を 26日先にシフト
+    df["Ichimoku_SpanA"] = ((df["Ichimoku_Tenkan"] + df["Ichimoku_Kijun"]) / 2).shift(displacement)
+
+    # 先行スパン2: (52日最高値 + 52日最安値) / 2 を 26日先にシフト
+    df["Ichimoku_SpanB"] = (
+        (high.rolling(senkou_b_period).max() + low.rolling(senkou_b_period).min()) / 2
+    ).shift(displacement)
+
+    # 遅行線: 終値を 26日前にシフト
+    df["Ichimoku_Chikou"] = df["Close"].shift(-displacement)
+
+    return df

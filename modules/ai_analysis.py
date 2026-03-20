@@ -11,6 +11,7 @@ from modules.fundamental import (
     format_fundamental_text,
 )
 from modules.margin import fetch_margin_data, format_margin_text
+from modules.market_context import fetch_market_context_text
 
 
 # ─── テクニカル指標計算 ──────────────────────────────────────────────────
@@ -137,6 +138,7 @@ def _build_prompt(
     fund_text: str,
     news_titles: tuple[str, ...],
     margin_text: str = "",
+    market_text: str = "",
 ) -> str:
     """分析用プロンプトを生成する。"""
     news_text = (
@@ -195,6 +197,7 @@ def _build_prompt(
     above75 = tech.get("above_sma75")
 
     margin_section = f"\n## 信用取引情報\n{margin_text}" if margin_text else ""
+    market_section = f"\n{market_text}" if market_text else ""
 
     return f"""あなたは日本株の総合アナリストです。以下のデータをもとに銘柄を多角的に分析し、JSONのみで回答してください。
 
@@ -215,7 +218,7 @@ def _build_prompt(
 - ボリンジャー位置: {tech.get('bb_sigma', 'N/A')}σ
 
 ## ファンダメンタル
-{fund_text}{margin_section}
+{fund_text}{margin_section}{market_section}
 
 ## 最近のニュース（直近30日）
 {news_text}
@@ -318,6 +321,7 @@ def get_comprehensive_analysis(
     fund_text: str,            # format_fundamental_text の結果
     news_titles: tuple[str, ...],
     margin_text: str = "",     # format_margin_text の結果（信用残・貸借倍率）
+    market_text: str = "",     # fetch_market_context_text の結果（マーケット環境）
     provider: str = "claude",  # "claude" | "openai" | "gemini"
     api_key: str = "",         # ユーザー入力キー（空なら secrets から Claude キーを使用）
 ) -> dict:
@@ -356,7 +360,7 @@ def get_comprehensive_analysis(
 
     try:
         tech = json.loads(tech_json)
-        prompt = _build_prompt(ticker, company_name, tech, fund_text, news_titles, margin_text)
+        prompt = _build_prompt(ticker, company_name, tech, fund_text, news_titles, margin_text, market_text)
 
         if provider == "claude":
             # Claude は secrets の共用キー or ユーザー入力キーを使用
@@ -427,7 +431,9 @@ def build_chat_system_prompt(
     except Exception:
         tech = {}
 
+    market_text = fetch_market_context_text()
     margin_section = f"\n\n## 信用取引情報\n{margin_text}" if margin_text else ""
+    market_section = f"\n\n{market_text}" if market_text else ""
 
     return f"""あなたは日本株の専門アナリストアシスタントです。
 ユーザーから {company_name}（{ticker}）についての質問を受けています。
@@ -440,7 +446,7 @@ def build_chat_system_prompt(
 {json.dumps(tech, ensure_ascii=False, indent=2)}
 
 ## ファンダメンタルデータ
-{fund_text}{margin_section}
+{fund_text}{margin_section}{market_section}
 
 回答は簡潔で具体的にしてください。不明な点は正直に不明と答えてください。"""
 
@@ -538,10 +544,10 @@ def prepare_analysis_inputs(
     company_name: str,
     df: pd.DataFrame,
     news_events: list[dict],
-) -> tuple[str, str, tuple[str, ...], str]:
+) -> tuple[str, str, tuple[str, ...], str, str]:
     """
     分析に必要な入力データをまとめて準備する。
-    Returns: (tech_json, fund_text, news_titles, margin_text)
+    Returns: (tech_json, fund_text, news_titles, margin_text, market_text)
     """
     tech_summary = calc_technical_summary(df)
     tech_json = json.dumps(tech_summary, ensure_ascii=False)
@@ -561,4 +567,6 @@ def prepare_analysis_inputs(
     margin_data = fetch_margin_data(ticker)
     margin_text = format_margin_text(margin_data)
 
-    return tech_json, fund_text, news_titles, margin_text
+    market_text = fetch_market_context_text()
+
+    return tech_json, fund_text, news_titles, margin_text, market_text

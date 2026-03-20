@@ -60,6 +60,7 @@ def create_candlestick_chart(
     show_sma: list[int] | None = None,
     show_ema: list[int] | None = None,
     show_bb: bool = False,
+    show_ichimoku: bool = False,
     show_rsi: bool = False,
     show_macd: bool = False,
     show_stoch: bool = False,
@@ -196,6 +197,59 @@ def create_candlestick_chart(
                 line=dict(color="rgba(100,149,237,0.8)", width=1, dash="dash"),
                 name="BB中心",
                 showlegend=False,
+            ),
+            row=1, col=1,
+        )
+        trace_idx += 1
+
+    # ─── 一目均衡表 ─────────────────────────────────────────────────
+    if show_ichimoku and "Ichimoku_Tenkan" in df.columns:
+        # 転換線（赤）
+        fig.add_trace(
+            go.Scatter(
+                x=trading_dates, y=df["Ichimoku_Tenkan"],
+                line=dict(color="#ef5350", width=1), name="転換線",
+            ),
+            row=1, col=1,
+        )
+        trace_idx += 1
+        # 基準線（青）
+        fig.add_trace(
+            go.Scatter(
+                x=trading_dates, y=df["Ichimoku_Kijun"],
+                line=dict(color="#42a5f5", width=1), name="基準線",
+            ),
+            row=1, col=1,
+        )
+        trace_idx += 1
+        # 先行スパンA（雲の上辺）
+        fig.add_trace(
+            go.Scatter(
+                x=trading_dates, y=df["Ichimoku_SpanA"],
+                line=dict(color="rgba(76,175,80,0.4)", width=0.5),
+                name="先行スパンA", showlegend=False,
+            ),
+            row=1, col=1,
+        )
+        trace_idx += 1
+        # 先行スパンB（雲の下辺 + 雲の塗りつぶし）
+        fig.add_trace(
+            go.Scatter(
+                x=trading_dates, y=df["Ichimoku_SpanB"],
+                line=dict(color="rgba(239,83,80,0.4)", width=0.5),
+                fill="tonexty",
+                fillcolor="rgba(76,175,80,0.06)",
+                name="雲",
+            ),
+            row=1, col=1,
+        )
+        trace_idx += 1
+        # 遅行線（緑）
+        fig.add_trace(
+            go.Scatter(
+                x=trading_dates, y=df["Ichimoku_Chikou"],
+                line=dict(color="#66bb6a", width=1, dash="dot"),
+                name="遅行線",
             ),
             row=1, col=1,
         )
