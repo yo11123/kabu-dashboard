@@ -542,10 +542,15 @@ def main() -> None:
 
     # ─── ティッカーバナー ───────────────────────────────────────────
     df_view = df.iloc[_default_start:]
-    last_close = float(df["Close"].iloc[-1])
-    prev_close = float(df["Close"].iloc[-2]) if len(df) >= 2 else last_close
+    _close_clean = df["Close"].dropna()
+    last_close = float(_close_clean.iloc[-1]) if not _close_clean.empty else 0
+    prev_close = float(_close_clean.iloc[-2]) if len(_close_clean) >= 2 else last_close
+    if last_close != last_close:  # NaN check
+        last_close = 0
+    if prev_close != prev_close:
+        prev_close = last_close
     change_val = last_close - prev_close
-    change_pct = change_val / prev_close * 100
+    change_pct = (change_val / prev_close * 100) if prev_close else 0
     _chg_color = "#26a69a" if change_pct >= 0 else "#ef5350"
     _chg_arrow = "▲" if change_pct >= 0 else "▼"
     _period_high = float(df_view["High"].max())

@@ -57,18 +57,28 @@ def _fetch(ticker: str, period: str, interval: str) -> pd.DataFrame | None:
                     continue
                 return None
 
-            df.columns = [col.capitalize() for col in df.columns]
+            # MultiIndex columns 対応（yfinance 新バージョン）
+            if isinstance(df.columns, pd.MultiIndex):
+                df.columns = [str(c[0]).capitalize() for c in df.columns]
+            else:
+                df.columns = [str(col).capitalize() for col in df.columns]
 
             if df.index.tz is not None:
                 df.index = df.index.tz_localize(None)
 
             cols = [c for c in ["Open", "High", "Low", "Close", "Volume"] if c in df.columns]
+            if "Close" not in cols:
+                if attempt < 2:
+                    time.sleep(2 ** attempt)
+                    continue
+                return None
+
             df = df[cols].copy()
 
             if df["Close"].isna().sum() > len(df) * 0.3:
                 return None
 
-            df.dropna(subset=["Open", "High", "Low", "Close"], inplace=True)
+            df.dropna(subset=["Close"], inplace=True)
             return df
 
         except Exception:
