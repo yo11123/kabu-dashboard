@@ -539,7 +539,7 @@ def main() -> None:
     from modules.persistence import init_persistence
     init_persistence()  # ページ内でも復元を再試行
 
-    st.title("ポートフォリオ分析")
+    st.markdown("<h1 style='font-family:Cormorant Garamond,serif; font-weight:300; letter-spacing:0.12em; font-size:1.6rem;'>ポートフォリオ分析</h1>", unsafe_allow_html=True)
     st.caption(
         "保有銘柄と株数を入力し、最新ニュース・テクニカル・ファンダメンタルを"
         "総合したAI分析で、個別銘柄ごとの行動アドバイスとポートフォリオ全体の"

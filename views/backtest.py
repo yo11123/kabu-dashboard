@@ -152,7 +152,7 @@ def _ai_strategy_suggestion(
 # ─── メイン ───────────────────────────────────────────────────────────────
 
 def main() -> None:
-    st.title("バックテスト")
+    st.markdown("<h1 style='font-family:Cormorant Garamond,serif; font-weight:300; letter-spacing:0.12em; font-size:1.6rem;'>バックテスト</h1>", unsafe_allow_html=True)
     st.caption(
         "売買戦略を過去データで検証。プリセット戦略の比較や、"
         "AIによる最適戦略の提案が受けられます。"

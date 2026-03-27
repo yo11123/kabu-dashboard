@@ -793,7 +793,7 @@ def _render_market_outlook(result: dict) -> None:
 # ─── メイン ─────────────────────────────────────────────────────────────
 
 def main() -> None:
-    st.title("買い時・仕込み時銘柄スクリーナー")
+    st.markdown("<h1 style='font-family:Cormorant Garamond,serif; font-weight:300; letter-spacing:0.12em; font-size:1.6rem;'>買い時・仕込み時銘柄スクリーナー</h1>", unsafe_allow_html=True)
     st.caption(
         "テクニカル（RSI・MACD・BB・トレンド転換・出来高の質）+"
         "ファンダメンタル（PER・PBR・配当・ROE）+"

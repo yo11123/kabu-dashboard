@@ -274,7 +274,7 @@ def main() -> None:
     if refresh_ms:
         st_autorefresh(interval=refresh_ms, key="tse_autorefresh")
 
-    st.title("日本株ダッシュボード")
+    st.markdown("<h1 style='font-family:Cormorant Garamond,serif; font-weight:300; letter-spacing:0.12em; font-size:1.6rem;'>日本株ダッシュボード</h1>", unsafe_allow_html=True)
 
     nikkei225 = load_tickers(TICKERS_PATH)
 

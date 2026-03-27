@@ -64,7 +64,7 @@ def fetch_all_next_earnings(tickers_tuple: tuple) -> list[dict]:
 
 # ─── ページ本体 ────────────────────────────────────────────────────────
 
-st.title("決算カレンダー")
+st.markdown("<h1 style='font-family:Cormorant Garamond,serif; font-weight:300; letter-spacing:0.12em; font-size:1.6rem;'>決算カレンダー</h1>", unsafe_allow_html=True)
 st.caption("日経225採用銘柄の次回決算発表予定日（yfinance データ）")
 
 tickers = load_tickers(TICKERS_PATH)

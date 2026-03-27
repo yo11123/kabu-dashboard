@@ -202,7 +202,7 @@ def _run_scan(
 # ─── メイン ─────────────────────────────────────────────────────────
 
 def main() -> None:
-    st.title("BBスキャナー — 2σライン沿い 上昇ブレイク銘柄")
+    st.markdown("<h1 style='font-family:Cormorant Garamond,serif; font-weight:300; letter-spacing:0.12em; font-size:1.6rem;'>BBスキャナー — 2σライン沿い 上昇ブレイク銘柄</h1>", unsafe_allow_html=True)
 
     nikkei225 = load_tickers(TICKERS_PATH)
     all_tse, tse_error = load_all_tse_stocks()

@@ -120,7 +120,7 @@ def _make_fund_flow_chart(df: pd.DataFrame) -> go.Figure:
 # ─── メイン ───────────────────────────────────────────────────────────────
 
 def main() -> None:
-    st.title("セクター分析")
+    st.markdown("<h1 style='font-family:Cormorant Garamond,serif; font-weight:300; letter-spacing:0.12em; font-size:1.6rem;'>セクター分析</h1>", unsafe_allow_html=True)
     st.caption(
         "TOPIX セクター ETF をもとに、セクターローテーション・資金フロー・"
         "月別リターンを可視化し、次に来るセクターを予測します。"
