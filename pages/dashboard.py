@@ -381,8 +381,7 @@ def main() -> None:
         ticker = manual.strip() if manual.strip() else selected_ticker
 
         period = "6mo"
-
-        fetch_btn = st.button("チャートを表示", type="primary", use_container_width=True)
+        fetch_btn = True
 
         st.divider()
         st.subheader("テクニカル指標")
