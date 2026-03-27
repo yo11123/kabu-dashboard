@@ -685,33 +685,54 @@ def _get_market_outlook(market_text: str, news_tuple: tuple, provider: str, api_
         else:
             return {"error": f"不明なプロバイダー: {provider}"}
 
-        # JSONパース
+        # JSONパース（AIの応答から JSON を確実に抽出）
         if not text or not text.strip():
             return {"error": "AIから空の応答が返されました"}
 
         text = text.strip()
-        if "```" in text:
-            for part in text.split("```"):
-                part = part.strip().lstrip("json").strip()
-                try:
-                    return json.loads(part)
-                except json.JSONDecodeError:
-                    continue
+
+        # 1. <antThinking> や <thinking> タグを除去
+        text = re.sub(r"<(?:ant)?[Tt]hinking>[\s\S]*?</(?:ant)?[Tt]hinking>", "", text).strip()
+
+        # 2. ```json ... ``` ブロックを抽出
+        code_blocks = re.findall(r"```(?:json)?\s*([\s\S]*?)```", text)
+        for block in code_blocks:
+            block = block.strip()
+            try:
+                return json.loads(block)
+            except json.JSONDecodeError:
+                continue
+
+        # 3. テキスト中の { ... } を抽出
         match = re.search(r"\{[\s\S]*\}", text)
         if match:
             try:
                 return json.loads(match.group())
             except json.JSONDecodeError:
                 pass
+
+        # 4. そのままパース
         try:
             return json.loads(text)
         except json.JSONDecodeError:
-            return {"error": "AIの応答をパースできませんでした。しばらく待ってから再試行してください。"}
+            # デフォルト値で返す（エラーにせず最低限の表示を保証）
+            return {
+                "market_judgment": "中立・様子見",
+                "score": 50,
+                "summary": "AIの応答を正常にパースできませんでした。再試行してください。",
+                "bull_factors": [],
+                "bear_factors": [],
+                "geopolitical": "",
+                "strategy": "",
+                "capital_advice": "",
+            }
 
     except Exception as e:
         err = str(e)[:300]
-        if "Expecting value" in err:
-            return {"error": "市場データの取得に失敗しました。しばらく待ってから再試行してください。"}
+        if "credit" in err.lower() or "balance" in err.lower():
+            return {"error": "APIクレジットが不足しています。Anthropicコンソールでクレジットを追加してください。"}
+        if "rate" in err.lower() or "quota" in err.lower():
+            return {"error": "APIレート制限です。しばらく待ってから再試行してください。"}
         return {"error": err}
 
 
