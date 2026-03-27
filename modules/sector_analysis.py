@@ -48,11 +48,11 @@ def get_sector_etfs() -> dict[str, str]:
 def _download_one(ticker: str, period: str) -> pd.DataFrame | None:
     """単一ティッカーの価格データを取得する。失敗時は None を返す。"""
     try:
-        df = yf.download(ticker, period=period, progress=False, auto_adjust=True)
+        t = yf.Ticker(ticker)
+        df = t.history(period=period)
         if df is not None and not df.empty:
-            # MultiIndex columns が返る場合があるのでフラット化
-            if isinstance(df.columns, pd.MultiIndex):
-                df.columns = df.columns.get_level_values(0)
+            if df.index.tz is not None:
+                df.index = df.index.tz_localize(None)
             return df
     except Exception as e:
         logger.warning("Failed to download %s: %s", ticker, e)
