@@ -38,9 +38,10 @@ def _fetch_quote(ticker: str) -> dict:
     """銘柄のリアルタイム情報を取得。"""
     try:
         t = yf.Ticker(ticker)
-        info = t.info or {}
-        hist = t.history(period="5d")
-        if hist.empty:
+
+        # まず株価データ（これが取れないと何も表示できない）
+        hist = t.history(period="1mo")
+        if hist is None or hist.empty:
             return {}
         close = float(hist["Close"].iloc[-1])
         prev = float(hist["Close"].iloc[-2]) if len(hist) >= 2 else close
@@ -48,10 +49,9 @@ def _fetch_quote(ticker: str) -> dict:
         chg_pct = (chg / prev * 100) if prev else 0
 
         # RSI 簡易計算
-        hist_long = t.history(period="1mo")
         rsi = None
-        if len(hist_long) >= 15:
-            delta = hist_long["Close"].diff()
+        if len(hist) >= 15:
+            delta = hist["Close"].diff()
             gain = delta.clip(lower=0).rolling(14).mean()
             loss = (-delta.clip(upper=0)).rolling(14).mean()
             loss = loss.replace(0, float("nan"))
@@ -63,11 +63,17 @@ def _fetch_quote(ticker: str) -> dict:
 
         # 出来高比
         vol_ratio = None
-        if len(hist_long) >= 30:
-            v5 = hist_long["Volume"].iloc[-5:].mean()
-            v30 = hist_long["Volume"].iloc[-30:].mean()
+        if len(hist) >= 30:
+            v5 = hist["Volume"].iloc[-5:].mean()
+            v30 = hist["Volume"].iloc[-30:].mean()
             if v30 > 0:
                 vol_ratio = round(float(v5 / v30), 2)
+
+        # info は補足情報（取得失敗しても株価は表示する）
+        try:
+            info = t.info or {}
+        except Exception:
+            info = {}
 
         return {
             "price": close,
