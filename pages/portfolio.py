@@ -118,32 +118,35 @@ def _get_api_key() -> str:
     return key
 
 
-@st.cache_data(ttl=120)
+@st.cache_data(ttl=60)
 def _fetch_current_price(ticker: str) -> dict:
-    """現在の株価情報を取得する。"""
+    """現在の株価情報を取得する。ダッシュボードと同じ手法で取得。"""
     try:
-        t = yf.Ticker(ticker)
-        hist = t.history(period="1mo")
-        if hist is None or hist.empty:
+        from modules.data_loader import fetch_stock_data_max
+
+        # ダッシュボードと同じデータソースを使用
+        df = fetch_stock_data_max(ticker)
+        if df is None or df.empty:
+            # フォールバック: 直接取得
+            t = yf.Ticker(ticker)
+            df = t.history(period="1mo")
+        if df is None or df.empty:
             return {}
-        # NaN を除去してから取得
-        close = hist["Close"].dropna()
+
+        close = df["Close"].dropna()
         if close.empty:
             return {}
         last_close = float(close.iloc[-1])
         prev_close = float(close.iloc[-2]) if len(close) >= 2 else last_close
-        # NaN チェック
         if last_close != last_close or prev_close != prev_close:
             return {}
         change = last_close - prev_close
         change_pct = (change / prev_close * 100) if prev_close else 0
         last_date = close.index[-1]
-        if hasattr(last_date, "strftime"):
-            date_str = last_date.strftime("%m/%d")
-        else:
-            date_str = ""
+        date_str = last_date.strftime("%m/%d") if hasattr(last_date, "strftime") else ""
+
         try:
-            info = t.info or {}
+            info = yf.Ticker(ticker).info or {}
         except Exception:
             info = {}
         return {
