@@ -13,6 +13,7 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from modules.styles import apply_theme
 from modules.data_loader import load_tickers, load_all_tse_stocks
+from streamlit_cookies_controller import CookieController
 
 st.set_page_config(page_title="ウォッチリスト", page_icon="👁", layout="wide")
 apply_theme()
@@ -117,8 +118,23 @@ def main() -> None:
     all_stocks = all_tse if all_tse else nikkei225
     stock_map = {s["code"]: s["name"] for s in all_stocks}
 
+    # ─── Cookie コントローラー ──────────────────────────────────
+    _cookies = CookieController()
+
     if "watchlist" not in st.session_state:
-        st.session_state.watchlist = []
+        saved = _cookies.get("watchlist_data")
+        if saved:
+            try:
+                st.session_state.watchlist = json.loads(saved) if isinstance(saved, str) else saved
+            except Exception:
+                st.session_state.watchlist = []
+        else:
+            st.session_state.watchlist = []
+
+    def _save_watchlist():
+        _cookies.set("watchlist_data", json.dumps(
+            st.session_state.watchlist, ensure_ascii=False,
+        ))
 
     # ─── サイドバー：銘柄追加 ─────────────────────────────────────
     with st.sidebar:
@@ -166,6 +182,7 @@ def main() -> None:
                         "memo": memo,
                         "added": pd.Timestamp.now().strftime("%Y-%m-%d"),
                     })
+                    _save_watchlist()
                     st.rerun()
 
         st.divider()
@@ -216,6 +233,7 @@ def main() -> None:
         idx = st.session_state.wl_remove
         if 0 <= idx < len(st.session_state.watchlist):
             st.session_state.watchlist.pop(idx)
+            _save_watchlist()
         st.session_state.wl_remove = None
         st.rerun()
 

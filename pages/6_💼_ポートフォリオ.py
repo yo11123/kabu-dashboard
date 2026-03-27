@@ -17,6 +17,8 @@ from modules.styles import apply_theme
 st.set_page_config(page_title="ポートフォリオ分析", page_icon="💼", layout="wide")
 apply_theme()
 
+from streamlit_cookies_controller import CookieController
+
 from modules.data_loader import load_all_tse_stocks, load_tickers
 from modules.events import fetch_latest_news
 from modules.ai_analysis import (
@@ -396,9 +398,19 @@ def main() -> None:
     all_stocks = all_tse if all_tse else nikkei225
     stock_map = {s["code"]: s["name"] for s in all_stocks}
 
-    # ─── セッションステート初期化 ─────────────────────────────────
+    # ─── Cookie コントローラー ──────────────────────────────────
+    _cookies = CookieController()
+
+    # ─── セッションステート初期化（Cookieから復元）─────────────────
     if "portfolio_holdings" not in st.session_state:
-        st.session_state.portfolio_holdings = []
+        saved = _cookies.get("portfolio_holdings")
+        if saved:
+            try:
+                st.session_state.portfolio_holdings = json.loads(saved) if isinstance(saved, str) else saved
+            except Exception:
+                st.session_state.portfolio_holdings = []
+        else:
+            st.session_state.portfolio_holdings = []
     if "portfolio_results" not in st.session_state:
         st.session_state.portfolio_results = {}
 
@@ -461,6 +473,9 @@ def main() -> None:
                         "shares": int(shares),
                         "avg_cost": float(avg_cost),
                     })
+                    _cookies.set("portfolio_holdings", json.dumps(
+                        st.session_state.portfolio_holdings, ensure_ascii=False,
+                    ))
                     st.rerun()
 
         st.divider()
@@ -527,6 +542,9 @@ def main() -> None:
     if to_remove is not None:
         st.session_state.portfolio_holdings.pop(to_remove)
         st.session_state.portfolio_results = {}
+        _cookies.set("portfolio_holdings", json.dumps(
+            st.session_state.portfolio_holdings, ensure_ascii=False,
+        ))
         st.rerun()
 
     st.divider()
