@@ -12,34 +12,51 @@ def fetch_stock_data_max_realtime(ticker: str) -> pd.DataFrame | None:
     """
     上場来全データをリアルタイム取得（TTL=60秒）。東証開場中に使用する。
     """
-    return _fetch(ticker, "max", "1d")
+    df = _fetch(ticker, "max", "1d")
+    if df is None or df.empty:
+        return df
+    return _ensure_latest_price(ticker, df)
 
 
 @st.cache_data(ttl=3600)
 def fetch_stock_data_max(ticker: str) -> pd.DataFrame | None:
     """
     上場来全データを取得（TTL=1時間）。東証閉場中に使用する。
-    yfinance のキャッシュ対策として、まず最新5日分を取得して
-    max データの末尾と比較・補正する。
+    fast_info で最新価格を補正し、常に正確な終値を返す。
     """
     df = _fetch(ticker, "max", "1d")
     if df is None or df.empty:
         return df
-    # 最新データで補正（yfinance の max が古い場合の対策）
+    df = _ensure_latest_price(ticker, df)
+    return df
+
+
+def _ensure_latest_price(ticker: str, df: pd.DataFrame) -> pd.DataFrame:
+    """
+    fast_info.last_price で最終行の Close を補正する。
+    history(max) が古い値や NaN を返す場合の対策。
+    """
     try:
-        recent = yf.Ticker(ticker).history(period="5d")
-        if recent is not None and not recent.empty:
-            if recent.index.tz is not None:
-                recent.index = recent.index.tz_localize(None)
-            recent.columns = [c.capitalize() for c in recent.columns]
-            last_max_date = df.index[-1]
-            last_recent_date = recent.index[-1]
-            if last_recent_date > last_max_date:
-                # max が古い → recent の新しい行を追加
-                new_rows = recent[recent.index > last_max_date]
-                cols = [c for c in ["Open", "High", "Low", "Close", "Volume"] if c in new_rows.columns]
-                if not new_rows.empty:
-                    df = pd.concat([df, new_rows[cols]])
+        t = yf.Ticker(ticker)
+        fi = t.fast_info
+        latest_price = float(fi.last_price)
+        prev_close = float(fi.previous_close) if fi.previous_close else latest_price
+
+        if latest_price != latest_price:  # NaN check
+            return df
+
+        last_close = df["Close"].iloc[-1]
+
+        # 最終行が NaN、または fast_info と異なる場合は補正
+        if last_close != last_close or abs(last_close - latest_price) > 0.01:
+            df.at[df.index[-1], "Close"] = latest_price
+            # Open/High/Low も NaN なら補正
+            if df["Open"].iloc[-1] != df["Open"].iloc[-1]:
+                df.at[df.index[-1], "Open"] = latest_price
+            if df["High"].iloc[-1] != df["High"].iloc[-1]:
+                df.at[df.index[-1], "High"] = latest_price
+            if df["Low"].iloc[-1] != df["Low"].iloc[-1]:
+                df.at[df.index[-1], "Low"] = latest_price
     except Exception:
         pass
     return df
