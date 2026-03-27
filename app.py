@@ -559,29 +559,31 @@ def main() -> None:
 
     st.markdown(
         f"""<div style="
-            background: linear-gradient(135deg, #101c30 0%, #0d1929 100%);
-            border: 1px solid #1e2d40; border-left: 4px solid {_chg_color};
-            border-radius: 8px; padding: 16px 24px; margin-bottom: 12px;
+            background: linear-gradient(135deg, rgba(12,20,36,0.8) 0%, rgba(10,16,28,0.6) 100%);
+            border: 1px solid rgba(29,184,160,0.1); border-left: 4px solid {_chg_color};
+            border-radius: 10px; padding: 18px 28px; margin-bottom: 14px;
+            backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px);
+            box-shadow: 0 4px 24px rgba(0,0,0,0.2), inset 0 1px 0 rgba(255,255,255,0.02);
         ">
             <div style="display:flex; align-items:baseline; gap:16px; flex-wrap:wrap;">
-                <span style="font-family:'IBM Plex Mono',monospace; font-size:1.3em; font-weight:700; color:#e0eaf5;">
+                <span style="font-family:'Inter','Noto Sans JP',sans-serif; font-size:1.3em; font-weight:700; color:#e8f0fa;">
                     {company_name}
                 </span>
-                <span style="font-family:'IBM Plex Mono',monospace; font-size:0.85em; color:#4a7a8a;">
+                <span style="font-family:'IBM Plex Mono',monospace; font-size:0.82em; color:#6a9aaa; letter-spacing:0.05em;">
                     {ticker}
                 </span>
-                <span style="font-family:'IBM Plex Mono',monospace; font-size:1.6em; font-weight:700; color:#e0eaf5; margin-left:auto;">
+                <span style="font-family:'IBM Plex Mono',monospace; font-size:1.6em; font-weight:700; color:#e8f0fa; margin-left:auto; letter-spacing:-0.02em;">
                     ¥{last_close:,.0f}
                 </span>
                 <span style="font-family:'IBM Plex Mono',monospace; font-size:1.0em; font-weight:600; color:{_chg_color};">
                     {_chg_arrow} {abs(change_val):,.0f}（{change_pct:+.2f}%）
                 </span>
             </div>
-            <div style="display:flex; gap:24px; margin-top:8px; font-family:'IBM Plex Mono',monospace; font-size:0.72em; color:#4a7a8a;">
-                <span>{PERIOD_LABELS[period]}高値 <b style="color:#e0eaf5;">¥{_period_high:,.0f}</b></span>
-                <span>{PERIOD_LABELS[period]}安値 <b style="color:#e0eaf5;">¥{_period_low:,.0f}</b></span>
-                <span>★ 決算 <b style="color:#FFD700;">{len(earnings_events)}</b>件</span>
-                <span>● ニュース <b style="color:#00BCD4;">{len(news_events)}</b>件</span>
+            <div style="display:flex; gap:28px; margin-top:10px; font-family:'IBM Plex Mono',monospace; font-size:0.7em; color:#4a7a8a; letter-spacing:0.03em;">
+                <span>{PERIOD_LABELS[period]}高値 <b style="color:#e8f0fa;">¥{_period_high:,.0f}</b></span>
+                <span>{PERIOD_LABELS[period]}安値 <b style="color:#e8f0fa;">¥{_period_low:,.0f}</b></span>
+                <span>★ 決算 <b style="color:#c9a84c;">{len(earnings_events)}</b>件</span>
+                <span>● ニュース <b style="color:#1db8a0;">{len(news_events)}</b>件</span>
             </div>
         </div>""",
         unsafe_allow_html=True,

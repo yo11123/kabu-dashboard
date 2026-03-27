@@ -1,323 +1,487 @@
 """
-Bloomberg 風ダークテーマ CSS
+Premium Dark テーマ CSS
+Bloomberg 風をベースに、グラスモーフィズム・ゴールドアクセント・
+グラデーションボーダーで高級感を演出。
 全ページの先頭で apply_theme() を呼ぶことで適用する。
 """
 import streamlit as st
 
 # ─── カラーパレット（Plotly チャートでも参照できるようエクスポート） ──
-BG_BASE      = "#0e1523"   # メイン背景
-BG_PANEL     = "#101c30"   # カード・パネル
-BG_SIDEBAR   = "#0b1220"   # サイドバー
-BORDER       = "#1e2d40"   # ボーダー
+BG_BASE      = "#080d18"   # メイン背景（より深い黒）
+BG_PANEL     = "#0c1424"   # カード・パネル
+BG_SIDEBAR   = "#060b14"   # サイドバー
+BORDER       = "#1a2640"   # ボーダー
 ACCENT       = "#1db8a0"   # ティール（アクセント）
 ACCENT_HOVER = "#25d4b8"   # ホバー時アクセント
-TEXT_PRIMARY  = "#e0eaf5"  # 主要テキスト
+ACCENT_GOLD  = "#c9a84c"   # ゴールドアクセント
+TEXT_PRIMARY  = "#e8f0fa"  # 主要テキスト
 TEXT_MUTED   = "#4a7a8a"   # 補足テキスト
-GRID_COLOR   = "#182538"   # チャートグリッド
+GRID_COLOR   = "#141e30"   # チャートグリッド
 UP_COLOR     = "#26a69a"   # 上昇色
 DOWN_COLOR   = "#ef5350"   # 下落色
 
 _CSS = """
 <style>
-/* ── Google Fonts: IBM Plex Mono / IBM Plex Sans JP ── */
-@import url('https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:ital,wght@0,300;0,400;0,500;0,600;1,400&family=IBM+Plex+Sans+JP:wght@300;400;500;600&display=swap');
+/* ── Google Fonts ── */
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=IBM+Plex+Mono:ital,wght@0,300;0,400;0,500;0,600;1,400&family=Noto+Sans+JP:wght@300;400;500;600;700&display=swap');
 
-/* ════════════════════════════════════
+/* ═══════════════════════════════════════════
    ベースレイアウト
-════════════════════════════════════ */
+═══════════════════════════════════════════ */
 .stApp {
-    background-color: #0e1523;
+    background: linear-gradient(165deg, #080d18 0%, #0a1020 40%, #0c1226 100%);
 }
 
 /* ── トップヘッダーバー ── */
 header[data-testid="stHeader"] {
-    background: rgba(11, 18, 32, 0.9) !important;
-    border-bottom: 1px solid #1a2744;
-    backdrop-filter: blur(6px);
+    background: rgba(8, 13, 24, 0.75) !important;
+    border-bottom: 1px solid rgba(29, 184, 160, 0.08);
+    backdrop-filter: blur(16px);
+    -webkit-backdrop-filter: blur(16px);
 }
 
-/* ════════════════════════════════════
-   サイドバー
-════════════════════════════════════ */
+/* ═══════════════════════════════════════════
+   サイドバー — グラスモーフィズム
+═══════════════════════════════════════════ */
 [data-testid="stSidebar"] {
-    background: #0b1220 !important;
-    border-right: 1px solid #1a2744 !important;
+    background: linear-gradient(180deg,
+        rgba(6, 11, 20, 0.95) 0%,
+        rgba(8, 14, 26, 0.92) 100%) !important;
+    border-right: 1px solid rgba(29, 184, 160, 0.1) !important;
+    backdrop-filter: blur(20px);
+    -webkit-backdrop-filter: blur(20px);
 }
 [data-testid="stSidebar"] h2,
 [data-testid="stSidebar"] h3 {
     font-family: 'IBM Plex Mono', monospace !important;
-    font-size: 0.68rem !important;
+    font-size: 0.62rem !important;
     font-weight: 600 !important;
     text-transform: uppercase;
-    letter-spacing: 0.14em;
-    color: #1db8a0 !important;
-    border-bottom: 1px solid #1a2744;
-    padding-bottom: 6px;
-    margin-top: 1.2rem !important;
-    margin-bottom: 0.75rem !important;
+    letter-spacing: 0.18em;
+    color: #c9a84c !important;
+    border-bottom: 1px solid rgba(201, 168, 76, 0.15);
+    padding-bottom: 8px;
+    margin-top: 1.4rem !important;
+    margin-bottom: 0.8rem !important;
 }
 /* ページナビゲーションリンク */
 [data-testid="stSidebarNav"] a span {
-    font-family: 'IBM Plex Mono', monospace !important;
-    font-size: 0.78rem;
-    letter-spacing: 0.03em;
+    font-family: 'Inter', 'Noto Sans JP', sans-serif !important;
+    font-size: 0.8rem;
+    font-weight: 500;
+    letter-spacing: 0.02em;
+    transition: color 0.2s ease;
 }
-
-/* ════════════════════════════════════
-   見出し
-════════════════════════════════════ */
-h1 {
-    font-family: 'IBM Plex Mono', monospace !important;
-    font-size: 1.15rem !important;
-    font-weight: 600 !important;
-    text-transform: uppercase;
-    letter-spacing: 0.1em;
+[data-testid="stSidebarNav"] a:hover span {
     color: #1db8a0 !important;
 }
+
+/* ═══════════════════════════════════════════
+   見出し — ゴールド＋ティールのアクセント
+═══════════════════════════════════════════ */
+h1 {
+    font-family: 'Inter', 'Noto Sans JP', sans-serif !important;
+    font-size: 1.25rem !important;
+    font-weight: 700 !important;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    background: linear-gradient(135deg, #1db8a0 0%, #c9a84c 100%);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
+}
 h2, h3 {
-    font-family: 'IBM Plex Mono', monospace !important;
-    letter-spacing: 0.04em;
+    font-family: 'Inter', 'Noto Sans JP', sans-serif !important;
+    font-weight: 600 !important;
+    letter-spacing: 0.03em;
+    color: #e8f0fa !important;
 }
 
-/* ════════════════════════════════════
-   メトリクスカード（Bloomberg セル風）
-════════════════════════════════════ */
+/* ═══════════════════════════════════════════
+   メトリクスカード — グラスモーフィズム
+═══════════════════════════════════════════ */
 [data-testid="metric-container"] {
-    background: #101c30 !important;
-    border: 1px solid #1e2d40 !important;
+    background: linear-gradient(135deg,
+        rgba(12, 20, 36, 0.8) 0%,
+        rgba(16, 28, 48, 0.6) 100%) !important;
+    border: 1px solid rgba(29, 184, 160, 0.12) !important;
     border-left: 3px solid #1db8a0 !important;
-    border-radius: 6px !important;
-    padding: 14px 18px !important;
-    transition: border-color 0.2s, box-shadow 0.2s;
+    border-radius: 8px !important;
+    padding: 16px 20px !important;
+    backdrop-filter: blur(10px);
+    -webkit-backdrop-filter: blur(10px);
+    transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+    position: relative;
+    overflow: hidden;
+}
+[data-testid="metric-container"]::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background: linear-gradient(135deg,
+        rgba(29, 184, 160, 0.03) 0%,
+        transparent 50%);
+    pointer-events: none;
 }
 [data-testid="metric-container"]:hover {
-    border-color: #2a4060 !important;
-    border-left-color: #25d4b8 !important;
-    box-shadow: 0 0 14px rgba(29, 184, 160, 0.08);
+    border-color: rgba(29, 184, 160, 0.25) !important;
+    border-left-color: #c9a84c !important;
+    box-shadow:
+        0 4px 24px rgba(29, 184, 160, 0.08),
+        0 0 40px rgba(29, 184, 160, 0.04),
+        inset 0 1px 0 rgba(255, 255, 255, 0.02);
+    transform: translateY(-1px);
 }
 [data-testid="stMetricLabel"] p {
     font-family: 'IBM Plex Mono', monospace !important;
-    font-size: 0.6rem !important;
+    font-size: 0.58rem !important;
     font-weight: 500 !important;
     text-transform: uppercase !important;
-    letter-spacing: 0.14em !important;
+    letter-spacing: 0.16em !important;
     color: #4a7a8a !important;
 }
 [data-testid="stMetricValue"] {
     font-family: 'IBM Plex Mono', monospace !important;
-    font-size: 1.55rem !important;
+    font-size: 1.5rem !important;
     font-weight: 600 !important;
-    color: #e0eaf5 !important;
-    letter-spacing: -0.01em;
+    color: #e8f0fa !important;
+    letter-spacing: -0.02em;
 }
 [data-testid="stMetricDelta"] > div {
     font-family: 'IBM Plex Mono', monospace !important;
-    font-size: 0.78rem !important;
+    font-size: 0.76rem !important;
     letter-spacing: 0.02em;
 }
 
-/* ════════════════════════════════════
-   ボタン
-════════════════════════════════════ */
+/* ═══════════════════════════════════════════
+   ボタン — グラデーションボーダー
+═══════════════════════════════════════════ */
 .stButton > button {
-    font-family: 'IBM Plex Mono', monospace !important;
-    font-size: 0.72rem !important;
-    font-weight: 500 !important;
+    font-family: 'Inter', 'Noto Sans JP', sans-serif !important;
+    font-size: 0.74rem !important;
+    font-weight: 600 !important;
     text-transform: uppercase;
-    letter-spacing: 0.07em;
-    background: transparent !important;
-    border: 1px solid #1db8a0 !important;
+    letter-spacing: 0.08em;
+    background: rgba(12, 20, 36, 0.6) !important;
+    border: 1px solid rgba(29, 184, 160, 0.3) !important;
     color: #1db8a0 !important;
-    border-radius: 4px !important;
-    transition: all 0.15s ease;
+    border-radius: 6px !important;
+    padding: 8px 20px !important;
+    transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+    position: relative;
+    overflow: hidden;
+}
+.stButton > button::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: -100%;
+    width: 100%;
+    height: 100%;
+    background: linear-gradient(90deg,
+        transparent,
+        rgba(29, 184, 160, 0.08),
+        transparent);
+    transition: left 0.5s ease;
+}
+.stButton > button:hover::before {
+    left: 100%;
 }
 .stButton > button:hover {
-    background: #1db8a0 !important;
-    color: #0e1523 !important;
-    box-shadow: 0 0 12px rgba(29, 184, 160, 0.25);
+    background: linear-gradient(135deg, #1db8a0, #18a08a) !important;
+    color: #080d18 !important;
+    border-color: #1db8a0 !important;
+    box-shadow:
+        0 4px 20px rgba(29, 184, 160, 0.25),
+        0 0 40px rgba(29, 184, 160, 0.1);
 }
 .stButton > button[kind="primary"] {
-    background: #1db8a0 !important;
-    color: #0e1523 !important;
-    font-weight: 600 !important;
+    background: linear-gradient(135deg, #1db8a0 0%, #18a890 100%) !important;
+    color: #080d18 !important;
+    font-weight: 700 !important;
     border: none !important;
+    box-shadow: 0 2px 12px rgba(29, 184, 160, 0.2);
 }
 .stButton > button[kind="primary"]:hover {
-    background: #25d4b8 !important;
-    box-shadow: 0 0 16px rgba(29, 184, 160, 0.35);
+    background: linear-gradient(135deg, #25d4b8 0%, #1db8a0 100%) !important;
+    box-shadow:
+        0 4px 24px rgba(29, 184, 160, 0.35),
+        0 0 40px rgba(29, 184, 160, 0.15);
+    transform: translateY(-1px);
 }
 
 /* リンクボタン */
 a[data-testid="stLinkButton"],
 a[data-testid="stLinkButton"] p {
-    font-family: 'IBM Plex Mono', monospace !important;
-    font-size: 0.72rem !important;
-    letter-spacing: 0.04em;
+    font-family: 'Inter', 'Noto Sans JP', sans-serif !important;
+    font-size: 0.74rem !important;
+    letter-spacing: 0.03em;
 }
 
-/* ════════════════════════════════════
-   フォーム要素
-════════════════════════════════════ */
+/* ═══════════════════════════════════════════
+   フォーム要素 — 洗練されたインプット
+═══════════════════════════════════════════ */
 /* セレクトボックス */
 [data-testid="stSelectbox"] > div > div {
-    background: #101c30 !important;
-    border: 1px solid #1e2d40 !important;
-    border-radius: 4px !important;
+    background: rgba(12, 20, 36, 0.7) !important;
+    border: 1px solid rgba(26, 38, 64, 0.8) !important;
+    border-radius: 6px !important;
+    transition: border-color 0.2s ease;
+}
+[data-testid="stSelectbox"] > div > div:hover {
+    border-color: rgba(29, 184, 160, 0.3) !important;
 }
 /* テキスト入力 */
 [data-testid="stTextInput"] input {
-    background: #101c30 !important;
-    border: 1px solid #1e2d40 !important;
-    border-radius: 4px !important;
+    background: rgba(12, 20, 36, 0.7) !important;
+    border: 1px solid rgba(26, 38, 64, 0.8) !important;
+    border-radius: 6px !important;
     font-family: 'IBM Plex Mono', monospace !important;
     font-size: 0.85rem !important;
+    transition: all 0.2s ease;
 }
 [data-testid="stTextInput"] input:focus {
     border-color: #1db8a0 !important;
-    box-shadow: 0 0 0 2px rgba(29, 184, 160, 0.15) !important;
+    box-shadow:
+        0 0 0 2px rgba(29, 184, 160, 0.12),
+        0 0 20px rgba(29, 184, 160, 0.06) !important;
 }
 /* スライダー */
 [data-baseweb="slider"] [role="slider"] {
-    background: #1db8a0 !important;
+    background: linear-gradient(135deg, #1db8a0, #c9a84c) !important;
     border-color: #1db8a0 !important;
+    box-shadow: 0 0 8px rgba(29, 184, 160, 0.3);
 }
 /* マルチセレクト */
 [data-testid="stMultiSelect"] > div > div {
-    background: #101c30 !important;
-    border: 1px solid #1e2d40 !important;
-    border-radius: 4px !important;
+    background: rgba(12, 20, 36, 0.7) !important;
+    border: 1px solid rgba(26, 38, 64, 0.8) !important;
+    border-radius: 6px !important;
 }
 
-/* ════════════════════════════════════
+/* ═══════════════════════════════════════════
+   ラベル（フォーム要素のラベル）
+═══════════════════════════════════════════ */
+[data-testid="stWidgetLabel"] p {
+    font-family: 'IBM Plex Mono', monospace !important;
+    font-size: 0.68rem !important;
+    font-weight: 500;
+    letter-spacing: 0.06em;
+    color: #6a9aaa !important;
+}
+
+/* ═══════════════════════════════════════════
    区切り線・キャプション
-════════════════════════════════════ */
+═══════════════════════════════════════════ */
 hr {
     border: none !important;
-    border-top: 1px solid #1a2744 !important;
-    margin: 0.9rem 0 !important;
+    border-top: 1px solid rgba(29, 184, 160, 0.08) !important;
+    margin: 1rem 0 !important;
 }
 [data-testid="stCaptionContainer"] p,
 .stCaption {
     font-family: 'IBM Plex Mono', monospace !important;
-    font-size: 0.66rem !important;
+    font-size: 0.64rem !important;
     color: #3a5a6a !important;
-    letter-spacing: 0.03em;
+    letter-spacing: 0.04em;
 }
 
-/* ════════════════════════════════════
-   コンテナ（border=True）
-════════════════════════════════════ */
+/* ═══════════════════════════════════════════
+   コンテナ（border=True）— グラスモーフィズム
+═══════════════════════════════════════════ */
 [data-testid="stVerticalBlockBorderWrapper"] {
-    border: 1px solid #1e2d40 !important;
-    border-radius: 6px !important;
-    background: #0d1929 !important;
+    border: 1px solid rgba(26, 38, 64, 0.6) !important;
+    border-radius: 10px !important;
+    background: linear-gradient(135deg,
+        rgba(10, 18, 32, 0.7) 0%,
+        rgba(13, 22, 38, 0.5) 100%) !important;
+    backdrop-filter: blur(8px);
+    -webkit-backdrop-filter: blur(8px);
+    transition: border-color 0.3s ease;
+}
+[data-testid="stVerticalBlockBorderWrapper"]:hover {
+    border-color: rgba(29, 184, 160, 0.15) !important;
 }
 
-/* ════════════════════════════════════
+/* ═══════════════════════════════════════════
    警告・エラー・成功バナー
-════════════════════════════════════ */
+═══════════════════════════════════════════ */
 [data-testid="stAlert"] {
-    border-radius: 6px !important;
-    font-family: 'IBM Plex Mono', monospace !important;
-    font-size: 0.8rem !important;
+    border-radius: 8px !important;
+    font-family: 'Inter', 'Noto Sans JP', sans-serif !important;
+    font-size: 0.82rem !important;
+    backdrop-filter: blur(6px);
 }
 
-/* ════════════════════════════════════
+/* ═══════════════════════════════════════════
    select_slider オプションラベル
-════════════════════════════════════ */
+═══════════════════════════════════════════ */
 [data-testid="stSlider"] span {
     font-family: 'IBM Plex Mono', monospace;
-    font-size: 0.68rem;
+    font-size: 0.66rem;
     color: #4a7a8a;
 }
 
-/* ════════════════════════════════════
-   タブ
-════════════════════════════════════ */
+/* ═══════════════════════════════════════════
+   タブ — プレミアムスタイル
+═══════════════════════════════════════════ */
 .stTabs [data-baseweb="tab-list"] {
-    gap: 0;
-    background: #0b1220;
-    border-radius: 8px 8px 0 0;
-    border: 1px solid #1e2d40;
+    gap: 2px;
+    background: rgba(6, 11, 20, 0.8);
+    border-radius: 10px 10px 0 0;
+    border: 1px solid rgba(26, 38, 64, 0.6);
     border-bottom: none;
-    padding: 0 4px;
+    padding: 4px 6px 0;
+    backdrop-filter: blur(10px);
 }
 .stTabs [data-baseweb="tab"] {
-    font-family: 'IBM Plex Mono', monospace !important;
-    font-size: 0.78rem;
+    font-family: 'Inter', 'Noto Sans JP', sans-serif !important;
+    font-size: 0.76rem;
     font-weight: 500;
     letter-spacing: 0.02em;
     color: #4a7a8a;
-    border-radius: 6px 6px 0 0;
-    padding: 10px 20px;
-    transition: all 0.15s ease;
+    border-radius: 8px 8px 0 0;
+    padding: 10px 22px;
+    transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
 }
 .stTabs [data-baseweb="tab"]:hover {
-    color: #e0eaf5;
+    color: #e8f0fa;
     background: rgba(29, 184, 160, 0.06);
 }
 .stTabs [aria-selected="true"] {
     color: #1db8a0 !important;
     font-weight: 600 !important;
     border-bottom: 2px solid #1db8a0 !important;
-    background: rgba(29, 184, 160, 0.04) !important;
+    background: rgba(29, 184, 160, 0.05) !important;
+    box-shadow: 0 -2px 12px rgba(29, 184, 160, 0.06);
 }
 .stTabs [data-baseweb="tab-panel"] {
-    border: 1px solid #1e2d40;
+    border: 1px solid rgba(26, 38, 64, 0.6);
     border-top: none;
-    border-radius: 0 0 8px 8px;
-    padding: 16px;
-    background: rgba(13, 25, 41, 0.5);
+    border-radius: 0 0 10px 10px;
+    padding: 20px;
+    background: rgba(10, 16, 28, 0.6);
+    backdrop-filter: blur(8px);
 }
 
-/* ════════════════════════════════════
+/* ═══════════════════════════════════════════
    エクスパンダー
-════════════════════════════════════ */
+═══════════════════════════════════════════ */
 [data-testid="stExpander"] {
-    border: 1px solid #1e2d40 !important;
-    border-radius: 6px !important;
-    background: #0d1929 !important;
+    border: 1px solid rgba(26, 38, 64, 0.5) !important;
+    border-radius: 8px !important;
+    background: linear-gradient(135deg,
+        rgba(10, 18, 32, 0.6) 0%,
+        rgba(13, 22, 38, 0.4) 100%) !important;
+    backdrop-filter: blur(6px);
+    transition: border-color 0.3s ease;
+}
+[data-testid="stExpander"]:hover {
+    border-color: rgba(29, 184, 160, 0.2) !important;
 }
 [data-testid="stExpander"] summary {
-    font-family: 'IBM Plex Mono', monospace !important;
-    font-size: 0.78rem !important;
+    font-family: 'Inter', 'Noto Sans JP', sans-serif !important;
+    font-size: 0.8rem !important;
     font-weight: 500;
-    color: #4a7a8a;
+    color: #6a9aaa;
+    transition: color 0.2s ease;
 }
 [data-testid="stExpander"] summary:hover {
     color: #1db8a0;
 }
 
-/* ════════════════════════════════════
+/* ═══════════════════════════════════════════
    チャットメッセージ
-════════════════════════════════════ */
+═══════════════════════════════════════════ */
 [data-testid="stChatMessage"] {
-    font-family: 'IBM Plex Sans JP', sans-serif !important;
+    font-family: 'Inter', 'Noto Sans JP', sans-serif !important;
     font-size: 0.88rem;
-    border-radius: 8px;
+    border-radius: 10px;
+    background: rgba(12, 20, 36, 0.6) !important;
+    border: 1px solid rgba(26, 38, 64, 0.4);
 }
 
-/* ════════════════════════════════════
-   プログレスバー
-════════════════════════════════════ */
+/* ═══════════════════════════════════════════
+   プログレスバー — グラデーション
+═══════════════════════════════════════════ */
 [data-testid="stProgress"] > div > div > div {
-    background: linear-gradient(90deg, #1db8a0, #25d4b8) !important;
+    background: linear-gradient(90deg,
+        #1db8a0 0%,
+        #c9a84c 50%,
+        #1db8a0 100%) !important;
+    background-size: 200% 100%;
+    animation: shimmer 2s ease-in-out infinite;
     border-radius: 4px;
 }
+@keyframes shimmer {
+    0%   { background-position: 200% 0; }
+    100% { background-position: -200% 0; }
+}
 
-/* ════════════════════════════════════
-   Plotly チャート — viewport 収まり保証
-   高さスライダーで大きくしても出来高バー
-   が画面外に出ないよう上限を設ける
-════════════════════════════════════ */
+/* ═══════════════════════════════════════════
+   Plotly チャート
+═══════════════════════════════════════════ */
 [data-testid="stPlotlyChart"] {
     max-height: calc(100vh - 320px);
     overflow: hidden;
+    border-radius: 8px;
+}
+
+/* ═══════════════════════════════════════════
+   データフレーム / テーブル
+═══════════════════════════════════════════ */
+[data-testid="stDataFrame"] {
+    border-radius: 8px;
+    overflow: hidden;
+}
+
+/* ═══════════════════════════════════════════
+   スクロールバー — プレミアム
+═══════════════════════════════════════════ */
+::-webkit-scrollbar {
+    width: 6px;
+    height: 6px;
+}
+::-webkit-scrollbar-track {
+    background: rgba(8, 13, 24, 0.4);
+}
+::-webkit-scrollbar-thumb {
+    background: rgba(29, 184, 160, 0.2);
+    border-radius: 3px;
+}
+::-webkit-scrollbar-thumb:hover {
+    background: rgba(29, 184, 160, 0.4);
+}
+
+/* ═══════════════════════════════════════════
+   全体的な本文テキスト
+═══════════════════════════════════════════ */
+.stApp p, .stApp li, .stApp span {
+    font-family: 'Inter', 'Noto Sans JP', sans-serif;
+}
+
+/* ═══════════════════════════════════════════
+   ダイアログ — グラスモーフィズム
+═══════════════════════════════════════════ */
+[data-testid="stModal"] > div {
+    background: linear-gradient(135deg,
+        rgba(10, 16, 28, 0.95) 0%,
+        rgba(12, 20, 36, 0.92) 100%) !important;
+    border: 1px solid rgba(29, 184, 160, 0.15) !important;
+    border-radius: 14px !important;
+    backdrop-filter: blur(24px);
+    -webkit-backdrop-filter: blur(24px);
+    box-shadow:
+        0 20px 60px rgba(0, 0, 0, 0.5),
+        0 0 40px rgba(29, 184, 160, 0.05);
 }
 </style>
 """
 
 
 def apply_theme() -> None:
-    """Bloomberg 風ダークテーマを適用する。各ページの先頭で呼ぶこと。"""
+    """Premium Dark テーマを適用する。各ページの先頭で呼ぶこと。"""
     st.markdown(_CSS, unsafe_allow_html=True)
