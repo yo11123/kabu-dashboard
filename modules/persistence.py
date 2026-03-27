@@ -1,20 +1,25 @@
 """
 データ永続化ヘルパー
-サーバーサイド JSON ファイルで保存。Cookie の JS タイミング問題を回避。
-リロードでも確実にデータが残る。
+サーバーサイド JSON ファイルで保存。リロードでも確実にデータが残る。
 """
 import json
 import os
+from datetime import date
+
 import streamlit as st
 
 _DATA_DIR = os.path.join(os.path.dirname(os.path.dirname(__file__)), ".data")
 os.makedirs(_DATA_DIR, exist_ok=True)
 
-# 永続化する全キーとデフォルト値
+# 永続化する全キーとデフォルト値（init_persistence で一括ロード）
 PERSISTENT_KEYS = {
     "portfolio_holdings": [],
     "watchlist_data": [],
     "screener_conditions": [],
+}
+
+# 当日限り有効なキー（save_daily/load_daily で管理）
+DAILY_KEYS = {
     "portfolio_results": {},
 }
 
@@ -46,9 +51,15 @@ def load(key: str, default=None):
 
 def init_persistence() -> None:
     """全永続キーをファイルから session_state にロード。"""
+    # 通常キー
     for key, default in PERSISTENT_KEYS.items():
         if key not in st.session_state:
             st.session_state[key] = load(key, default)
+
+    # 当日限りキー
+    for key, default in DAILY_KEYS.items():
+        if key not in st.session_state:
+            st.session_state[key] = load_daily(key, default)
 
 
 def save_from_session(cookie_key: str, session_key: str) -> None:
@@ -65,14 +76,12 @@ def load_into_session(cookie_key: str, session_key: str, default=None) -> None:
 
 def save_daily(key: str, data) -> None:
     """日付付きでデータを保存。当日分のみ有効。"""
-    from datetime import date
     wrapped = {"date": date.today().isoformat(), "data": data}
     save(key, wrapped)
 
 
 def load_daily(key: str, default=None):
     """当日分のデータのみ読み込む。日付が違えば default を返す。"""
-    from datetime import date
     wrapped = load(key)
     if wrapped is None:
         return default

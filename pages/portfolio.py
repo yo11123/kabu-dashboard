@@ -570,8 +570,12 @@ def main() -> None:
         save_from_session("portfolio_holdings", "portfolio_holdings")
 
     if to_remove is not None:
+        removed_code = st.session_state.portfolio_holdings[to_remove]["code"]
         st.session_state.portfolio_holdings.pop(to_remove)
-        st.session_state.portfolio_results = {}
+        # 削除した銘柄の分析結果だけ除去（他の銘柄の結果は保持）
+        if removed_code in st.session_state.portfolio_results:
+            del st.session_state.portfolio_results[removed_code]
+            save_daily("portfolio_results", st.session_state.portfolio_results)
         save_from_session("portfolio_holdings", "portfolio_holdings")
         st.rerun()
 
