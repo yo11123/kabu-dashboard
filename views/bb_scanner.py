@@ -398,7 +398,7 @@ def main() -> None:
                     ),
                 ):
                     st.session_state["calendar_selected_ticker"] = row["コード"]
-                    st.switch_page("pages/dashboard.py")
+                    st.switch_page("views/dashboard.py")
 
 
 if __name__ == "__main__":

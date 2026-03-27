@@ -413,7 +413,7 @@ def main() -> None:
             use_container_width=True,
         ):
             st.session_state["selected_ticker"] = item["code"]
-            st.switch_page("pages/dashboard.py")
+            st.switch_page("views/dashboard.py")
 
 
 main()

@@ -536,7 +536,7 @@ def _render_card(rank: int, item: dict) -> None:
             type="primary",
         ):
             st.session_state["calendar_selected_ticker"] = item["ticker"]
-            st.switch_page("pages/dashboard.py")
+            st.switch_page("views/dashboard.py")
 
     st.write("")  # カード間の余白
 

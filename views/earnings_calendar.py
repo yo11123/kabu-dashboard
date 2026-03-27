@@ -130,4 +130,4 @@ for earn_date, group in df_all.groupby("next_earnings_date"):
             # チャートページへ遷移（session_state 経由で銘柄を渡す）
             if c4.button("📊 表示", key=f"open_{row['code']}_{earn_date}", use_container_width=True):
                 st.session_state["calendar_selected_ticker"] = row["code"]
-                st.switch_page("pages/dashboard.py")
+                st.switch_page("views/dashboard.py")

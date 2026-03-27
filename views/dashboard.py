@@ -35,7 +35,7 @@ from modules.ai_analysis import (
 apply_theme()
 try_restore_from_cookies()
 
-TICKERS_PATH = os.path.join(os.path.dirname(os.path.dirname(__file__)), "data", "nikkei225_tickers.txt")
+TICKERS_PATH = os.path.join(os.path.dirname(__file__), "..", "data", "nikkei225_tickers.txt")
 
 PERIOD_LABELS = {
     "1mo": "1ヶ月",
