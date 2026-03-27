@@ -156,6 +156,11 @@ def main() -> None:
 
     # ── Tab 1: パフォーマンス ──────────────────────────────────────
     with tab1:
+        st.caption(
+            "TOPIX業種別ETFの騰落率をセクターごとに比較。"
+            "プラスは株価上昇、マイナスは下落を意味します。"
+            "どの業種に資金が集まっているかを一目で把握できます。"
+        )
         period_col = st.selectbox(
             "期間", ["1週間", "1ヶ月", "3ヶ月", "6ヶ月"],
             key="perf_period",
@@ -173,11 +178,19 @@ def main() -> None:
             worst = perf_df.loc[perf_df[col].idxmin()]
             c1, c2, c3 = st.columns(3)
             c1.metric("最強セクター", best["sector"], f"{best[col]:+.1f}%")
+            c1.caption("選択期間内で最も上昇した業種")
             c2.metric("最弱セクター", worst["sector"], f"{worst[col]:+.1f}%")
+            c2.caption("選択期間内で最も下落した業種")
             c3.metric("セクター間スプレッド", f"{best[col] - worst[col]:.1f}%pt")
+            c3.caption("最強と最弱の差。大きいほど業種間格差が拡大")
 
     # ── Tab 2: 資金フロー ─────────────────────────────────────────
     with tab2:
+        st.caption(
+            "出来高×価格変動率の累積値で、セクターへの資金の流入・流出を推計。"
+            "プラスは買いが優勢（資金流入）、マイナスは売りが優勢（資金流出）。"
+            "機関投資家の動きを間接的に読み取れます。"
+        )
         if not flow_df.empty:
             fig_flow = _make_fund_flow_chart(flow_df)
             st.plotly_chart(fig_flow, use_container_width=True)
@@ -188,11 +201,13 @@ def main() -> None:
 
             with c1:
                 st.markdown("**資金流入セクター**")
+                st.caption("直近30日で買い圧力が強い業種")
                 for _, row in inflow.head(5).iterrows():
                     st.markdown(f"- {row['sector']}")
 
             with c2:
                 st.markdown("**資金流出セクター**")
+                st.caption("直近30日で売り圧力が強い業種")
                 for _, row in outflow.head(5).iterrows():
                     st.markdown(f"- {row['sector']}")
         else:
@@ -200,6 +215,11 @@ def main() -> None:
 
     # ── Tab 3: 月別リターン ───────────────────────────────────────
     with tab3:
+        st.caption(
+            "各セクターの月ごとの騰落率をヒートマップで表示。"
+            "緑が濃いほど上昇、赤が濃いほど下落。"
+            "季節性やトレンドの変化を視覚的に確認できます。"
+        )
         if not monthly_df.empty:
             fig_heat = _make_heatmap(monthly_df, "セクター別月次リターン")
             st.plotly_chart(fig_heat, use_container_width=True)
@@ -208,6 +228,11 @@ def main() -> None:
 
     # ── Tab 4: ローテーション予測 ─────────────────────────────────
     with tab4:
+        st.caption(
+            "短期（1週間）と中期（1ヶ月）のリターン差から、資金の移動先を推定。"
+            "景気サイクル（回復→拡大→後退→低迷）に基づき、"
+            "次に有望なセクターを予測します。"
+        )
         phase = rotation.get("cycle_phase", "不明")
 
         st.markdown(
@@ -221,6 +246,9 @@ def main() -> None:
                      margin-top:4px; letter-spacing:0.06em;">
                     {phase}
                 </div>
+                <div style="font-family:'Inter',sans-serif; font-size:0.65em; color:#6b7280; margin-top:6px;">
+                    リーダーセクターの傾向から推定した現在の景気局面
+                </div>
             </div>""",
             unsafe_allow_html=True,
         )
@@ -231,16 +259,19 @@ def main() -> None:
 
         with c1:
             st.markdown("**リーダーセクター**（加速中）")
+            st.caption("直近1週間のリターンがプラスかつ加速している業種。今まさに資金が向かっている先")
             for s in rotation.get("leaders", []):
                 st.markdown(f"- {s}")
 
         with c2:
             st.markdown("**注目セクター**（浮上中）")
+            st.caption("中期では低迷していたが、直近で回復の兆し。次のローテーション先の候補")
             for s in rotation.get("emerging", []):
                 st.markdown(f"- {s}")
 
         with c3:
             st.markdown("**失速セクター**（減速中）")
+            st.caption("直近で下落が加速している業種。資金が流出し始めている可能性")
             for s in rotation.get("laggards", []):
                 st.markdown(f"- {s}")
 
@@ -248,6 +279,10 @@ def main() -> None:
 
         # 景気サイクル別セクター
         st.subheader("景気サイクル × 有望セクター")
+        st.caption(
+            "景気の局面ごとに歴史的に強いセクター。"
+            "現在の推定フェーズと照らし合わせることで、中長期の投資判断に活用できます。"
+        )
         for cycle_phase, sectors in cycle_map.items():
             marker = " ← 現在" if cycle_phase == phase else ""
             st.markdown(f"**{cycle_phase}{marker}**")
