@@ -3,8 +3,10 @@ import urllib.request
 import xml.etree.ElementTree as ET
 
 import pandas as pd
+import requests
 import yfinance as yf
 import streamlit as st
+from lxml import html as lhtml
 
 
 # ─── 出版社優先度 ──────────────────────────────────────────────────────────
@@ -21,6 +23,10 @@ def _publisher_priority(publisher: str) -> int:
         return 1
     if "bloomberg" in p or "ブルームバーグ" in p:
         return 2
+    if "kabutan" in p or "株探" in p:
+        return 3
+    if "東洋経済" in p or "toyokeizai" in p:
+        return 4
     return 9
 
 
@@ -198,6 +204,186 @@ def fetch_earnings_events(ticker: str, chart_start: str, chart_end: str) -> list
     return events
 
 
+# ─── Kabutan ニューススクレイピング ──────────────────────────────────────
+
+def _fetch_kabutan_news_raw(
+    ticker: str,
+    start_dt: pd.Timestamp,
+    end_dt: pd.Timestamp,
+) -> list[dict]:
+    """Kabutan の銘柄ニュースページからニュースを取得する。"""
+    code4 = ticker.replace(".T", "").strip().zfill(4)
+    url = f"https://kabutan.jp/stock/news?code={code4}"
+    try:
+        resp = requests.get(
+            url,
+            headers={"User-Agent": "Mozilla/5.0 (compatible; kabu-dashboard/1.0)"},
+            timeout=10,
+        )
+        resp.raise_for_status()
+        tree = lhtml.fromstring(resp.content)
+    except Exception:
+        return []
+
+    items: list[dict] = []
+    rows = tree.xpath('//table[contains(@class,"s_news_list")]//tr')
+    for row in rows:
+        try:
+            tds = row.xpath(".//td")
+            if len(tds) < 3:
+                continue
+
+            # 1列目: 日時 "26/03/27 15:38"
+            date_text = tds[0].text_content().strip()
+            # \xa0（非分割スペース）で日付と時間を分割
+            date_part = date_text.split("\xa0")[0].split(" ")[0].strip()
+            # "26/03/27" → "2026/03/27"
+            parts = date_part.split("/")
+            if len(parts) == 3 and len(parts[0]) == 2:
+                date_part = f"20{parts[0]}/{parts[1]}/{parts[2]}"
+            try:
+                pub_dt = pd.Timestamp(date_part)
+            except Exception:
+                continue
+
+            if pub_dt < start_dt or pub_dt > end_dt:
+                continue
+
+            # 3列目: ニュースタイトル（リンク付き）
+            link_el = tds[2].xpath(".//a")
+            if not link_el:
+                title = tds[2].text_content().strip()
+                link = ""
+            else:
+                title = link_el[0].text_content().strip()
+                href = link_el[0].get("href", "")
+                link = f"https://kabutan.jp{href}" if href.startswith("/") else href
+
+            if not title:
+                continue
+
+            items.append({
+                "pub_dt": pub_dt,
+                "title": title,
+                "publisher": "株探",
+                "link": link,
+                "uuid": f"kabutan_{abs(hash(link or title))}",
+            })
+        except Exception:
+            continue
+
+    return items
+
+
+# ─── Google News RSS（汎用クエリ）───────────────────────────────────────
+
+def _fetch_google_news_general_raw(
+    query: str,
+    start_dt: pd.Timestamp,
+    end_dt: pd.Timestamp,
+) -> list[dict]:
+    """
+    Google News RSS でサイト制限なし全ソースからニュースを取得。
+    Bloomberg、ロイター、東洋経済などを補完。
+    """
+    try:
+        url = (
+            "https://news.google.com/rss/search"
+            f"?q={urllib.parse.quote(query)}&hl=ja&gl=JP&ceid=JP:ja"
+        )
+        req = urllib.request.Request(
+            url,
+            headers={"User-Agent": "Mozilla/5.0 (compatible; kabu-dashboard/1.0)"},
+        )
+        with urllib.request.urlopen(req, timeout=10) as resp:
+            xml_data = resp.read()
+
+        root = ET.fromstring(xml_data)
+        items: list[dict] = []
+
+        for item in root.findall(".//item"):
+            title = item.findtext("title", "").strip()
+            link = item.findtext("link", "").strip()
+            pub_date_str = item.findtext("pubDate", "")
+            source_el = item.find("source")
+            publisher = (
+                source_el.text.strip()
+                if source_el is not None and source_el.text
+                else "不明"
+            )
+
+            if not title or not pub_date_str:
+                continue
+
+            suffix = f" - {publisher}"
+            if title.endswith(suffix):
+                title = title[: -len(suffix)].strip()
+
+            try:
+                pub_dt = pd.Timestamp(pub_date_str)
+                if pub_dt.tz is not None:
+                    pub_dt = pub_dt.tz_convert("UTC").tz_localize(None)
+            except Exception:
+                continue
+
+            if pub_dt < start_dt or pub_dt > end_dt:
+                continue
+
+            items.append({
+                "pub_dt": pub_dt,
+                "title": title,
+                "publisher": publisher,
+                "link": link,
+                "uuid": f"gnews_gen_{abs(hash(link))}",
+            })
+
+        return items
+
+    except Exception:
+        return []
+
+
+# ─── 最新ニュース取得（チャート期間に依存しない）─────────────────────────
+
+@st.cache_data(ttl=1800)
+def fetch_latest_news(
+    ticker: str,
+    company_name: str = "",
+    max_items: int = 30,
+) -> list[dict]:
+    """
+    直近30日間の最新ニュースを全ソースから収集する。
+    ポートフォリオ分析など、チャート期間に依存しない用途向け。
+    """
+    end_dt = pd.Timestamp.now()
+    start_dt = end_dt - pd.Timedelta(days=30)
+    code4 = ticker.replace(".T", "").strip()
+
+    # 全ソースから並列的に収集
+    nikkei_query = f"{company_name} {code4} site:nikkei.com" if company_name else f"{code4} site:nikkei.com"
+    nikkei_items = _fetch_google_news_rss_raw(nikkei_query, start_dt, end_dt)
+
+    general_query = f"{company_name} {code4} 株" if company_name else f"{code4} 株"
+    general_items = _fetch_google_news_general_raw(general_query, start_dt, end_dt)
+
+    yf_items = _fetch_yfinance_news_raw(ticker, start_dt, end_dt)
+    kabutan_items = _fetch_kabutan_news_raw(ticker, start_dt, end_dt)
+
+    # マージ＋重複除去（タイトル先頭30文字）
+    seen: set[str] = set()
+    merged: list[dict] = []
+    # 日経→株探→汎用ニュース→yfinance の優先順
+    for item in nikkei_items + kabutan_items + general_items + yf_items:
+        key = item["title"][:30]
+        if key not in seen:
+            seen.add(key)
+            merged.append(item)
+
+    # 日付降順ソート（最新が先頭）
+    merged.sort(key=lambda x: x["pub_dt"], reverse=True)
+    return merged[:max_items]
+
+
 # ─── ニュースイベント ──────────────────────────────────────────────────────
 
 @st.cache_data(ttl=3600)
@@ -227,19 +413,25 @@ def fetch_news_events(
     code_4 = ticker.replace(".T", "").strip()
 
     # 1. 日経記事を Google News RSS で取得
-    #    銘柄コード + 会社名（あれば）で絞り込み
     nikkei_query = f"{code_4} site:nikkei.com"
     if company_name:
         nikkei_query = f"{company_name} {code_4} site:nikkei.com"
     nikkei_items = _fetch_google_news_rss_raw(nikkei_query, start_dt, end_dt)
 
-    # 2. yfinance ニュースで補完
+    # 2. 株探ニュースで補完
+    kabutan_items = _fetch_kabutan_news_raw(ticker, start_dt, end_dt)
+
+    # 3. Google News 汎用（Bloomberg, ロイター, 東洋経済等）
+    general_query = f"{company_name} {code_4} 株" if company_name else f"{code_4} 株"
+    general_items = _fetch_google_news_general_raw(general_query, start_dt, end_dt)
+
+    # 4. yfinance ニュースで補完
     yf_items = _fetch_yfinance_news_raw(ticker, start_dt, end_dt)
 
-    # 3. マージ（日経を先頭に配置）+ タイトル先頭30文字で重複除去
+    # 5. マージ（日経→株探→汎用→yfinance）+ タイトル先頭30文字で重複除去
     seen: set[str] = set()
     merged: list[dict] = []
-    for item in nikkei_items + yf_items:
+    for item in nikkei_items + kabutan_items + general_items + yf_items:
         key = item["title"][:30]
         if key not in seen:
             seen.add(key)
