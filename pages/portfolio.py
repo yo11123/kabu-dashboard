@@ -505,8 +505,10 @@ def main() -> None:
         chg = price_info.get("change_pct", 0) if price_info else 0
         chg_color = "#5ca08b" if chg >= 0 else "#c45c5c"
         price_str = f"¥{price:,.0f} ({chg:+.2f}%)" if price else "取得中..."
+        shares_str = f"{h['shares']:,}株"
+        cost_str = f"取得単価 ¥{h['avg_cost']:,.0f}" if h["avg_cost"] > 0 else "取得単価: 未設定"
 
-        with st.expander(f"**{name_display}**　`{h['code']}`　　{price_str}", expanded=False):
+        with st.expander(f"**{name_display}**　`{h['code']}`　　{shares_str}　{cost_str}　　{price_str}", expanded=False):
             c1, c2, c3 = st.columns([2, 2, 1])
             new_shares = c1.number_input(
                 "株数", min_value=1, value=h["shares"], step=100,
