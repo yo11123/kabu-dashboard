@@ -14,7 +14,7 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from modules.styles import apply_theme
 from modules.data_loader import load_tickers, load_all_tse_stocks
-from modules.persistence import load_into_session, save_from_session
+from modules.persistence import load_into_session, save_from_session, try_restore_from_cookies
 
 apply_theme()
 
@@ -127,6 +127,7 @@ def _save_watchlist():
 # ─── メイン ───────────────────────────────────────────────────────────────
 
 def main() -> None:
+    try_restore_from_cookies()
     st.title("👁 ウォッチリスト")
     st.caption("気になる銘柄を登録して監視。目標価格やRSI条件の到達時にハイライト表示します。")
 

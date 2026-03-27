@@ -4,7 +4,7 @@ from streamlit_autorefresh import st_autorefresh
 
 import pandas as pd
 
-from modules.persistence import save_daily, load_daily
+from modules.persistence import save_daily, load_daily, try_restore_from_cookies
 
 from modules.data_loader import (
     fetch_stock_data_max,
@@ -33,6 +33,7 @@ from modules.ai_analysis import (
 )
 
 apply_theme()
+try_restore_from_cookies()
 
 TICKERS_PATH = os.path.join(os.path.dirname(os.path.dirname(__file__)), "data", "nikkei225_tickers.txt")
 

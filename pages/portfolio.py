@@ -16,7 +16,7 @@ from modules.styles import apply_theme
 
 apply_theme()
 
-from modules.persistence import load_into_session, save_from_session, save_daily, load_daily
+from modules.persistence import load_into_session, save_from_session, save_daily, load_daily, try_restore_from_cookies
 from modules.data_loader import load_all_tse_stocks, load_tickers
 from modules.events import fetch_latest_news
 from modules.ai_analysis import (
@@ -504,6 +504,7 @@ def _hex_to_rgb(hex_color: str) -> str:
 
 
 def main() -> None:
+    try_restore_from_cookies()
     st.title("💼 ポートフォリオ分析")
     st.caption(
         "保有銘柄と株数を入力し、最新ニュース・テクニカル・ファンダメンタルを"
