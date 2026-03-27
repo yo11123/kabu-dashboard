@@ -238,14 +238,24 @@ def main() -> None:
 
     # ─── 全銘柄チャート一覧 ───────────────────────────────────────
     st.divider()
-    st.subheader("チャート一覧")
 
-    period_opts = {"1ヶ月": "1mo", "3ヶ月": "3mo", "6ヶ月": "6mo", "1年": "1y", "2年": "2y"}
-    selected_period = st.selectbox("表示期間", list(period_opts.keys()), index=2, key="wl_chart_period")
-    yf_period = period_opts[selected_period]
+    if "wl_show_charts" not in st.session_state:
+        st.session_state.wl_show_charts = False
 
-    for w in watchlist:
-        _render_mini_chart(w["code"], w["name"] or w["code"], yf_period)
+    if st.button(
+        "チャートを閉じる" if st.session_state.wl_show_charts else "全銘柄のチャートを表示",
+        use_container_width=True,
+    ):
+        st.session_state.wl_show_charts = not st.session_state.wl_show_charts
+        st.rerun()
+
+    if st.session_state.wl_show_charts:
+        period_opts = {"1ヶ月": "1mo", "3ヶ月": "3mo", "6ヶ月": "6mo", "1年": "1y", "2年": "2y"}
+        selected_period = st.selectbox("表示期間", list(period_opts.keys()), index=2, key="wl_chart_period")
+        yf_period = period_opts[selected_period]
+
+        for w in watchlist:
+            _render_mini_chart(w["code"], w["name"] or w["code"], yf_period)
 
 
 def _render_watch_card(item: dict, alert: bool) -> None:
