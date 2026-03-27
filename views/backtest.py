@@ -103,7 +103,7 @@ def _ai_strategy_suggestion(
     api_key: str,
 ) -> dict:
     """AIが最適戦略を提案する。"""
-    from modules.ai_analysis import _call_claude, _parse_json, _classify_error
+    from modules.ai_analysis import call_light_llm, _parse_json, _classify_error
 
     prompt = f"""あなたは定量的投資戦略の専門家です。
 以下の銘柄の過去バックテスト結果を分析し、この銘柄に最も適した売買戦略を提案してください。
@@ -138,12 +138,12 @@ def _ai_strategy_suggestion(
 ```"""
 
     try:
-        text = _call_claude(prompt, api_key)
+        text = call_light_llm(prompt)
         return {**_parse_json(text), "error": False}
     except Exception as e:
         return {
             "best_strategy": "",
-            "best_reason": _classify_error(str(e), "claude"),
+            "best_reason": _classify_error(str(e), "gemini"),
             "error": True,
         }
 

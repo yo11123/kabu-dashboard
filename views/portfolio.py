@@ -106,19 +106,50 @@ def _parse_portfolio_image(image_bytes: bytes, api_key: str) -> list[dict] | Non
 ```"""
 
     try:
-        client = anthropic.Anthropic(api_key=api_key)
-        resp = client.messages.create(
-            model="claude-haiku-4-5-20251001",
-            max_tokens=2000,
-            messages=[{
-                "role": "user",
-                "content": [
-                    {"type": "image", "source": {"type": "base64", "media_type": media_type, "data": b64}},
-                    {"type": "text", "text": prompt},
-                ],
-            }],
-        )
-        text = resp.content[0].text.strip()
+        # Gemini 無料枠を優先、なければ Claude
+        gemini_key = ""
+        try:
+            gemini_key = st.secrets.get("GEMINI_API_KEY", "")
+        except Exception:
+            pass
+
+        if gemini_key:
+            import requests as _req
+            url = "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent"
+            payload = {
+                "contents": [{
+                    "role": "user",
+                    "parts": [
+                        {"inline_data": {"mime_type": media_type, "data": b64}},
+                        {"text": prompt},
+                    ],
+                }],
+            }
+            resp = _req.post(
+                url,
+                params={"key": gemini_key},
+                headers={"Content-Type": "application/json; charset=utf-8"},
+                data=json.dumps(payload, ensure_ascii=False).encode("utf-8"),
+                timeout=30,
+            )
+            resp.raise_for_status()
+            text = resp.json()["candidates"][0]["content"]["parts"][0]["text"].strip()
+        else:
+            # フォールバック: Claude
+            import anthropic as _anthropic
+            client = _anthropic.Anthropic(api_key=api_key)
+            _resp = client.messages.create(
+                model="claude-haiku-4-5-20251001",
+                max_tokens=2000,
+                messages=[{
+                    "role": "user",
+                    "content": [
+                        {"type": "image", "source": {"type": "base64", "media_type": media_type, "data": b64}},
+                        {"type": "text", "text": prompt},
+                    ],
+                }],
+            )
+            text = _resp.content[0].text.strip()
 
         import re
         # ```json ... ``` ブロック抽出

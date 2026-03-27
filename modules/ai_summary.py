@@ -97,17 +97,13 @@ def get_earnings_analysis(
     )
 
     try:
-        client = _get_client()
-        response = client.messages.create(
-            model="claude-3-5-haiku-20241022",
-            max_tokens=600,
-            messages=[{"role": "user", "content": prompt}],
-        )
-        return _parse_json_response(response.content[0].text)
-    except ValueError as e:
+        from modules.ai_analysis import call_light_llm
+        text = call_light_llm(prompt)
+        return _parse_json_response(text)
+    except Exception as e:
         return {
             "assessment": "中立",
-            "assessment_detail": str(e),
+            "assessment_detail": str(e)[:200],
             "key_points": [],
             "stock_impact": "中立",
             "reasoning": "",
@@ -153,16 +149,13 @@ def get_news_analysis(
     )
 
     try:
-        client = _get_client()
-        response = client.messages.create(
-            model="claude-3-5-haiku-20241022",
-            max_tokens=600,
-            messages=[{"role": "user", "content": prompt}],
-        )
-        return _parse_json_response(response.content[0].text)
-    except ValueError as e:
+        from modules.ai_analysis import call_light_llm
+        text = call_light_llm(prompt)
+        return _parse_json_response(text)
+    except Exception as e:
+        err_msg = str(e)[:200]
         return {
-            "summary": str(e),
+            "summary": f"AI分析エラー: {err_msg}",
             "stock_impact": "中立",
             "confidence": "低",
             "reasoning": "",

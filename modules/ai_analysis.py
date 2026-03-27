@@ -405,6 +405,30 @@ def _call_gemini(prompt: str, api_key: str) -> str:
     return resp.json()["candidates"][0]["content"]["parts"][0]["text"]
 
 
+def _get_gemini_key() -> str:
+    """secrets から Gemini API キーを取得。"""
+    try:
+        return st.secrets.get("GEMINI_API_KEY", "")
+    except Exception:
+        return ""
+
+
+def call_light_llm(prompt: str) -> str:
+    """軽量タスク用。Gemini 無料枠を優先、なければ Claude Haiku。"""
+    gemini_key = _get_gemini_key()
+    if gemini_key:
+        return _call_gemini(prompt, gemini_key)
+
+    # フォールバック: Claude Haiku
+    try:
+        key = st.secrets.get("ANTHROPIC_API_KEY", "")
+    except Exception:
+        key = ""
+    if key:
+        return _call_claude(prompt, key)
+    raise ValueError("GEMINI_API_KEY も ANTHROPIC_API_KEY も設定されていません")
+
+
 def _classify_error(err_str: str, provider: str) -> str:
     """エラー文字列から分かりやすいメッセージを生成する。"""
     s = err_str.lower()

@@ -643,47 +643,8 @@ def _get_market_outlook(market_text: str, news_tuple: tuple, provider: str, api_
         return {"error": "市場データを取得できませんでした（休場日の可能性があります）"}
 
     try:
-        if provider == "claude":
-            import anthropic
-            key = api_key.strip()
-            if not key:
-                try:
-                    key = st.secrets.get("ANTHROPIC_API_KEY", "")
-                except Exception:
-                    key = ""
-            if not key:
-                return {"error": "APIキーが設定されていません"}
-            client = anthropic.Anthropic(api_key=key)
-            resp = client.messages.create(
-                model="claude-haiku-4-5-20251001",
-                max_tokens=2000,
-                messages=[{"role": "user", "content": prompt}],
-            )
-            text = resp.content[0].text
-        elif provider == "openai":
-            from openai import OpenAI
-            client = OpenAI(api_key=api_key.strip())
-            resp = client.chat.completions.create(
-                model="gpt-4o-mini",
-                max_tokens=2000,
-                messages=[{"role": "user", "content": prompt}],
-            )
-            text = resp.choices[0].message.content
-        elif provider == "gemini":
-            import requests as _req
-            url = "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent"
-            payload = {"contents": [{"role": "user", "parts": [{"text": prompt}]}]}
-            resp = _req.post(
-                url,
-                params={"key": api_key.strip()},
-                headers={"Content-Type": "application/json; charset=utf-8"},
-                data=json.dumps(payload, ensure_ascii=False).encode("utf-8"),
-                timeout=60,
-            )
-            resp.raise_for_status()
-            text = resp.json()["candidates"][0]["content"]["parts"][0]["text"]
-        else:
-            return {"error": f"不明なプロバイダー: {provider}"}
+        from modules.ai_analysis import call_light_llm
+        text = call_light_llm(prompt)
 
         # JSONパース（AIの応答から JSON を確実に抽出）
         if not text or not text.strip():
