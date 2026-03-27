@@ -45,6 +45,68 @@ TICKERS_PATH = os.path.join(
 # ─── ヘルパー ─────────────────────────────────────────────────────────────
 
 
+def _parse_portfolio_image(image_bytes: bytes, api_key: str) -> list[dict] | None:
+    """証券アプリのスクリーンショットから銘柄情報を抽出する。"""
+    import base64
+    import anthropic
+
+    b64 = base64.standard_b64encode(image_bytes).decode("utf-8")
+    # 画像形式を推定
+    if image_bytes[:4] == b"\x89PNG":
+        media_type = "image/png"
+    elif image_bytes[:2] == b"\xff\xd8":
+        media_type = "image/jpeg"
+    else:
+        media_type = "image/png"
+
+    prompt = """この画像は日本の証券アプリのポートフォリオ（保有銘柄一覧）のスクリーンショットです。
+画像から以下の情報を読み取ってください:
+- 銘柄コード（4桁の数字）
+- 銘柄名
+- 保有株数
+- 平均取得単価（取得価格、買付単価など）
+
+以下のJSON配列 **のみ** を出力してください。読み取れない項目は0にしてください。
+
+```json
+[
+  {"code": "7203", "name": "トヨタ自動車", "shares": 100, "avg_cost": 2500},
+  {"code": "9984", "name": "ソフトバンクG", "shares": 200, "avg_cost": 6800}
+]
+```"""
+
+    try:
+        client = anthropic.Anthropic(api_key=api_key)
+        resp = client.messages.create(
+            model="claude-haiku-4-5-20251001",
+            max_tokens=2000,
+            messages=[{
+                "role": "user",
+                "content": [
+                    {"type": "image", "source": {"type": "base64", "media_type": media_type, "data": b64}},
+                    {"type": "text", "text": prompt},
+                ],
+            }],
+        )
+        text = resp.content[0].text.strip()
+
+        import re
+        # ```json ... ``` ブロック抽出
+        blocks = re.findall(r"```(?:json)?\s*([\s\S]*?)```", text)
+        for block in blocks:
+            try:
+                return json.loads(block.strip())
+            except json.JSONDecodeError:
+                continue
+        # [ ... ] を抽出
+        match = re.search(r"\[[\s\S]*\]", text)
+        if match:
+            return json.loads(match.group())
+        return json.loads(text)
+    except Exception:
+        return None
+
+
 def _get_api_key() -> str:
     """API キーを取得する。"""
     try:
@@ -488,6 +550,50 @@ def main() -> None:
                     })
                     save_from_session("portfolio_holdings", "portfolio_holdings")
                     st.rerun()
+
+        st.divider()
+
+        # 画像から自動入力
+        st.header("画像から一括登録")
+        st.caption("証券アプリのスクリーンショットをアップロードすると、AIが銘柄・株数・取得単価を読み取ります")
+        uploaded = st.file_uploader(
+            "スクリーンショット",
+            type=["png", "jpg", "jpeg", "webp"],
+            key="pf_image_upload",
+            label_visibility="collapsed",
+        )
+        if uploaded and st.button("画像を読み取る", use_container_width=True):
+            _api_key = _get_api_key()
+            if not _api_key:
+                st.error("APIキーが必要です")
+            else:
+                with st.spinner("画像を解析中..."):
+                    _parsed = _parse_portfolio_image(uploaded.read(), _api_key)
+                if _parsed:
+                    _added = 0
+                    for item in _parsed:
+                        code = item.get("code", "").strip()
+                        if not code:
+                            continue
+                        if not code.endswith(".T"):
+                            code = f"{code}.T"
+                        existing = [h for h in st.session_state.portfolio_holdings if h["code"] == code]
+                        if not existing:
+                            st.session_state.portfolio_holdings.append({
+                                "code": code,
+                                "name": stock_map.get(code, item.get("name", "")),
+                                "shares": int(item.get("shares", 100)),
+                                "avg_cost": float(item.get("avg_cost", 0)),
+                            })
+                            _added += 1
+                    if _added:
+                        save_from_session("portfolio_holdings", "portfolio_holdings")
+                        st.success(f"{_added}銘柄を追加しました")
+                        st.rerun()
+                    else:
+                        st.warning("新規の銘柄が見つかりませんでした（既に登録済みの可能性）")
+                else:
+                    st.error("画像から銘柄情報を読み取れませんでした")
 
         st.divider()
 
