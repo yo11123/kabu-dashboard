@@ -59,7 +59,7 @@ def fetch_market_data(ticker: str, period: str) -> pd.DataFrame | None:
 
 
 # ─── ページ設定 ──────────────────────────────────────────────────────
-st.title("📈 マーケット概況")
+st.title("マーケット概況")
 st.caption("主要指数・先物・為替（yfinance データ、最大15分遅延）")
 
 # 平日は 60 秒ごとに自動更新

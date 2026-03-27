@@ -64,7 +64,7 @@ def fetch_all_next_earnings(tickers_tuple: tuple) -> list[dict]:
 
 # ─── ページ本体 ────────────────────────────────────────────────────────
 
-st.title("📅 決算カレンダー")
+st.title("決算カレンダー")
 st.caption("日経225採用銘柄の次回決算発表予定日（yfinance データ）")
 
 tickers = load_tickers(TICKERS_PATH)

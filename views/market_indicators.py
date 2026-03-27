@@ -143,7 +143,7 @@ def _render_live_indicator(name: str, data: dict, period: str) -> None:
 # ─── メイン ─────────────────────────────────────────────────────────────
 
 def main() -> None:
-    st.title("🌐 市場指標ダッシュボード")
+    st.title("市場指標ダッシュボード")
     st.caption("テクニカル・センチメント・マクロ経済まで網羅した全58指標ガイド")
 
     with helix_spinner("市場データを取得中..."):

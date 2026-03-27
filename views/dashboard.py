@@ -274,7 +274,7 @@ def main() -> None:
     if refresh_ms:
         st_autorefresh(interval=refresh_ms, key="tse_autorefresh")
 
-    st.title("📊 日本株ダッシュボード")
+    st.title("日本株ダッシュボード")
 
     nikkei225 = load_tickers(TICKERS_PATH)
 

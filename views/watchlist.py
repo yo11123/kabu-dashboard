@@ -135,7 +135,7 @@ def _save_watchlist():
 
 def main() -> None:
     try_restore_from_cookies()
-    st.title("👁 ウォッチリスト")
+    st.title("ウォッチリスト")
     st.caption("気になる銘柄を登録して監視。目標価格やRSI条件の到達時にハイライト表示します。")
 
     nikkei225 = load_tickers(TICKERS_PATH)

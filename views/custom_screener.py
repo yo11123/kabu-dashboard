@@ -224,7 +224,7 @@ def _apply_filters(data: list[dict], conditions: list[tuple]) -> list[dict]:
 # ─── メイン ───────────────────────────────────────────────────────────────
 
 def main() -> None:
-    st.title("🔍 カスタムスクリーナー")
+    st.title("カスタムスクリーナー")
     st.caption("ファンダメンタル + テクニカル条件を自由に組み合わせて銘柄をスキャン。プリセットも利用可能。")
 
     nikkei225 = load_tickers(TICKERS_PATH)

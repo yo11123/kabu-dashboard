@@ -202,7 +202,7 @@ def _run_scan(
 # ─── メイン ─────────────────────────────────────────────────────────
 
 def main() -> None:
-    st.title("📡 BBスキャナー — 2σライン沿い 上昇ブレイク銘柄")
+    st.title("BBスキャナー — 2σライン沿い 上昇ブレイク銘柄")
 
     nikkei225 = load_tickers(TICKERS_PATH)
     all_tse, tse_error = load_all_tse_stocks()
