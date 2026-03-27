@@ -127,19 +127,23 @@ def _get_api_key() -> str:
     return key
 
 
-@st.cache_data(ttl=60)
 def _fetch_current_price(ticker: str) -> dict:
-    """現在の株価情報を取得する。"""
+    """現在の株価情報を取得する。ダッシュボードと同じデータソースを使用。"""
     try:
-        t = yf.Ticker(ticker)
-        hist = t.history(period="5d")
-        # 5日で取れなければ1ヶ月に拡大
-        if hist is None or hist.empty:
-            hist = t.history(period="1mo")
-        if hist is None or hist.empty:
+        from modules.data_loader import fetch_stock_data_max
+        from modules.market_hours import is_tse_open
+        from modules.data_loader import fetch_stock_data_max_realtime
+
+        # ダッシュボードと同じ: 開場中は60秒キャッシュ、閉場中は6時間キャッシュ
+        if is_tse_open():
+            df = fetch_stock_data_max_realtime(ticker)
+        else:
+            df = fetch_stock_data_max(ticker)
+
+        if df is None or df.empty:
             return {}
 
-        close = hist["Close"].dropna()
+        close = df["Close"].dropna()
         if close.empty:
             return {}
         last_close = float(close.iloc[-1])
@@ -152,7 +156,7 @@ def _fetch_current_price(ticker: str) -> dict:
         date_str = last_date.strftime("%m/%d") if hasattr(last_date, "strftime") else ""
 
         try:
-            info = t.info or {}
+            info = yf.Ticker(ticker).info or {}
         except Exception:
             info = {}
         return {
