@@ -1,20 +1,21 @@
 """
 データ永続化ヘルパー
-ファイル + Cookie の二重保存で、リロードでもリブートでもデータを保持。
+GitHub Gist をメインストレージとして使用。リブートしても絶対にデータが消えない。
+ファイルはキャッシュとして併用（APIコール削減）。
 
-- リロード: ファイルから即座に復元
-- リブート: ファイルは消えるが Cookie から復元
+セットアップ:
+  1. https://github.com/settings/tokens で Personal Access Token を作成（gist権限のみ）
+  2. Streamlit Cloud の secrets.toml に GITHUB_TOKEN = "ghp_xxxxx" を追加
 """
 import json
 import os
 from datetime import date
 
+import requests
 import streamlit as st
 
 _DATA_DIR = os.path.join(os.path.dirname(os.path.dirname(__file__)), ".data")
 os.makedirs(_DATA_DIR, exist_ok=True)
-
-_MAX_AGE = 365 * 24 * 3600  # Cookie有効期限: 1年
 
 # 永続化する全キーとデフォルト値
 PERSISTENT_KEYS = {
@@ -23,15 +24,157 @@ PERSISTENT_KEYS = {
     "screener_conditions": [],
 }
 
-# 当日限り有効なキー
 DAILY_KEYS = {
     "portfolio_results": {},
 }
 
-_COOKIE_RESTORE_DONE = "__cookie_restore_done__"
+_GIST_ID_FILE = os.path.join(_DATA_DIR, "_gist_id.txt")
+_GIST_DESCRIPTION = "kabu-dashboard-user-data"
 
 
-# ─── ファイル操作 ─────────────────────────────────────────────────────────
+# ─── GitHub Token ─────────────────────────────────────────────────────────
+
+def _get_github_token() -> str:
+    try:
+        return st.secrets.get("GITHUB_TOKEN", "")
+    except Exception:
+        return ""
+
+
+# ─── Gist 操作 ────────────────────────────────────────────────────────────
+
+def _gist_headers() -> dict:
+    token = _get_github_token()
+    if not token:
+        return {}
+    return {
+        "Authorization": f"token {token}",
+        "Accept": "application/vnd.github.v3+json",
+    }
+
+
+def _get_gist_id() -> str:
+    """保存済みの Gist ID を取得。なければ空文字。"""
+    # ファイルキャッシュ
+    if os.path.exists(_GIST_ID_FILE):
+        with open(_GIST_ID_FILE, "r") as f:
+            gid = f.read().strip()
+            if gid:
+                return gid
+    # session_state
+    return st.session_state.get("_gist_id", "")
+
+
+def _save_gist_id(gist_id: str) -> None:
+    st.session_state["_gist_id"] = gist_id
+    try:
+        with open(_GIST_ID_FILE, "w") as f:
+            f.write(gist_id)
+    except Exception:
+        pass
+
+
+def _gist_save_all(data: dict) -> bool:
+    """全データを Gist に保存。成功なら True。"""
+    headers = _gist_headers()
+    if not headers:
+        return False
+
+    content = json.dumps(data, ensure_ascii=False, indent=2)
+    files = {"kabu_dashboard_data.json": {"content": content}}
+
+    gist_id = _get_gist_id()
+
+    try:
+        if gist_id:
+            # 更新
+            resp = requests.patch(
+                f"https://api.github.com/gists/{gist_id}",
+                headers=headers,
+                json={"files": files},
+                timeout=10,
+            )
+            if resp.status_code == 200:
+                return True
+            # 404 なら Gist が削除されている → 新規作成にフォールバック
+
+        # 新規作成
+        resp = requests.post(
+            "https://api.github.com/gists",
+            headers=headers,
+            json={
+                "description": _GIST_DESCRIPTION,
+                "public": False,
+                "files": files,
+            },
+            timeout=10,
+        )
+        if resp.status_code == 201:
+            new_id = resp.json()["id"]
+            _save_gist_id(new_id)
+            return True
+    except Exception:
+        pass
+    return False
+
+
+def _gist_load_all() -> dict | None:
+    """Gist から全データを読み込む。"""
+    headers = _gist_headers()
+    if not headers:
+        return None
+
+    gist_id = _get_gist_id()
+
+    # Gist ID が不明なら検索
+    if not gist_id:
+        gist_id = _find_gist()
+        if gist_id:
+            _save_gist_id(gist_id)
+
+    if not gist_id:
+        return None
+
+    try:
+        resp = requests.get(
+            f"https://api.github.com/gists/{gist_id}",
+            headers=headers,
+            timeout=10,
+        )
+        if resp.status_code != 200:
+            return None
+        files = resp.json().get("files", {})
+        f = files.get("kabu_dashboard_data.json")
+        if not f:
+            return None
+        return json.loads(f["content"])
+    except Exception:
+        return None
+
+
+def _find_gist() -> str:
+    """ユーザーの Gist から kabu-dashboard 用を検索。"""
+    headers = _gist_headers()
+    if not headers:
+        return ""
+    try:
+        resp = requests.get(
+            "https://api.github.com/gists",
+            headers=headers,
+            params={"per_page": 30},
+            timeout=10,
+        )
+        if resp.status_code != 200:
+            return ""
+        for g in resp.json():
+            if g.get("description") == _GIST_DESCRIPTION:
+                return g["id"]
+    except Exception:
+        pass
+    return ""
+
+
+# ─── ファイルキャッシュ（APIコール削減）────────────────────────────────────
 
 def _file_path(key: str) -> str:
     return os.path.join(_DATA_DIR, f"{key}.json")
@@ -56,26 +199,11 @@ def _file_load(key: str, default=None):
         return default
 
 
-# ─── Cookie 操作 ──────────────────────────────────────────────────────────
-
-def _cookie_save_raw(key: str, data) -> None:
-    """Cookieに保存（ページ内で CookieController が既に存在する前提）。"""
-    try:
-        from streamlit_cookies_controller import CookieController
-        ctrl = CookieController()
-        value = json.dumps(data, ensure_ascii=False)
-        ctrl.set(key, value, max_age=_MAX_AGE)
-    except Exception:
-        pass
-
-
 # ─── 公開 API ─────────────────────────────────────────────────────────────
 
 def init_persistence() -> None:
-    """
-    app.py で pg.run() の前に呼ぶ。ファイルからのみロード。
-    Cookie復元は try_restore_from_cookies() で別途行う。
-    """
+    """app.py で pg.run() の前に呼ぶ。"""
+    # 1. ファイルキャッシュからロード
     for key, default in PERSISTENT_KEYS.items():
         if key not in st.session_state:
             st.session_state[key] = _file_load(key, default)
@@ -84,76 +212,54 @@ def init_persistence() -> None:
         if key not in st.session_state:
             st.session_state[key] = load_daily(key, default)
 
-
-def try_restore_from_cookies() -> None:
-    """
-    各ページの先頭で呼ぶ。ファイルが空（リブート後）なら Cookie から復元。
-    CookieController はページ内でレンダリングされるので確実に動作する。
-    """
-    if st.session_state.get(_COOKIE_RESTORE_DONE):
-        return
-
-    # ファイルにデータがあるかチェック
+    # 2. ファイルが空（リブート後）なら Gist から復元
     has_file_data = any(
         _file_load(key) not in (None, [], {})
         for key in PERSISTENT_KEYS
     )
 
-    if has_file_data:
-        st.session_state[_COOKIE_RESTORE_DONE] = True
-        return
+    if not has_file_data and not st.session_state.get("_gist_restore_done"):
+        gist_data = _gist_load_all()
+        if gist_data:
+            for key, default in PERSISTENT_KEYS.items():
+                val = gist_data.get(key, default)
+                if val and val != default:
+                    st.session_state[key] = val
+                    _file_save(key, val)
 
-    # ファイルが空 → Cookie から復元
-    try:
-        from streamlit_cookies_controller import CookieController
-        ctrl = CookieController()
-        all_cookies = ctrl.getAll()
-    except Exception:
-        return
+            for key, default in DAILY_KEYS.items():
+                raw = gist_data.get(key)
+                if raw and isinstance(raw, dict) and raw.get("date") == date.today().isoformat():
+                    st.session_state[key] = raw.get("data", default)
+                    _file_save(key, raw)
 
-    if all_cookies is None:
-        return  # JS未ロード → 次のrerunで再試行
-
-    restored = False
-    for key, default in PERSISTENT_KEYS.items():
-        raw = all_cookies.get(key)
-        if raw is not None:
-            try:
-                parsed = json.loads(raw) if isinstance(raw, str) else raw
-                if parsed and parsed != default:
-                    st.session_state[key] = parsed
-                    _file_save(key, parsed)
-                    restored = True
-            except Exception:
-                pass
-
-    for key, default in DAILY_KEYS.items():
-        raw = all_cookies.get(key)
-        if raw is not None:
-            try:
-                parsed = json.loads(raw) if isinstance(raw, str) else raw
-                if isinstance(parsed, dict) and parsed.get("date") == date.today().isoformat():
-                    st.session_state[key] = parsed.get("data", default)
-                    _file_save(key, parsed)
-                    restored = True
-            except Exception:
-                pass
-
-    st.session_state[_COOKIE_RESTORE_DONE] = True
-    if restored:
-        st.rerun()
+        st.session_state["_gist_restore_done"] = True
 
 
 def save(key: str, data) -> None:
-    """ファイル + Cookie に二重保存。"""
+    """ファイル + Gist に保存。"""
     _file_save(key, data)
-    _cookie_save_raw(key, data)
+    # Gist に全データまとめて保存
+    _sync_to_gist()
 
 
 def save_from_session(cookie_key: str, session_key: str) -> None:
-    """session_state → ファイル + Cookie に保存。"""
+    """session_state → ファイル + Gist に保存。"""
     if session_key in st.session_state:
-        save(cookie_key, st.session_state[session_key])
+        _file_save(cookie_key, st.session_state[session_key])
+        _sync_to_gist()
+
+
+def _sync_to_gist() -> None:
+    """全永続データを Gist に同期。"""
+    all_data = {}
+    for key in PERSISTENT_KEYS:
+        all_data[key] = _file_load(key, PERSISTENT_KEYS[key])
+    for key in DAILY_KEYS:
+        raw = _file_load(key)
+        if raw:
+            all_data[key] = raw
+    _gist_save_all(all_data)
 
 
 def load_into_session(cookie_key: str, session_key: str, default=None) -> None:
@@ -163,10 +269,10 @@ def load_into_session(cookie_key: str, session_key: str, default=None) -> None:
 
 
 def save_daily(key: str, data) -> None:
-    """日付付きでファイル + Cookie に保存。"""
+    """日付付きでファイル + Gist に保存。"""
     wrapped = {"date": date.today().isoformat(), "data": data}
     _file_save(key, wrapped)
-    _cookie_save_raw(key, wrapped)
+    _sync_to_gist()
 
 
 def load_daily(key: str, default=None):
@@ -177,3 +283,8 @@ def load_daily(key: str, default=None):
     if not isinstance(wrapped, dict) or wrapped.get("date") != date.today().isoformat():
         return default
     return wrapped.get("data", default)
+
+
+def try_restore_from_cookies() -> None:
+    """後方互換用。Gist方式では不要だが呼び出し元を壊さないために残す。"""
+    pass
