@@ -337,8 +337,11 @@ def main() -> None:
         #   3. 検索中は先頭候補
         #   4. デフォルト: トヨタ
         cal_ticker = st.session_state.pop("calendar_selected_ticker", None)
+        nav_ticker = st.session_state.pop("selected_ticker", None)
 
-        if cal_ticker:
+        if nav_ticker:
+            target_ticker = nav_ticker
+        elif cal_ticker:
             target_ticker = cal_ticker
         elif not q:
             # 検索なし: 現在表示中の銘柄を維持（チェックボックス操作などで戻らないように）

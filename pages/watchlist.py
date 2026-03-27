@@ -285,34 +285,24 @@ def _render_watch_card(item: dict, alert: bool) -> None:
             f"font-style:italic;'>📝 {w['memo']}</div>"
         )
 
-    st.markdown(
-        f"""<div style="
-            background: rgba(10,15,26,0.5);
-            border: 1px solid {border_color}; border-left: 2px solid {border_color};
-            border-radius: 2px; padding: 18px 24px; margin-bottom: 6px;
-        ">
-            <div style="display:flex; align-items:baseline; gap:14px; flex-wrap:wrap;">
-                <span style="font-family:'Cormorant Garamond',serif; font-size:1.1em; font-weight:400; color:#f0ece4;">
-                    {name}
-                </span>
-                <span style="font-family:'Inter',sans-serif; font-size:0.6em; color:#6b7280; letter-spacing:0.12em;">
-                    {w['code']}
-                </span>
-                <span style="font-family:'IBM Plex Mono',monospace; font-size:1.1em; color:#f0ece4; margin-left:auto;">
-                    ¥{price:,.0f}
-                </span>
-                <span style="font-family:'IBM Plex Mono',monospace; font-size:0.8em; color:{chg_color};">
-                    {chg_pct:+.2f}%
-                </span>
-            </div>
-            <div style="margin-top:6px; font-family:'Inter',sans-serif; font-size:0.65em; color:#6b7280;">
-                {info_html}
-            </div>
-            {alert_html}
-            {memo_html}
-        </div>""",
-        unsafe_allow_html=True,
+    # カード内の各セクション
+    info_section = ""
+    if info_html:
+        info_section = f'<div style="margin-top:6px; font-family:Inter,sans-serif; font-size:0.65em; color:#6b7280;">{info_html}</div>'
+
+    card_html = (
+        f'<div style="background:rgba(10,15,26,0.5); border:1px solid {border_color};'
+        f' border-left:2px solid {border_color}; border-radius:2px; padding:18px 24px; margin-bottom:6px;">'
+        f'<div style="display:flex; align-items:baseline; gap:14px; flex-wrap:wrap;">'
+        f'<span style="font-family:Cormorant Garamond,serif; font-size:1.1em; color:#f0ece4;">{name}</span>'
+        f'<span style="font-family:Inter,sans-serif; font-size:0.6em; color:#6b7280; letter-spacing:0.12em;">{w["code"]}</span>'
+        f'<span style="font-family:IBM Plex Mono,monospace; font-size:1.1em; color:#f0ece4; margin-left:auto;">¥{price:,.0f}</span>'
+        f'<span style="font-family:IBM Plex Mono,monospace; font-size:0.8em; color:{chg_color};">{chg_pct:+.2f}%</span>'
+        f'</div>'
+        f'{info_section}{alert_html}{memo_html}'
+        f'</div>'
     )
+    st.markdown(card_html, unsafe_allow_html=True)
 
     # アクションボタン
     c1, c2, c3 = st.columns([1, 1, 6])
