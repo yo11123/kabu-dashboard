@@ -507,8 +507,14 @@ def main() -> None:
         price_str = f"¥{price:,.0f} ({chg:+.2f}%)" if price else "取得中..."
         shares_str = f"{h['shares']:,}株"
         cost_str = f"取得単価 ¥{h['avg_cost']:,.0f}" if h["avg_cost"] > 0 else "取得単価: 未設定"
+        pnl_str = ""
+        if h["avg_cost"] > 0 and price > 0:
+            pnl_val = (price - h["avg_cost"]) * h["shares"]
+            pnl_pct = (price / h["avg_cost"] - 1) * 100
+            pnl_label = "含み益" if pnl_val >= 0 else "含み損"
+            pnl_str = f"　{pnl_label} ¥{abs(pnl_val):,.0f} ({pnl_pct:+.1f}%)"
 
-        with st.expander(f"**{name_display}**　`{h['code']}`　　{shares_str}　{cost_str}　　{price_str}", expanded=False):
+        with st.expander(f"**{name_display}**　`{h['code']}`　　{shares_str}　{cost_str}　　{price_str}{pnl_str}", expanded=False):
             c1, c2, c3 = st.columns([2, 2, 1])
             new_shares = c1.number_input(
                 "株数", min_value=1, value=h["shares"], step=100,
