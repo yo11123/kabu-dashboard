@@ -10,16 +10,16 @@ from modules.persistence import init_persistence
 
 pages = [
     st.Page("pages/dashboard.py", title="ダッシュボード", icon=":material/candlestick_chart:", default=True),
-    st.Page("pages/1_📡_BBスキャナー.py", title="BBスキャナー", icon=":material/radar:"),
-    st.Page("pages/2_🎯_買い時銘柄.py", title="買い時銘柄", icon=":material/target:"),
-    st.Page("pages/3_📅_決算カレンダー.py", title="決算カレンダー", icon=":material/event_note:"),
-    st.Page("pages/4_🌐_市場指標.py", title="市場指標", icon=":material/public:"),
-    st.Page("pages/5_📈_マーケット概況.py", title="マーケット概況", icon=":material/trending_up:"),
-    st.Page("pages/6_💼_ポートフォリオ.py", title="ポートフォリオ", icon=":material/account_balance_wallet:"),
-    st.Page("pages/7_👁_ウォッチリスト.py", title="ウォッチリスト", icon=":material/visibility:"),
-    st.Page("pages/8_🔄_セクター分析.py", title="セクター分析", icon=":material/donut_small:"),
-    st.Page("pages/9_🔍_カスタムスクリーナー.py", title="カスタムスクリーナー", icon=":material/filter_alt:"),
-    st.Page("pages/10_📊_バックテスト.py", title="バックテスト", icon=":material/query_stats:"),
+    st.Page("pages/bb_scanner.py", title="BBスキャナー", icon=":material/radar:"),
+    st.Page("pages/buy_timing.py", title="買い時銘柄", icon=":material/target:"),
+    st.Page("pages/earnings_calendar.py", title="決算カレンダー", icon=":material/event_note:"),
+    st.Page("pages/market_indicators.py", title="市場指標", icon=":material/public:"),
+    st.Page("pages/market_overview.py", title="マーケット概況", icon=":material/trending_up:"),
+    st.Page("pages/portfolio.py", title="ポートフォリオ", icon=":material/account_balance_wallet:"),
+    st.Page("pages/watchlist.py", title="ウォッチリスト", icon=":material/visibility:"),
+    st.Page("pages/sector_analysis.py", title="セクター分析", icon=":material/donut_small:"),
+    st.Page("pages/custom_screener.py", title="カスタムスクリーナー", icon=":material/filter_alt:"),
+    st.Page("pages/backtest.py", title="バックテスト", icon=":material/query_stats:"),
 ]
 
 pg = st.navigation(pages)
@@ -33,7 +33,7 @@ st.set_page_config(
 
 apply_theme()
 
-# ─── Cookie から全永続データを復元（JS準備完了まで待機）─
+# ─── データ復元 ───────────────────────────────────────────────────────────
 init_persistence()
 
 # ─── 選択されたページを実行 ───────────────────────────────────────────────

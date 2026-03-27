@@ -484,16 +484,7 @@ def main() -> None:
     holdings = st.session_state.portfolio_holdings
 
     if not holdings:
-        st.markdown(
-            "<div style='text-align:center; color:#6b7280; padding:4em 1em; "
-            "font-family:Inter,Noto Sans JP,sans-serif; font-size:0.9em;'>"
-            "サイドバーから保有銘柄を追加してください"
-            "<br><br>"
-            "<span style='font-size:0.85em; color:#505868; font-style:italic;'>"
-            "銘柄コードと株数を入力すると、AI分析を開始できます"
-            "</span></div>",
-            unsafe_allow_html=True,
-        )
+        st.info("サイドバーから保有銘柄を追加してください。銘柄コードと株数を入力すると、AI分析を開始できます。")
         st.stop()
 
     # ─── 保有一覧テーブル ─────────────────────────────────────────
