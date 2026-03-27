@@ -224,14 +224,15 @@ h3 {
     letter-spacing: 0.2em;
 }
 .stButton > button[kind="primary"] {
-    background: var(--gold) !important;
-    color: var(--bg-base) !important;
+    background: rgba(212, 175, 55, 0.12) !important;
+    color: var(--gold) !important;
     font-weight: 600 !important;
-    border: 1px solid var(--gold) !important;
+    border: 1px solid rgba(212, 175, 55, 0.3) !important;
 }
 .stButton > button[kind="primary"]:hover {
-    background: var(--gold-light) !important;
-    box-shadow: 0 4px 24px rgba(212, 175, 55, 0.2);
+    background: rgba(212, 175, 55, 0.22) !important;
+    color: var(--gold-light) !important;
+    box-shadow: 0 4px 24px rgba(212, 175, 55, 0.1);
     letter-spacing: 0.2em;
 }
 
@@ -279,6 +280,25 @@ a[data-testid="stLinkButton"] p {
     background: rgba(10, 15, 26, 0.5) !important;
     border: 1px solid rgba(212, 175, 55, 0.08) !important;
     border-radius: 2px !important;
+}
+/* マルチセレクト選択済みタグ */
+[data-testid="stMultiSelect"] span[data-baseweb="tag"] {
+    background: rgba(212, 175, 55, 0.12) !important;
+    border: 1px solid rgba(212, 175, 55, 0.2) !important;
+    color: var(--ivory-muted) !important;
+    border-radius: 2px !important;
+}
+[data-testid="stMultiSelect"] span[data-baseweb="tag"] span {
+    color: var(--ivory-muted) !important;
+}
+/* タグの×ボタン */
+[data-testid="stMultiSelect"] span[data-baseweb="tag"] svg {
+    fill: var(--text-muted) !important;
+}
+
+/* スライダーのトラック */
+[data-baseweb="slider"] div[role="progressbar"] {
+    background: rgba(212, 175, 55, 0.3) !important;
 }
 
 /* ═══════════════════════════════════════════
