@@ -78,6 +78,7 @@ def _gist_save_all(data: dict) -> bool:
     """全データを Gist に保存。成功なら True。"""
     headers = _gist_headers()
     if not headers:
+        st.session_state["_gist_status"] = "❌ GITHUB_TOKEN が未設定です"
         return False
 
     content = json.dumps(data, ensure_ascii=False, indent=2)
@@ -95,6 +96,7 @@ def _gist_save_all(data: dict) -> bool:
                 timeout=10,
             )
             if resp.status_code == 200:
+                st.session_state["_gist_status"] = f"✅ Gist保存成功 (ID: {gist_id[:8]}...)"
                 return True
             # 404 なら Gist が削除されている → 新規作成にフォールバック
 
@@ -112,9 +114,11 @@ def _gist_save_all(data: dict) -> bool:
         if resp.status_code == 201:
             new_id = resp.json()["id"]
             _save_gist_id(new_id)
+            st.session_state["_gist_status"] = f"✅ Gist新規作成成功 (ID: {new_id[:8]}...)"
             return True
-    except Exception:
-        pass
+        st.session_state["_gist_status"] = f"❌ Gist保存失敗 (HTTP {resp.status_code}: {resp.text[:100]})"
+    except Exception as e:
+        st.session_state["_gist_status"] = f"❌ Gist例外: {str(e)[:100]}"
     return False
 
 

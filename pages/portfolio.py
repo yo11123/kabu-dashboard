@@ -512,6 +512,11 @@ def main() -> None:
         "リスク診断を受けられます。"
     )
 
+    # Gist ステータス表示
+    _gist_status = st.session_state.get("_gist_status", "")
+    if _gist_status:
+        st.caption(_gist_status)
+
     # ─── 銘柄候補のロード ─────────────────────────────────────────
     nikkei225 = load_tickers(TICKERS_PATH)
     all_tse, _ = load_all_tse_stocks()
