@@ -52,7 +52,7 @@ def _make_chart(df, title: str = "", color: str = "#4caf50") -> go.Figure:
         yaxis=dict(showgrid=True, gridcolor=GRID_COLOR, tickfont=dict(size=9, color=TEXT_MUTED)),
         plot_bgcolor=BG_BASE,
         paper_bgcolor=BG_PANEL,
-        font=dict(family="'IBM Plex Mono', monospace", color=TEXT_MUTED, size=10),
+        font=dict(family="'IBM Plex Mono', 'Inter', monospace", color=TEXT_MUTED, size=10),
     )
     return fig
 

@@ -733,21 +733,21 @@ def _render_market_outlook(result: dict) -> None:
     # ヘッダーバナー
     st.markdown(
         f"""<div style="
-            background: linear-gradient(135deg, #101c30 0%, #0d1929 100%);
-            border: 1px solid #1e2d40; border-left: 4px solid {color};
-            border-radius: 8px; padding: 18px 24px; margin-bottom: 12px;
+            background: rgba(10,15,26,0.5);
+            border: 1px solid rgba(212,175,55,0.06); border-left: 2px solid {color};
+            border-radius: 2px; padding: 24px 32px; margin-bottom: 16px;
         ">
-            <div style="display:flex; align-items:center; gap:16px; flex-wrap:wrap;">
-                <span style="font-size:2em;">{emoji}</span>
+            <div style="display:flex; align-items:center; gap:20px; flex-wrap:wrap;">
+                <span style="font-size:1.8em;">{emoji}</span>
                 <div>
-                    <div style="font-family:'IBM Plex Mono',monospace; font-size:1.2em; font-weight:700; color:{color};">
+                    <div style="font-family:'Cormorant Garamond',serif; font-size:1.3em; font-weight:400; color:{color}; letter-spacing:0.05em;">
                         日本株全体: {judgment}
                     </div>
-                    <div style="font-family:'IBM Plex Mono',monospace; font-size:0.8em; color:#4a7a8a; margin-top:4px;">
-                        市場スコア: {score} / 100
+                    <div style="font-family:'Inter',sans-serif; font-size:0.7em; color:#6b7280; margin-top:6px; letter-spacing:0.12em; text-transform:uppercase;">
+                        Market Score: {score} / 100
                     </div>
                 </div>
-                <div style="margin-left:auto; max-width:55%; font-family:'IBM Plex Sans JP',sans-serif; font-size:0.88em; color:#c9d6e3; line-height:1.6;">
+                <div style="margin-left:auto; max-width:55%; font-family:'Inter','Noto Sans JP',sans-serif; font-size:0.85em; color:#b8b0a2; line-height:1.8;">
                     {summary}
                 </div>
             </div>
@@ -778,18 +778,18 @@ def _render_market_outlook(result: dict) -> None:
 
     # 資金配分アドバイス
     if capital_advice:
-        _advice_color = "#1db8a0" if score >= 50 else "#ff9800"
+        _advice_color = "#d4af37" if score >= 50 else "#c45c5c"
         st.markdown(
             f"""<div style="
-                background: linear-gradient(135deg, #101c30 0%, #0d1929 100%);
-                border: 1px solid #1e2d40; border-left: 4px solid {_advice_color};
-                border-radius: 8px; padding: 14px 20px; margin-top: 8px;
+                background: rgba(10,15,26,0.5);
+                border: 1px solid rgba(212,175,55,0.06); border-left: 2px solid {_advice_color};
+                border-radius: 2px; padding: 20px 28px; margin-top: 12px;
             ">
-                <div style="font-family:'IBM Plex Mono',monospace; font-size:0.75em; color:{_advice_color};
-                     text-transform:uppercase; letter-spacing:0.1em; margin-bottom:6px;">
-                    💰 余力がある方へのアドバイス
+                <div style="font-family:'Inter',sans-serif; font-size:0.65em; color:{_advice_color};
+                     text-transform:uppercase; letter-spacing:0.18em; margin-bottom:10px;">
+                    Capital Allocation Advice
                 </div>
-                <div style="font-family:'IBM Plex Sans JP',sans-serif; font-size:0.9em; color:#c9d6e3; line-height:1.7;">
+                <div style="font-family:'Inter','Noto Sans JP',sans-serif; font-size:0.88em; color:#b8b0a2; line-height:1.8;">
                     {capital_advice}
                 </div>
             </div>""",

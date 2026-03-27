@@ -442,9 +442,9 @@ def create_candlestick_chart(
         title=dict(
             text=title,
             font=dict(
-                family="'IBM Plex Mono', monospace",
+                family="'Inter', 'Noto Sans JP', sans-serif",
                 size=14,
-                color="#1db8a0",
+                color="#d4af37",
             ),
         ),
         xaxis_rangeslider_visible=False,
@@ -455,13 +455,13 @@ def create_candlestick_chart(
             y=1.02,
             xanchor="right",
             x=1,
-            font=dict(family="'IBM Plex Mono', monospace", size=11, color=TEXT_MUTED),
+            font=dict(family="'Inter', sans-serif", size=11, color=TEXT_MUTED),
             bgcolor="rgba(0,0,0,0)",
         ),
         margin=dict(l=60, r=20, t=60, b=40),
         plot_bgcolor=BG_BASE,
         paper_bgcolor=BG_PANEL,
-        font=dict(family="'IBM Plex Mono', monospace", color=TEXT_MUTED, size=11),
+        font=dict(family="'IBM Plex Mono', 'Inter', monospace", color=TEXT_MUTED, size=11),
         dragmode="pan",
         clickmode="event+select",
     )

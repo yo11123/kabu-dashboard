@@ -559,31 +559,29 @@ def main() -> None:
 
     st.markdown(
         f"""<div style="
-            background: linear-gradient(135deg, rgba(12,20,36,0.8) 0%, rgba(10,16,28,0.6) 100%);
-            border: 1px solid rgba(29,184,160,0.1); border-left: 4px solid {_chg_color};
-            border-radius: 10px; padding: 18px 28px; margin-bottom: 14px;
-            backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px);
-            box-shadow: 0 4px 24px rgba(0,0,0,0.2), inset 0 1px 0 rgba(255,255,255,0.02);
+            background: rgba(10,15,26,0.5);
+            border: 1px solid rgba(212,175,55,0.06); border-left: 2px solid {_chg_color};
+            border-radius: 2px; padding: 24px 32px; margin-bottom: 16px;
         ">
-            <div style="display:flex; align-items:baseline; gap:16px; flex-wrap:wrap;">
-                <span style="font-family:'Inter','Noto Sans JP',sans-serif; font-size:1.3em; font-weight:700; color:#e8f0fa;">
+            <div style="display:flex; align-items:baseline; gap:20px; flex-wrap:wrap;">
+                <span style="font-family:'Cormorant Garamond','Noto Sans JP',serif; font-size:1.5em; font-weight:400; color:#f0ece4; letter-spacing:0.05em;">
                     {company_name}
                 </span>
-                <span style="font-family:'IBM Plex Mono',monospace; font-size:0.82em; color:#6a9aaa; letter-spacing:0.05em;">
+                <span style="font-family:'Inter',sans-serif; font-size:0.7em; color:#6b7280; letter-spacing:0.15em; text-transform:uppercase;">
                     {ticker}
                 </span>
-                <span style="font-family:'IBM Plex Mono',monospace; font-size:1.6em; font-weight:700; color:#e8f0fa; margin-left:auto; letter-spacing:-0.02em;">
+                <span style="font-family:'IBM Plex Mono',monospace; font-size:1.5em; font-weight:400; color:#f0ece4; margin-left:auto; letter-spacing:0.02em;">
                     ¥{last_close:,.0f}
                 </span>
-                <span style="font-family:'IBM Plex Mono',monospace; font-size:1.0em; font-weight:600; color:{_chg_color};">
+                <span style="font-family:'IBM Plex Mono',monospace; font-size:0.95em; font-weight:500; color:{_chg_color};">
                     {_chg_arrow} {abs(change_val):,.0f}（{change_pct:+.2f}%）
                 </span>
             </div>
-            <div style="display:flex; gap:28px; margin-top:10px; font-family:'IBM Plex Mono',monospace; font-size:0.7em; color:#4a7a8a; letter-spacing:0.03em;">
-                <span>{PERIOD_LABELS[period]}高値 <b style="color:#e8f0fa;">¥{_period_high:,.0f}</b></span>
-                <span>{PERIOD_LABELS[period]}安値 <b style="color:#e8f0fa;">¥{_period_low:,.0f}</b></span>
-                <span>★ 決算 <b style="color:#c9a84c;">{len(earnings_events)}</b>件</span>
-                <span>● ニュース <b style="color:#1db8a0;">{len(news_events)}</b>件</span>
+            <div style="display:flex; gap:32px; margin-top:14px; font-family:'Inter',sans-serif; font-size:0.65em; color:#6b7280; letter-spacing:0.08em; text-transform:uppercase;">
+                <span>{PERIOD_LABELS[period]}高値 <b style="color:#f0ece4; font-weight:500;">¥{_period_high:,.0f}</b></span>
+                <span>{PERIOD_LABELS[period]}安値 <b style="color:#f0ece4; font-weight:500;">¥{_period_low:,.0f}</b></span>
+                <span>決算 <b style="color:#d4af37; font-weight:500;">{len(earnings_events)}</b></span>
+                <span>ニュース <b style="color:#8fb8a0; font-weight:500;">{len(news_events)}</b></span>
             </div>
         </div>""",
         unsafe_allow_html=True,
@@ -844,10 +842,10 @@ def main() -> None:
         with _chat_window:
             if not st.session_state[_chat_key]:
                 st.markdown(
-                    "<div style='text-align:center;color:#4a7a8a;padding:3em 1em;"
-                    "font-family:IBM Plex Mono,monospace;font-size:0.85em;'>"
+                    "<div style='text-align:center;color:#6b7280;padding:3em 1em;"
+                    "font-family:Inter,Noto Sans JP,sans-serif;font-size:0.82em;letter-spacing:0.04em;'>"
                     "まだ会話がありません<br><br>"
-                    "<span style='font-size:0.9em;color:#3a5a6a;'>"
+                    "<span style='font-size:0.9em;color:#505868;font-style:italic;'>"
                     "例:「今買い時ですか？」「RSIの数値をどう見ますか？」「決算はいつ？」"
                     "</span></div>",
                     unsafe_allow_html=True,

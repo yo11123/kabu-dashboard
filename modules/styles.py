@@ -1,276 +1,296 @@
 """
-Premium Dark テーマ CSS
-Bloomberg 風をベースに、グラスモーフィズム・ゴールドアクセント・
-グラデーションボーダーで高級感を演出。
+Luxury Dark テーマ CSS
+高級マンションのWebサイトを彷彿とさせる、洗練されたダークテーマ。
+セリフ体見出し・シャンパンゴールド・グラスモーフィズムで上質感を演出。
 全ページの先頭で apply_theme() を呼ぶことで適用する。
 """
 import streamlit as st
 
 # ─── カラーパレット（Plotly チャートでも参照できるようエクスポート） ──
-BG_BASE      = "#080d18"   # メイン背景（より深い黒）
-BG_PANEL     = "#0c1424"   # カード・パネル
-BG_SIDEBAR   = "#060b14"   # サイドバー
-BORDER       = "#1a2640"   # ボーダー
-ACCENT       = "#1db8a0"   # ティール（アクセント）
-ACCENT_HOVER = "#25d4b8"   # ホバー時アクセント
-ACCENT_GOLD  = "#c9a84c"   # ゴールドアクセント
-TEXT_PRIMARY  = "#e8f0fa"  # 主要テキスト
-TEXT_MUTED   = "#4a7a8a"   # 補足テキスト
-GRID_COLOR   = "#141e30"   # チャートグリッド
-UP_COLOR     = "#26a69a"   # 上昇色
-DOWN_COLOR   = "#ef5350"   # 下落色
+BG_BASE      = "#06090f"   # メイン背景（漆黒）
+BG_PANEL     = "#0a0f1a"   # カード・パネル
+BG_SIDEBAR   = "#050810"   # サイドバー
+BORDER       = "#1a1f2e"   # ボーダー（極めて控えめ）
+ACCENT       = "#d4af37"   # シャンパンゴールド（メインアクセント）
+ACCENT_HOVER = "#e6c34d"   # ホバー時ゴールド
+ACCENT_SUB   = "#8fb8a0"   # セージグリーン（サブアクセント）
+TEXT_PRIMARY  = "#f0ece4"  # アイボリーホワイト
+TEXT_MUTED   = "#6b7280"   # グレー（補足テキスト）
+GRID_COLOR   = "#111620"   # チャートグリッド
+UP_COLOR     = "#5ca08b"   # 上昇色（落ち着いたグリーン）
+DOWN_COLOR   = "#c45c5c"   # 下落色（落ち着いたレッド）
 
 _CSS = """
 <style>
 /* ── Google Fonts ── */
-@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=IBM+Plex+Mono:ital,wght@0,300;0,400;0,500;0,600;1,400&family=Noto+Sans+JP:wght@300;400;500;600;700&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,300;0,400;0,500;0,600;0,700;1,400&family=Inter:wght@300;400;500;600;700&family=Noto+Sans+JP:wght@300;400;500;600;700&family=IBM+Plex+Mono:wght@300;400;500;600&display=swap');
+
+/* ═══════════════════════════════════════════
+   CSS Variables
+═══════════════════════════════════════════ */
+:root {
+    --bg-base: #06090f;
+    --bg-panel: #0a0f1a;
+    --bg-elevated: #0e1320;
+    --border: rgba(212, 175, 55, 0.06);
+    --border-hover: rgba(212, 175, 55, 0.15);
+    --gold: #d4af37;
+    --gold-light: #e6c34d;
+    --gold-dim: rgba(212, 175, 55, 0.5);
+    --ivory: #f0ece4;
+    --ivory-muted: #b8b0a2;
+    --sage: #8fb8a0;
+    --text-muted: #6b7280;
+    --serif: 'Cormorant Garamond', 'Noto Sans JP', serif;
+    --sans: 'Inter', 'Noto Sans JP', sans-serif;
+    --mono: 'IBM Plex Mono', monospace;
+    --ease: cubic-bezier(0.25, 0.1, 0.25, 1);
+}
 
 /* ═══════════════════════════════════════════
    ベースレイアウト
 ═══════════════════════════════════════════ */
 .stApp {
-    background: linear-gradient(165deg, #080d18 0%, #0a1020 40%, #0c1226 100%);
+    background: var(--bg-base);
+}
+
+/* 繊細な背景ノイズテクスチャ風 */
+.stApp::before {
+    content: '';
+    position: fixed;
+    top: 0; left: 0; right: 0; bottom: 0;
+    background:
+        radial-gradient(ellipse at 20% 50%,
+            rgba(212, 175, 55, 0.015) 0%, transparent 60%),
+        radial-gradient(ellipse at 80% 20%,
+            rgba(143, 184, 160, 0.01) 0%, transparent 50%);
+    pointer-events: none;
+    z-index: 0;
 }
 
 /* ── トップヘッダーバー ── */
 header[data-testid="stHeader"] {
-    background: rgba(8, 13, 24, 0.75) !important;
-    border-bottom: 1px solid rgba(29, 184, 160, 0.08);
-    backdrop-filter: blur(16px);
-    -webkit-backdrop-filter: blur(16px);
+    background: rgba(6, 9, 15, 0.85) !important;
+    border-bottom: 1px solid rgba(212, 175, 55, 0.05);
+    backdrop-filter: blur(24px);
+    -webkit-backdrop-filter: blur(24px);
 }
 
 /* ═══════════════════════════════════════════
-   サイドバー — グラスモーフィズム
+   サイドバー — 静謐なパネル
 ═══════════════════════════════════════════ */
 [data-testid="stSidebar"] {
     background: linear-gradient(180deg,
-        rgba(6, 11, 20, 0.95) 0%,
-        rgba(8, 14, 26, 0.92) 100%) !important;
-    border-right: 1px solid rgba(29, 184, 160, 0.1) !important;
-    backdrop-filter: blur(20px);
-    -webkit-backdrop-filter: blur(20px);
+        rgba(5, 8, 16, 0.97) 0%,
+        rgba(8, 12, 20, 0.95) 100%) !important;
+    border-right: 1px solid rgba(212, 175, 55, 0.06) !important;
 }
 [data-testid="stSidebar"] h2,
 [data-testid="stSidebar"] h3 {
-    font-family: 'IBM Plex Mono', monospace !important;
-    font-size: 0.62rem !important;
-    font-weight: 600 !important;
-    text-transform: uppercase;
-    letter-spacing: 0.18em;
-    color: #c9a84c !important;
-    border-bottom: 1px solid rgba(201, 168, 76, 0.15);
-    padding-bottom: 8px;
-    margin-top: 1.4rem !important;
-    margin-bottom: 0.8rem !important;
+    font-family: var(--serif) !important;
+    font-size: 0.8rem !important;
+    font-weight: 400 !important;
+    font-style: italic;
+    text-transform: none;
+    letter-spacing: 0.12em;
+    color: var(--gold) !important;
+    border-bottom: none;
+    padding-bottom: 4px;
+    margin-top: 1.6rem !important;
+    margin-bottom: 0.6rem !important;
+    position: relative;
+}
+[data-testid="stSidebar"] h2::after,
+[data-testid="stSidebar"] h3::after {
+    content: '';
+    display: block;
+    width: 32px;
+    height: 1px;
+    background: linear-gradient(90deg, var(--gold), transparent);
+    margin-top: 8px;
 }
 /* ページナビゲーションリンク */
 [data-testid="stSidebarNav"] a span {
-    font-family: 'Inter', 'Noto Sans JP', sans-serif !important;
-    font-size: 0.8rem;
-    font-weight: 500;
-    letter-spacing: 0.02em;
-    transition: color 0.2s ease;
+    font-family: var(--sans) !important;
+    font-size: 0.78rem;
+    font-weight: 400;
+    letter-spacing: 0.04em;
+    color: var(--ivory-muted) !important;
+    transition: all 0.4s var(--ease);
 }
 [data-testid="stSidebarNav"] a:hover span {
-    color: #1db8a0 !important;
+    color: var(--gold) !important;
+    letter-spacing: 0.06em;
 }
 
 /* ═══════════════════════════════════════════
-   見出し — ゴールド＋ティールのアクセント
+   見出し — エレガントなセリフ体
 ═══════════════════════════════════════════ */
 h1 {
-    font-family: 'Inter', 'Noto Sans JP', sans-serif !important;
-    font-size: 1.25rem !important;
-    font-weight: 700 !important;
-    text-transform: uppercase;
-    letter-spacing: 0.08em;
-    background: linear-gradient(135deg, #1db8a0 0%, #c9a84c 100%);
-    -webkit-background-clip: text;
-    -webkit-text-fill-color: transparent;
-    background-clip: text;
+    font-family: var(--serif) !important;
+    font-size: 1.6rem !important;
+    font-weight: 300 !important;
+    text-transform: none;
+    letter-spacing: 0.15em;
+    color: var(--ivory) !important;
+    position: relative;
+    padding-bottom: 12px;
 }
-h2, h3 {
-    font-family: 'Inter', 'Noto Sans JP', sans-serif !important;
-    font-weight: 600 !important;
-    letter-spacing: 0.03em;
-    color: #e8f0fa !important;
+h1::after {
+    content: '';
+    position: absolute;
+    bottom: 0;
+    left: 0;
+    width: 48px;
+    height: 1px;
+    background: linear-gradient(90deg, var(--gold), transparent);
+}
+h2 {
+    font-family: var(--serif) !important;
+    font-size: 1.2rem !important;
+    font-weight: 400 !important;
+    letter-spacing: 0.08em;
+    color: var(--ivory) !important;
+}
+h3 {
+    font-family: var(--sans) !important;
+    font-size: 0.85rem !important;
+    font-weight: 500 !important;
+    letter-spacing: 0.06em;
+    color: var(--ivory-muted) !important;
+    text-transform: uppercase;
 }
 
 /* ═══════════════════════════════════════════
-   メトリクスカード — グラスモーフィズム
+   メトリクスカード — ミニマルラグジュアリー
 ═══════════════════════════════════════════ */
 [data-testid="metric-container"] {
-    background: linear-gradient(135deg,
-        rgba(12, 20, 36, 0.8) 0%,
-        rgba(16, 28, 48, 0.6) 100%) !important;
-    border: 1px solid rgba(29, 184, 160, 0.12) !important;
-    border-left: 3px solid #1db8a0 !important;
-    border-radius: 8px !important;
-    padding: 16px 20px !important;
-    backdrop-filter: blur(10px);
-    -webkit-backdrop-filter: blur(10px);
-    transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+    background: rgba(10, 15, 26, 0.6) !important;
+    border: 1px solid rgba(212, 175, 55, 0.06) !important;
+    border-left: 2px solid var(--gold-dim) !important;
+    border-radius: 2px !important;
+    padding: 20px 24px !important;
+    transition: all 0.5s var(--ease);
     position: relative;
-    overflow: hidden;
-}
-[data-testid="metric-container"]::before {
-    content: '';
-    position: absolute;
-    top: 0;
-    left: 0;
-    right: 0;
-    bottom: 0;
-    background: linear-gradient(135deg,
-        rgba(29, 184, 160, 0.03) 0%,
-        transparent 50%);
-    pointer-events: none;
 }
 [data-testid="metric-container"]:hover {
-    border-color: rgba(29, 184, 160, 0.25) !important;
-    border-left-color: #c9a84c !important;
-    box-shadow:
-        0 4px 24px rgba(29, 184, 160, 0.08),
-        0 0 40px rgba(29, 184, 160, 0.04),
-        inset 0 1px 0 rgba(255, 255, 255, 0.02);
-    transform: translateY(-1px);
+    border-left-color: var(--gold) !important;
+    background: rgba(10, 15, 26, 0.8) !important;
+    box-shadow: 0 8px 32px rgba(0, 0, 0, 0.2);
 }
 [data-testid="stMetricLabel"] p {
-    font-family: 'IBM Plex Mono', monospace !important;
-    font-size: 0.58rem !important;
+    font-family: var(--sans) !important;
+    font-size: 0.6rem !important;
     font-weight: 500 !important;
     text-transform: uppercase !important;
-    letter-spacing: 0.16em !important;
-    color: #4a7a8a !important;
+    letter-spacing: 0.2em !important;
+    color: var(--text-muted) !important;
 }
 [data-testid="stMetricValue"] {
-    font-family: 'IBM Plex Mono', monospace !important;
-    font-size: 1.5rem !important;
-    font-weight: 600 !important;
-    color: #e8f0fa !important;
-    letter-spacing: -0.02em;
+    font-family: var(--mono) !important;
+    font-size: 1.45rem !important;
+    font-weight: 400 !important;
+    color: var(--ivory) !important;
+    letter-spacing: 0.02em;
 }
 [data-testid="stMetricDelta"] > div {
-    font-family: 'IBM Plex Mono', monospace !important;
-    font-size: 0.76rem !important;
+    font-family: var(--mono) !important;
+    font-size: 0.75rem !important;
+    font-weight: 400;
     letter-spacing: 0.02em;
 }
 
 /* ═══════════════════════════════════════════
-   ボタン — グラデーションボーダー
+   ボタン — 洗練されたミニマリズム
 ═══════════════════════════════════════════ */
 .stButton > button {
-    font-family: 'Inter', 'Noto Sans JP', sans-serif !important;
-    font-size: 0.74rem !important;
-    font-weight: 600 !important;
+    font-family: var(--sans) !important;
+    font-size: 0.72rem !important;
+    font-weight: 500 !important;
     text-transform: uppercase;
-    letter-spacing: 0.08em;
-    background: rgba(12, 20, 36, 0.6) !important;
-    border: 1px solid rgba(29, 184, 160, 0.3) !important;
-    color: #1db8a0 !important;
-    border-radius: 6px !important;
-    padding: 8px 20px !important;
-    transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
-    position: relative;
-    overflow: hidden;
-}
-.stButton > button::before {
-    content: '';
-    position: absolute;
-    top: 0;
-    left: -100%;
-    width: 100%;
-    height: 100%;
-    background: linear-gradient(90deg,
-        transparent,
-        rgba(29, 184, 160, 0.08),
-        transparent);
-    transition: left 0.5s ease;
-}
-.stButton > button:hover::before {
-    left: 100%;
+    letter-spacing: 0.15em;
+    background: transparent !important;
+    border: 1px solid rgba(212, 175, 55, 0.25) !important;
+    color: var(--gold) !important;
+    border-radius: 0px !important;
+    padding: 10px 28px !important;
+    transition: all 0.5s var(--ease);
 }
 .stButton > button:hover {
-    background: linear-gradient(135deg, #1db8a0, #18a08a) !important;
-    color: #080d18 !important;
-    border-color: #1db8a0 !important;
-    box-shadow:
-        0 4px 20px rgba(29, 184, 160, 0.25),
-        0 0 40px rgba(29, 184, 160, 0.1);
+    background: var(--gold) !important;
+    color: var(--bg-base) !important;
+    border-color: var(--gold) !important;
+    box-shadow: 0 4px 20px rgba(212, 175, 55, 0.15);
+    letter-spacing: 0.2em;
 }
 .stButton > button[kind="primary"] {
-    background: linear-gradient(135deg, #1db8a0 0%, #18a890 100%) !important;
-    color: #080d18 !important;
-    font-weight: 700 !important;
-    border: none !important;
-    box-shadow: 0 2px 12px rgba(29, 184, 160, 0.2);
+    background: var(--gold) !important;
+    color: var(--bg-base) !important;
+    font-weight: 600 !important;
+    border: 1px solid var(--gold) !important;
 }
 .stButton > button[kind="primary"]:hover {
-    background: linear-gradient(135deg, #25d4b8 0%, #1db8a0 100%) !important;
-    box-shadow:
-        0 4px 24px rgba(29, 184, 160, 0.35),
-        0 0 40px rgba(29, 184, 160, 0.15);
-    transform: translateY(-1px);
+    background: var(--gold-light) !important;
+    box-shadow: 0 4px 24px rgba(212, 175, 55, 0.2);
+    letter-spacing: 0.2em;
 }
 
 /* リンクボタン */
 a[data-testid="stLinkButton"],
 a[data-testid="stLinkButton"] p {
-    font-family: 'Inter', 'Noto Sans JP', sans-serif !important;
-    font-size: 0.74rem !important;
-    letter-spacing: 0.03em;
+    font-family: var(--sans) !important;
+    font-size: 0.72rem !important;
+    letter-spacing: 0.08em;
 }
 
 /* ═══════════════════════════════════════════
-   フォーム要素 — 洗練されたインプット
+   フォーム要素 — シンプルで上品
 ═══════════════════════════════════════════ */
-/* セレクトボックス */
 [data-testid="stSelectbox"] > div > div {
-    background: rgba(12, 20, 36, 0.7) !important;
-    border: 1px solid rgba(26, 38, 64, 0.8) !important;
-    border-radius: 6px !important;
-    transition: border-color 0.2s ease;
+    background: rgba(10, 15, 26, 0.5) !important;
+    border: 1px solid rgba(212, 175, 55, 0.08) !important;
+    border-radius: 2px !important;
+    transition: border-color 0.3s var(--ease);
 }
 [data-testid="stSelectbox"] > div > div:hover {
-    border-color: rgba(29, 184, 160, 0.3) !important;
+    border-color: rgba(212, 175, 55, 0.2) !important;
 }
-/* テキスト入力 */
 [data-testid="stTextInput"] input {
-    background: rgba(12, 20, 36, 0.7) !important;
-    border: 1px solid rgba(26, 38, 64, 0.8) !important;
-    border-radius: 6px !important;
-    font-family: 'IBM Plex Mono', monospace !important;
+    background: rgba(10, 15, 26, 0.5) !important;
+    border: none !important;
+    border-bottom: 1px solid rgba(212, 175, 55, 0.12) !important;
+    border-radius: 0 !important;
+    font-family: var(--mono) !important;
     font-size: 0.85rem !important;
-    transition: all 0.2s ease;
+    color: var(--ivory) !important;
+    padding: 8px 4px !important;
+    transition: border-color 0.3s var(--ease);
 }
 [data-testid="stTextInput"] input:focus {
-    border-color: #1db8a0 !important;
-    box-shadow:
-        0 0 0 2px rgba(29, 184, 160, 0.12),
-        0 0 20px rgba(29, 184, 160, 0.06) !important;
+    border-bottom-color: var(--gold) !important;
+    box-shadow: none !important;
 }
-/* スライダー */
 [data-baseweb="slider"] [role="slider"] {
-    background: linear-gradient(135deg, #1db8a0, #c9a84c) !important;
-    border-color: #1db8a0 !important;
-    box-shadow: 0 0 8px rgba(29, 184, 160, 0.3);
+    background: var(--gold) !important;
+    border-color: var(--gold) !important;
+    box-shadow: 0 0 12px rgba(212, 175, 55, 0.2);
 }
-/* マルチセレクト */
 [data-testid="stMultiSelect"] > div > div {
-    background: rgba(12, 20, 36, 0.7) !important;
-    border: 1px solid rgba(26, 38, 64, 0.8) !important;
-    border-radius: 6px !important;
+    background: rgba(10, 15, 26, 0.5) !important;
+    border: 1px solid rgba(212, 175, 55, 0.08) !important;
+    border-radius: 2px !important;
 }
 
 /* ═══════════════════════════════════════════
-   ラベル（フォーム要素のラベル）
+   ラベル
 ═══════════════════════════════════════════ */
 [data-testid="stWidgetLabel"] p {
-    font-family: 'IBM Plex Mono', monospace !important;
-    font-size: 0.68rem !important;
+    font-family: var(--sans) !important;
+    font-size: 0.65rem !important;
     font-weight: 500;
-    letter-spacing: 0.06em;
-    color: #6a9aaa !important;
+    text-transform: uppercase;
+    letter-spacing: 0.15em;
+    color: var(--text-muted) !important;
 }
 
 /* ═══════════════════════════════════════════
@@ -278,145 +298,135 @@ a[data-testid="stLinkButton"] p {
 ═══════════════════════════════════════════ */
 hr {
     border: none !important;
-    border-top: 1px solid rgba(29, 184, 160, 0.08) !important;
-    margin: 1rem 0 !important;
+    border-top: 1px solid rgba(212, 175, 55, 0.06) !important;
+    margin: 1.2rem 0 !important;
 }
 [data-testid="stCaptionContainer"] p,
 .stCaption {
-    font-family: 'IBM Plex Mono', monospace !important;
-    font-size: 0.64rem !important;
-    color: #3a5a6a !important;
-    letter-spacing: 0.04em;
+    font-family: var(--sans) !important;
+    font-size: 0.65rem !important;
+    color: #505868 !important;
+    letter-spacing: 0.06em;
+    font-style: italic;
 }
 
 /* ═══════════════════════════════════════════
-   コンテナ（border=True）— グラスモーフィズム
+   コンテナ（border=True）
 ═══════════════════════════════════════════ */
 [data-testid="stVerticalBlockBorderWrapper"] {
-    border: 1px solid rgba(26, 38, 64, 0.6) !important;
-    border-radius: 10px !important;
-    background: linear-gradient(135deg,
-        rgba(10, 18, 32, 0.7) 0%,
-        rgba(13, 22, 38, 0.5) 100%) !important;
-    backdrop-filter: blur(8px);
-    -webkit-backdrop-filter: blur(8px);
-    transition: border-color 0.3s ease;
+    border: 1px solid rgba(212, 175, 55, 0.05) !important;
+    border-radius: 2px !important;
+    background: rgba(10, 15, 26, 0.4) !important;
+    transition: all 0.5s var(--ease);
 }
 [data-testid="stVerticalBlockBorderWrapper"]:hover {
-    border-color: rgba(29, 184, 160, 0.15) !important;
+    border-color: rgba(212, 175, 55, 0.12) !important;
+    box-shadow: 0 8px 40px rgba(0, 0, 0, 0.15);
 }
 
 /* ═══════════════════════════════════════════
    警告・エラー・成功バナー
 ═══════════════════════════════════════════ */
 [data-testid="stAlert"] {
-    border-radius: 8px !important;
-    font-family: 'Inter', 'Noto Sans JP', sans-serif !important;
-    font-size: 0.82rem !important;
-    backdrop-filter: blur(6px);
+    border-radius: 2px !important;
+    font-family: var(--sans) !important;
+    font-size: 0.8rem !important;
 }
 
 /* ═══════════════════════════════════════════
-   select_slider オプションラベル
+   スライダーラベル
 ═══════════════════════════════════════════ */
 [data-testid="stSlider"] span {
-    font-family: 'IBM Plex Mono', monospace;
-    font-size: 0.66rem;
-    color: #4a7a8a;
+    font-family: var(--mono);
+    font-size: 0.65rem;
+    color: var(--text-muted);
 }
 
 /* ═══════════════════════════════════════════
-   タブ — プレミアムスタイル
+   タブ — ミニマルエレガンス
 ═══════════════════════════════════════════ */
 .stTabs [data-baseweb="tab-list"] {
-    gap: 2px;
-    background: rgba(6, 11, 20, 0.8);
-    border-radius: 10px 10px 0 0;
-    border: 1px solid rgba(26, 38, 64, 0.6);
-    border-bottom: none;
-    padding: 4px 6px 0;
-    backdrop-filter: blur(10px);
+    gap: 0;
+    background: transparent;
+    border-radius: 0;
+    border: none;
+    border-bottom: 1px solid rgba(212, 175, 55, 0.08);
+    padding: 0;
 }
 .stTabs [data-baseweb="tab"] {
-    font-family: 'Inter', 'Noto Sans JP', sans-serif !important;
-    font-size: 0.76rem;
-    font-weight: 500;
-    letter-spacing: 0.02em;
-    color: #4a7a8a;
-    border-radius: 8px 8px 0 0;
-    padding: 10px 22px;
-    transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+    font-family: var(--sans) !important;
+    font-size: 0.72rem;
+    font-weight: 400;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    color: var(--text-muted);
+    border-radius: 0;
+    padding: 14px 24px;
+    border: none;
+    transition: all 0.4s var(--ease);
 }
 .stTabs [data-baseweb="tab"]:hover {
-    color: #e8f0fa;
-    background: rgba(29, 184, 160, 0.06);
+    color: var(--ivory);
+    background: transparent;
 }
 .stTabs [aria-selected="true"] {
-    color: #1db8a0 !important;
-    font-weight: 600 !important;
-    border-bottom: 2px solid #1db8a0 !important;
-    background: rgba(29, 184, 160, 0.05) !important;
-    box-shadow: 0 -2px 12px rgba(29, 184, 160, 0.06);
+    color: var(--gold) !important;
+    font-weight: 500 !important;
+    border-bottom: 1px solid var(--gold) !important;
+    background: transparent !important;
 }
 .stTabs [data-baseweb="tab-panel"] {
-    border: 1px solid rgba(26, 38, 64, 0.6);
+    border: none;
     border-top: none;
-    border-radius: 0 0 10px 10px;
-    padding: 20px;
-    background: rgba(10, 16, 28, 0.6);
-    backdrop-filter: blur(8px);
+    border-radius: 0;
+    padding: 24px 4px;
+    background: transparent;
 }
 
 /* ═══════════════════════════════════════════
    エクスパンダー
 ═══════════════════════════════════════════ */
 [data-testid="stExpander"] {
-    border: 1px solid rgba(26, 38, 64, 0.5) !important;
-    border-radius: 8px !important;
-    background: linear-gradient(135deg,
-        rgba(10, 18, 32, 0.6) 0%,
-        rgba(13, 22, 38, 0.4) 100%) !important;
-    backdrop-filter: blur(6px);
-    transition: border-color 0.3s ease;
-}
-[data-testid="stExpander"]:hover {
-    border-color: rgba(29, 184, 160, 0.2) !important;
+    border: none !important;
+    border-bottom: 1px solid rgba(212, 175, 55, 0.06) !important;
+    border-radius: 0 !important;
+    background: transparent !important;
 }
 [data-testid="stExpander"] summary {
-    font-family: 'Inter', 'Noto Sans JP', sans-serif !important;
-    font-size: 0.8rem !important;
-    font-weight: 500;
-    color: #6a9aaa;
-    transition: color 0.2s ease;
+    font-family: var(--sans) !important;
+    font-size: 0.78rem !important;
+    font-weight: 400;
+    letter-spacing: 0.06em;
+    color: var(--text-muted);
+    transition: all 0.3s var(--ease);
 }
 [data-testid="stExpander"] summary:hover {
-    color: #1db8a0;
+    color: var(--gold);
+    letter-spacing: 0.08em;
 }
 
 /* ═══════════════════════════════════════════
    チャットメッセージ
 ═══════════════════════════════════════════ */
 [data-testid="stChatMessage"] {
-    font-family: 'Inter', 'Noto Sans JP', sans-serif !important;
+    font-family: var(--sans) !important;
     font-size: 0.88rem;
-    border-radius: 10px;
-    background: rgba(12, 20, 36, 0.6) !important;
-    border: 1px solid rgba(26, 38, 64, 0.4);
+    border-radius: 2px;
+    background: rgba(10, 15, 26, 0.4) !important;
+    border: 1px solid rgba(212, 175, 55, 0.04);
 }
 
 /* ═══════════════════════════════════════════
-   プログレスバー — グラデーション
+   プログレスバー — ゴールドグラデーション
 ═══════════════════════════════════════════ */
 [data-testid="stProgress"] > div > div > div {
     background: linear-gradient(90deg,
-        #1db8a0 0%,
-        #c9a84c 50%,
-        #1db8a0 100%) !important;
+        #d4af37, #e6c34d, #d4af37) !important;
     background-size: 200% 100%;
-    animation: shimmer 2s ease-in-out infinite;
-    border-radius: 4px;
+    animation: goldShimmer 3s ease-in-out infinite;
+    border-radius: 0;
 }
-@keyframes shimmer {
+@keyframes goldShimmer {
     0%   { background-position: 200% 0; }
     100% { background-position: -200% 0; }
 }
@@ -427,61 +437,58 @@ hr {
 [data-testid="stPlotlyChart"] {
     max-height: calc(100vh - 320px);
     overflow: hidden;
-    border-radius: 8px;
 }
 
 /* ═══════════════════════════════════════════
-   データフレーム / テーブル
-═══════════════════════════════════════════ */
-[data-testid="stDataFrame"] {
-    border-radius: 8px;
-    overflow: hidden;
-}
-
-/* ═══════════════════════════════════════════
-   スクロールバー — プレミアム
+   スクロールバー
 ═══════════════════════════════════════════ */
 ::-webkit-scrollbar {
-    width: 6px;
-    height: 6px;
+    width: 4px;
+    height: 4px;
 }
 ::-webkit-scrollbar-track {
-    background: rgba(8, 13, 24, 0.4);
+    background: transparent;
 }
 ::-webkit-scrollbar-thumb {
-    background: rgba(29, 184, 160, 0.2);
-    border-radius: 3px;
+    background: rgba(212, 175, 55, 0.15);
+    border-radius: 0;
 }
 ::-webkit-scrollbar-thumb:hover {
-    background: rgba(29, 184, 160, 0.4);
+    background: rgba(212, 175, 55, 0.3);
 }
 
 /* ═══════════════════════════════════════════
    全体的な本文テキスト
 ═══════════════════════════════════════════ */
-.stApp p, .stApp li, .stApp span {
-    font-family: 'Inter', 'Noto Sans JP', sans-serif;
+.stApp p, .stApp li {
+    font-family: var(--sans);
+    color: var(--ivory-muted);
+    line-height: 1.7;
 }
 
 /* ═══════════════════════════════════════════
-   ダイアログ — グラスモーフィズム
+   ダイアログ
 ═══════════════════════════════════════════ */
 [data-testid="stModal"] > div {
-    background: linear-gradient(135deg,
-        rgba(10, 16, 28, 0.95) 0%,
-        rgba(12, 20, 36, 0.92) 100%) !important;
-    border: 1px solid rgba(29, 184, 160, 0.15) !important;
-    border-radius: 14px !important;
-    backdrop-filter: blur(24px);
-    -webkit-backdrop-filter: blur(24px);
-    box-shadow:
-        0 20px 60px rgba(0, 0, 0, 0.5),
-        0 0 40px rgba(29, 184, 160, 0.05);
+    background: rgba(8, 12, 20, 0.97) !important;
+    border: 1px solid rgba(212, 175, 55, 0.1) !important;
+    border-radius: 2px !important;
+    backdrop-filter: blur(30px);
+    -webkit-backdrop-filter: blur(30px);
+    box-shadow: 0 24px 80px rgba(0, 0, 0, 0.6);
+}
+
+/* ═══════════════════════════════════════════
+   セレクション（テキスト選択時）
+═══════════════════════════════════════════ */
+::selection {
+    background: rgba(212, 175, 55, 0.2);
+    color: var(--ivory);
 }
 </style>
 """
 
 
 def apply_theme() -> None:
-    """Premium Dark テーマを適用する。各ページの先頭で呼ぶこと。"""
+    """Luxury Dark テーマを適用する。各ページの先頭で呼ぶこと。"""
     st.markdown(_CSS, unsafe_allow_html=True)
