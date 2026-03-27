@@ -380,12 +380,7 @@ def main() -> None:
         manual = st.text_input("海外ETF等の直接入力（例: VTI）", value="")
         ticker = manual.strip() if manual.strip() else selected_ticker
 
-        period = st.select_slider(
-            "表示期間",
-            options=list(PERIOD_LABELS.keys()),
-            value="6mo",
-            format_func=lambda x: PERIOD_LABELS[x],
-        )
+        period = "6mo"
 
         fetch_btn = st.button("チャートを表示", type="primary", use_container_width=True)
 
