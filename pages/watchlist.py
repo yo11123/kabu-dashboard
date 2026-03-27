@@ -6,6 +6,7 @@ import os
 import sys
 
 import pandas as pd
+import plotly.graph_objects as go
 import streamlit as st
 import yfinance as yf
 
@@ -235,6 +236,17 @@ def main() -> None:
         st.session_state.wl_remove = None
         st.rerun()
 
+    # ─── 全銘柄チャート一覧 ───────────────────────────────────────
+    st.divider()
+    st.subheader("チャート一覧")
+
+    period_opts = {"1ヶ月": "1mo", "3ヶ月": "3mo", "6ヶ月": "6mo", "1年": "1y", "2年": "2y"}
+    selected_period = st.selectbox("表示期間", list(period_opts.keys()), index=2, key="wl_chart_period")
+    yf_period = period_opts[selected_period]
+
+    for w in watchlist:
+        _render_mini_chart(w["code"], w["name"] or w["code"], yf_period)
+
 
 def _render_watch_card(item: dict, alert: bool) -> None:
     """ウォッチリストのカードを描画。"""
@@ -312,6 +324,72 @@ def _render_watch_card(item: dict, alert: bool) -> None:
     if c2.button("✕ 削除", key=f"wl_del_{idx}"):
         st.session_state.wl_remove = idx
         st.rerun()
+
+
+@st.cache_data(ttl=600)
+def _fetch_chart_data(ticker: str, period: str) -> pd.DataFrame | None:
+    """チャート用の株価データを取得。"""
+    try:
+        df = yf.Ticker(ticker).history(period=period)
+        if df is not None and not df.empty:
+            if df.index.tz is not None:
+                df.index = df.index.tz_localize(None)
+            return df
+    except Exception:
+        pass
+    return None
+
+
+def _render_mini_chart(ticker: str, name: str, period: str) -> None:
+    """ミニチャート（ローソク足 + SMA25）を描画。"""
+    df = _fetch_chart_data(ticker, period)
+    if df is None or df.empty:
+        st.caption(f"{name} ({ticker}) — データ取得失敗")
+        return
+
+    close = df["Close"]
+    price = float(close.iloc[-1])
+    prev = float(close.iloc[0])
+    change_pct = (price / prev - 1) * 100
+    chg_color = "#5ca08b" if change_pct >= 0 else "#c45c5c"
+
+    sma25 = close.rolling(25).mean()
+
+    fig = go.Figure()
+    fig.add_trace(go.Candlestick(
+        x=df.index,
+        open=df["Open"], high=df["High"],
+        low=df["Low"], close=df["Close"],
+        increasing_line_color="#5ca08b",
+        decreasing_line_color="#c45c5c",
+        increasing_fillcolor="#5ca08b",
+        decreasing_fillcolor="#c45c5c",
+        showlegend=False,
+    ))
+    fig.add_trace(go.Scatter(
+        x=df.index, y=sma25,
+        mode="lines",
+        line=dict(color="#d4af37", width=1),
+        name="SMA25",
+        showlegend=False,
+    ))
+    fig.update_layout(
+        title=dict(
+            text=(
+                f"{name}　¥{price:,.0f}　"
+                f"<span style='color:{chg_color}'>{change_pct:+.1f}%</span>"
+            ),
+            font=dict(family="'Inter', sans-serif", size=13, color="#f0ece4"),
+        ),
+        height=250,
+        margin=dict(l=50, r=20, t=40, b=20),
+        plot_bgcolor="#06090f",
+        paper_bgcolor="#0a0f1a",
+        font=dict(family="'IBM Plex Mono', monospace", color="#6b7280", size=10),
+        xaxis=dict(showgrid=False, rangeslider_visible=False),
+        yaxis=dict(showgrid=True, gridcolor="#111620"),
+    )
+    st.plotly_chart(fig, use_container_width=True)
 
 
 main()
