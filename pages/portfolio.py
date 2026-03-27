@@ -493,30 +493,50 @@ def main() -> None:
     # ─── 保有一覧テーブル ─────────────────────────────────────────
     st.subheader("保有銘柄一覧")
 
-    # 削除ボタン付きリスト
+    # 銘柄リスト（編集・削除）
     to_remove = None
+    changed = False
     for i, h in enumerate(holdings):
-        cols = st.columns([3, 2, 2, 2, 1])
         name_display = h["name"] or h["code"]
-        cols[0].markdown(f"**{name_display}** `{h['code']}`")
-        cols[1].markdown(f"{h['shares']:,}株")
-        cols[2].markdown(f"取得: ¥{h['avg_cost']:,.0f}" if h["avg_cost"] > 0 else "取得単価: 未設定")
 
-        # 現在価格（キャッシュ）
+        # 現在価格
         price_info = _fetch_current_price(h["code"])
-        if price_info:
-            chg = price_info.get("change_pct", 0)
-            chg_color = "#5ca08b" if chg >= 0 else "#c45c5c"
-            cols[3].markdown(
-                f"¥{price_info['price']:,.0f} "
-                f"<span style='color:{chg_color};'>{chg:+.2f}%</span>",
-                unsafe_allow_html=True,
-            )
-        else:
-            cols[3].markdown("取得中...")
+        price = price_info.get("price", 0) if price_info else 0
+        chg = price_info.get("change_pct", 0) if price_info else 0
+        chg_color = "#5ca08b" if chg >= 0 else "#c45c5c"
+        price_str = f"¥{price:,.0f} ({chg:+.2f}%)" if price else "取得中..."
 
-        if cols[4].button("✕", key=f"rm_{i}", help="削除"):
-            to_remove = i
+        with st.expander(f"**{name_display}**　`{h['code']}`　　{price_str}", expanded=False):
+            c1, c2, c3 = st.columns([2, 2, 1])
+            new_shares = c1.number_input(
+                "株数", min_value=1, value=h["shares"], step=100,
+                key=f"edit_shares_{i}",
+            )
+            new_cost = c2.number_input(
+                "取得単価 (¥)", min_value=0.0, value=float(h["avg_cost"]), step=100.0,
+                key=f"edit_cost_{i}",
+            )
+            if c3.button("削除", key=f"rm_{i}", use_container_width=True):
+                to_remove = i
+
+            if new_shares != h["shares"] or new_cost != h["avg_cost"]:
+                st.session_state.portfolio_holdings[i]["shares"] = int(new_shares)
+                st.session_state.portfolio_holdings[i]["avg_cost"] = float(new_cost)
+                changed = True
+
+            # 損益表示
+            if h["avg_cost"] > 0 and price > 0:
+                pnl = (price - h["avg_cost"]) * h["shares"]
+                pnl_pct = (price / h["avg_cost"] - 1) * 100
+                pnl_color = "#5ca08b" if pnl >= 0 else "#c45c5c"
+                st.markdown(
+                    f"評価額 **¥{price * h['shares']:,.0f}** ｜ "
+                    f"含み損益 <span style='color:{pnl_color};'>**¥{pnl:,.0f}** ({pnl_pct:+.1f}%)</span>",
+                    unsafe_allow_html=True,
+                )
+
+    if changed:
+        save_from_session("portfolio_holdings", "portfolio_holdings")
 
     if to_remove is not None:
         st.session_state.portfolio_holdings.pop(to_remove)
