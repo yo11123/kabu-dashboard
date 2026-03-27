@@ -528,6 +528,11 @@ hr {
     background: rgba(212, 175, 55, 0.2);
     color: var(--ivory);
 }
+
+/* Streamlit デフォルトの Running/spinner 表示を非表示 */
+[data-testid="stStatusWidget"] {
+    display: none !important;
+}
 </style>
 """
 

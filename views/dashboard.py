@@ -815,24 +815,27 @@ def main() -> None:
         if _cached_result and _cached_result != "__run__":
             _render_ai_results(_cached_result)
         elif _cached_result == "__run__":
-            with helix_spinner("AI 分析を実行中..."):
-                _ai_result = get_comprehensive_analysis(
-                    ticker=ticker,
-                    company_name=company_name,
-                    tech_json=tech_json,
-                    fund_text=fund_text,
-                    news_titles=news_titles,
-                    margin_text=_margin_text,
-                    market_text=_market_text,
-                    provider=ai_provider,
-                    api_key=ai_api_key,
-                )
+            _ai_placeholder = st.empty()
+            from modules.loading import show_loading
+            _ai_placeholder.markdown("")
+            show_loading("AI 分析を実行中...")
+            _ai_result = get_comprehensive_analysis(
+                ticker=ticker,
+                company_name=company_name,
+                tech_json=tech_json,
+                fund_text=fund_text,
+                news_titles=news_titles,
+                margin_text=_margin_text,
+                market_text=_market_text,
+                provider=ai_provider,
+                api_key=ai_api_key,
+            )
             st.session_state[_cache_key][_analyzed_key] = _ai_result
             save_daily(_cache_key, st.session_state[_cache_key])
-            _render_ai_results(_ai_result)
+            st.rerun()
         else:
-            st.info(
-                "**AI総合分析を実行** ボタンを押すと、テクニカル・ファンダメンタル・ニュース・マーケット環境を"
+            st.caption(
+                f"「AI総合分析を実行」ボタンを押すと、テクニカル・ファンダメンタル・ニュース・マーケット環境を"
                 f"統合した分析レポートを {_provider_label} が生成します。"
             )
 
