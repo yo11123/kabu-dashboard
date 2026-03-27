@@ -364,11 +364,11 @@ def _parse_json(text: str) -> dict:
 # ─── プロバイダー別 LLM 呼び出し ─────────────────────────────────────────
 
 
-def _call_claude(prompt: str, api_key: str) -> str:
+def _call_claude(prompt: str, api_key: str, model: str = "claude-haiku-4-5-20251001") -> str:
     """Claude (Anthropic) を呼び出す。"""
     client = anthropic.Anthropic(api_key=api_key)
     response = client.messages.create(
-        model="claude-haiku-4-5-20251001",
+        model=model,
         max_tokens=4096,
         messages=[{"role": "user", "content": prompt}],
     )
@@ -487,7 +487,7 @@ def get_comprehensive_analysis(
                     "overall_detail": "Anthropic API キーが設定されていません。サイドバーにキーを入力するか、secrets.toml を確認してください。",
                     "error": True,
                 }
-            text = _call_claude(prompt, key)
+            text = _call_claude(prompt, key, model="claude-sonnet-4-6-20250514")
 
         elif provider == "openai":
             key = api_key.strip()
