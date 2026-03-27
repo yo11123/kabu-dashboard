@@ -64,8 +64,15 @@ def _fetch_current_price(ticker: str) -> dict:
         hist = t.history(period="1mo")
         if hist is None or hist.empty:
             return {}
-        last_close = float(hist["Close"].iloc[-1])
-        prev_close = float(hist["Close"].iloc[-2]) if len(hist) >= 2 else last_close
+        # NaN を除去してから取得
+        close = hist["Close"].dropna()
+        if close.empty:
+            return {}
+        last_close = float(close.iloc[-1])
+        prev_close = float(close.iloc[-2]) if len(close) >= 2 else last_close
+        # NaN チェック
+        if last_close != last_close or prev_close != prev_close:
+            return {}
         change = last_close - prev_close
         change_pct = (change / prev_close * 100) if prev_close else 0
         try:
@@ -513,6 +520,11 @@ def main() -> None:
         price_info = _fetch_current_price(h["code"])
         price = price_info.get("price", 0) if price_info else 0
         chg = price_info.get("change_pct", 0) if price_info else 0
+        # NaN 防止
+        if price != price:  # NaN check
+            price = 0
+        if chg != chg:
+            chg = 0
         chg_color = "#5ca08b" if chg >= 0 else "#c45c5c"
         price_str = f"¥{price:,.0f} ({chg:+.2f}%)" if price > 0 else "価格取得中..."
         shares_str = f"{h['shares']:,}株"
@@ -525,7 +537,7 @@ def main() -> None:
             pnl_label = "含み益" if pnl_val >= 0 else "含み損"
             pnl_html = f"　<span style='color:{pnl_color};font-weight:600;'>{pnl_label} ¥{abs(pnl_val):,.0f} ({pnl_pct:+.1f}%)</span>"
 
-        chg_html = f"<span style='color:{chg_color};'>¥{price:,.0f} ({chg:+.2f}%)</span>" if price else "取得中..."
+        chg_html = f"<span style='color:{chg_color};'>¥{price:,.0f} ({chg:+.2f}%)</span>" if price > 0 else "価格取得中..."
 
         st.markdown(
             f"<details><summary style='cursor:pointer;list-style:none;padding:8px 0;'>"
