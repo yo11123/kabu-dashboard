@@ -109,8 +109,9 @@ header[data-testid="stHeader"] {
     background: linear-gradient(90deg, var(--gold), transparent);
     margin-top: 8px;
 }
-/* ページナビゲーションリンク */
-[data-testid="stSidebarNav"] a span {
+/* ページナビゲーションリンク（テキスト部分のみ、アイコン span を除外）*/
+[data-testid="stSidebarNav"] a [data-testid="stMarkdownContainer"],
+[data-testid="stSidebarNav"] a > span:not(.material-symbols-rounded) {
     font-family: var(--sans) !important;
     font-size: 0.78rem;
     font-weight: 400;
@@ -118,9 +119,31 @@ header[data-testid="stHeader"] {
     color: var(--ivory-muted) !important;
     transition: all 0.4s var(--ease);
 }
-[data-testid="stSidebarNav"] a:hover span {
+[data-testid="stSidebarNav"] a:hover [data-testid="stMarkdownContainer"],
+[data-testid="stSidebarNav"] a:hover > span:not(.material-symbols-rounded) {
     color: var(--gold) !important;
     letter-spacing: 0.06em;
+}
+/* Material Icons のスタイル保護 */
+[data-testid="stSidebarNav"] .material-symbols-rounded {
+    font-family: 'Material Symbols Rounded' !important;
+    font-size: 1.15rem !important;
+    color: var(--gold-dim) !important;
+    margin-right: 8px;
+    vertical-align: middle;
+}
+[data-testid="stSidebarNav"] a:hover .material-symbols-rounded {
+    color: var(--gold) !important;
+}
+/* ナビグループ見出し */
+[data-testid="stSidebarNav"] h2,
+[data-testid="stSidebarNav"] [data-testid="stMarkdownContainer"] p {
+    font-family: var(--sans) !important;
+    font-size: 0.62rem !important;
+    font-weight: 600 !important;
+    text-transform: uppercase;
+    letter-spacing: 0.18em;
+    color: var(--gold) !important;
 }
 
 /* ═══════════════════════════════════════════
