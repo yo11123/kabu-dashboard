@@ -628,8 +628,9 @@ def main() -> None:
         st.divider()
 
         # 画像から自動入力
+        from modules.ai_analysis import get_light_llm_provider
         st.header("画像から一括登録")
-        st.caption("証券アプリのスクリーンショットを複数枚まとめてアップロード可能。同じ銘柄は自動で重複排除されます。")
+        st.caption(f"{get_light_llm_provider()} で読み取り。複数枚アップロード可能。同じ銘柄は自動で重複排除。")
         uploaded_files = st.file_uploader(
             "スクリーンショット（複数選択可）",
             type=["png", "jpg", "jpeg", "webp"],

@@ -413,6 +413,11 @@ def _get_gemini_key() -> str:
         return ""
 
 
+def get_light_llm_provider() -> str:
+    """現在の軽量LLMプロバイダー名を返す。"""
+    return "Gemini" if _get_gemini_key() else "Claude"
+
+
 def call_light_llm(prompt: str) -> str:
     """軽量タスク用。Gemini 無料枠を優先、なければ Claude Haiku。"""
     gemini_key = _get_gemini_key()

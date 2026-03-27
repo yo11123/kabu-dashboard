@@ -813,8 +813,9 @@ def main() -> None:
         _outlook_provider = "claude" if _outlook_key else ""
 
         if _outlook_provider:
+            from modules.ai_analysis import get_light_llm_provider
             _market_news = tuple(_fetch_market_news())
-            with helix_spinner("市場ニュース＋指標データからAIが相場観を分析中..."):
+            with helix_spinner(f"市場ニュース＋指標データから {get_light_llm_provider()} が相場観を分析中..."):
                 _outlook = _get_market_outlook(_market_text, _market_news, _outlook_provider, _outlook_key)
             _render_market_outlook(_outlook)
             st.divider()

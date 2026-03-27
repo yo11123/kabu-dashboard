@@ -320,7 +320,9 @@ def main() -> None:
         st.plotly_chart(fig, use_container_width=True)
 
     elif strategy_mode == "AI提案":
+        from modules.ai_analysis import get_light_llm_provider
         st.subheader("AI戦略提案")
+        st.caption(f"Powered by {get_light_llm_provider()}")
 
         if not api_key:
             st.warning("APIキーを入力してください。")
