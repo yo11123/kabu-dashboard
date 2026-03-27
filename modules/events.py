@@ -369,11 +369,34 @@ def fetch_latest_news(
     yf_items = _fetch_yfinance_news_raw(ticker, start_dt, end_dt)
     kabutan_items = _fetch_kabutan_news_raw(ticker, start_dt, end_dt)
 
+    # TDNet 適時開示
+    tdnet_items = []
+    try:
+        from modules.tdnet import fetch_tdnet_disclosures
+        disclosures = fetch_tdnet_disclosures(ticker)
+        for d in disclosures:
+            try:
+                pub_dt = pd.Timestamp(d["date"])
+                if pub_dt >= start_dt and pub_dt <= end_dt:
+                    impact = d.get("impact", "neutral")
+                    prefix = {"positive": "📈", "negative": "📉"}.get(impact, "📋")
+                    tdnet_items.append({
+                        "pub_dt": pub_dt,
+                        "title": f"[{d.get('category', 'IR')}] {d['title']}",
+                        "publisher": "TDNet適時開示",
+                        "link": d.get("link", ""),
+                        "uuid": f"tdnet_{abs(hash(d.get('link', d['title'])))}",
+                    })
+            except Exception:
+                continue
+    except Exception:
+        pass
+
     # マージ＋重複除去（タイトル先頭30文字）
     seen: set[str] = set()
     merged: list[dict] = []
-    # 日経→株探→汎用ニュース→yfinance の優先順
-    for item in nikkei_items + kabutan_items + general_items + yf_items:
+    # TDNet→日経→株探→汎用ニュース→yfinance の優先順
+    for item in tdnet_items + nikkei_items + kabutan_items + general_items + yf_items:
         key = item["title"][:30]
         if key not in seen:
             seen.add(key)
