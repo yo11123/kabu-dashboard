@@ -582,7 +582,14 @@ def main() -> None:
     st.divider()
 
     # ─── 分析実行 ─────────────────────────────────────────────────
-    if st.button("AI分析を実行", use_container_width=True, type="primary"):
+    has_cached = bool(st.session_state.portfolio_results)
+    if has_cached:
+        st.caption("✅ 本日の分析結果を表示中（キャッシュ済み・API消費なし）。再分析するには下のボタンを押してください。")
+    if st.button(
+        "再分析を実行（API消費あり）" if has_cached else "AI分析を実行",
+        use_container_width=True,
+        type="secondary" if has_cached else "primary",
+    ):
         api_key = _get_api_key()
         if not api_key and provider == "claude":
             st.error("APIキーが設定されていません。サイドバーでAPIキーを入力してください。")
