@@ -402,7 +402,8 @@ def _render_mini_chart(ticker: str, name: str, period: str) -> None:
         plot_bgcolor="#06090f",
         paper_bgcolor="#0a0f1a",
         font=dict(family="'IBM Plex Mono', monospace", color="#6b7280", size=10),
-        xaxis=dict(showgrid=False, rangeslider_visible=False),
+        xaxis=dict(showgrid=False, rangeslider_visible=False,
+                   tickformat="%Y/%m/%d"),
         yaxis=dict(showgrid=True, gridcolor="#111620"),
     )
     st.plotly_chart(fig, use_container_width=True)

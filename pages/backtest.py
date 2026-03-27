@@ -85,7 +85,7 @@ def _equity_chart(result: dict, ticker: str) -> go.Figure:
         font=dict(family="'IBM Plex Mono', monospace", color=TEXT_MUTED, size=11),
         margin=dict(l=60, r=20, t=50, b=40),
         height=400,
-        xaxis=dict(showgrid=True, gridcolor=GRID_COLOR),
+        xaxis=dict(showgrid=True, gridcolor=GRID_COLOR, tickformat="%Y/%m/%d"),
         yaxis=dict(showgrid=True, gridcolor=GRID_COLOR, title="評価額 (¥)"),
         legend=dict(orientation="h", y=1.05),
     )
@@ -311,7 +311,7 @@ def main() -> None:
             font=dict(family="'IBM Plex Mono', monospace", color=TEXT_MUTED, size=11),
             margin=dict(l=60, r=20, t=50, b=40),
             height=450,
-            xaxis=dict(showgrid=True, gridcolor=GRID_COLOR),
+            xaxis=dict(showgrid=True, gridcolor=GRID_COLOR, tickformat="%Y/%m/%d"),
             yaxis=dict(showgrid=True, gridcolor=GRID_COLOR, title="評価額 (¥)"),
             legend=dict(orientation="h", y=1.08),
         )
