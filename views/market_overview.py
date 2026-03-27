@@ -16,6 +16,7 @@ from modules.chart import create_candlestick_chart
 from modules.market_hours import market_status_label
 from modules.styles import apply_theme
 
+from modules.loading import helix_spinner
 apply_theme()
 
 JST = pytz.timezone("Asia/Tokyo")
@@ -87,7 +88,7 @@ for i in range(0, len(INDICES), 2):
 
     for col, idx in zip(cols, row_indices):
         with col:
-            with st.spinner(f"{idx['name']} 取得中..."):
+            with helix_spinner(f"{idx['name']} 取得中..."):
                 df = fetch_market_data(idx["ticker"], period)
 
             if df is None or df.empty:

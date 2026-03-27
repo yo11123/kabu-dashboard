@@ -15,6 +15,7 @@ from modules.styles import apply_theme
 from modules.data_loader import load_tickers, load_all_tse_stocks
 from modules.persistence import load_into_session, save_from_session
 
+from modules.loading import helix_spinner
 apply_theme()
 
 TICKERS_PATH = os.path.join(os.path.dirname(__file__), "..", "data", "nikkei225_tickers.txt")
@@ -344,7 +345,7 @@ def main() -> None:
     if len(scan_stocks) > 300:
         st.warning(f"⚠️ {len(scan_stocks):,} 銘柄のスキャンは初回 3〜5 分かかります（結果は4時間キャッシュ）。")
 
-    with st.spinner(f"{len(scan_stocks):,} 銘柄をスキャン中..."):
+    with helix_spinner(f"{len(scan_stocks):,} 銘柄をスキャン中..."):
         all_data = _scan_universe(tickers_tuple)
 
     # フィルタ適用

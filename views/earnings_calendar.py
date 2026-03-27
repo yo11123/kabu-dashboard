@@ -16,6 +16,7 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from modules.data_loader import load_tickers
 from modules.styles import apply_theme
 
+from modules.loading import helix_spinner
 apply_theme()
 
 TICKERS_PATH = os.path.join(os.path.dirname(__file__), "..", "data", "nikkei225_tickers.txt")
@@ -80,7 +81,7 @@ if refresh_btn:
     st.rerun()
 
 # ── データ取得 ──
-with st.spinner("決算日データを取得中... 初回は1〜2分かかります"):
+with helix_spinner("決算日データを取得中... 初回は1〜2分かかります"):
     all_earnings = fetch_all_next_earnings(tuple(
         {"code": t["code"], "name": t["name"], "sector": t["sector"]} for t in tickers
     ))

@@ -16,6 +16,7 @@ except ImportError:
     def _lstm_predict(*_a, **_kw):
         return None
 
+from modules.loading import helix_spinner
 apply_theme()
 
 TICKERS_PATH = os.path.join(os.path.dirname(__file__), "..", "data", "nikkei225_tickers.txt")
@@ -262,7 +263,7 @@ def main() -> None:
         ticker_names   = tuple(t.get("name", "") for t in scan_items)
         ticker_markets = tuple(t.get("market", "") for t in scan_items)
 
-        with st.spinner(
+        with helix_spinner(
             f"{len(scan_items):,} 銘柄をスキャン中…"
             "（初回は数十秒〜数分かかります）"
         ):

@@ -32,6 +32,7 @@ from modules.ai_analysis import (
     get_chat_response,
 )
 
+from modules.loading import helix_spinner
 apply_theme()
 try_restore_from_cookies()
 
@@ -487,7 +488,7 @@ def main() -> None:
     ticker_changed = st.session_state.get("current_ticker") != ticker
 
     if fetch_btn or ticker_changed:
-        with st.spinner(f"{ticker} のデータを取得中..."):
+        with helix_spinner(f"{ticker} のデータを取得中..."):
             df_raw = fetch_stock_data_max_realtime(ticker) if is_tse_open() \
                 else fetch_stock_data_max(ticker)
     else:
@@ -529,7 +530,7 @@ def main() -> None:
     chart_start = df.index[0].strftime("%Y-%m-%d")
     chart_end = df.index[-1].strftime("%Y-%m-%d")
 
-    with st.spinner("イベントデータを取得中..."):
+    with helix_spinner("イベントデータを取得中..."):
         ticker_info = fetch_ticker_info(ticker)
         earnings_events = fetch_earnings_events(ticker, chart_start, chart_end) if show_earnings else []
         # company_name を渡すことで Google News RSS の日経検索精度を高める
@@ -672,7 +673,7 @@ def main() -> None:
             show_news_dialog(str(original_date), news_events, ticker, ticker_info)
 
     # ─── データ事前取得（タブ共用）──────────────────────────────────
-    with st.spinner("データを取得中..."):
+    with helix_spinner("データを取得中..."):
         _margin = fetch_margin_data(ticker)
         _fund_yf = fetch_fundamental_yfinance(ticker)
         _fund_kb = fetch_fundamental_kabutan(ticker)
@@ -814,7 +815,7 @@ def main() -> None:
         if _cached_result and _cached_result != "__run__":
             _render_ai_results(_cached_result)
         elif _cached_result == "__run__":
-            with st.spinner("AI 分析を実行中..."):
+            with helix_spinner("AI 分析を実行中..."):
                 _ai_result = get_comprehensive_analysis(
                     ticker=ticker,
                     company_name=company_name,
@@ -876,7 +877,7 @@ def main() -> None:
                 with st.chat_message("user"):
                     st.markdown(_user_input)
                 with st.chat_message("assistant"):
-                    with st.spinner("回答を生成中..."):
+                    with helix_spinner("回答を生成中..."):
                         _sys_prompt = build_chat_system_prompt(
                             ticker, company_name, tech_json, fund_text, _margin_text
                         )

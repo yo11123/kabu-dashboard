@@ -23,6 +23,7 @@ from modules.market_context import fetch_market_context_text, fetch_market_snaps
 from modules.market_hours import market_status_label
 from modules.styles import apply_theme
 
+from modules.loading import helix_spinner
 apply_theme()
 
 TICKERS_PATH = os.path.join(os.path.dirname(__file__), "..", "data", "nikkei225_tickers.txt")
@@ -813,7 +814,7 @@ def main() -> None:
 
         if _outlook_provider:
             _market_news = tuple(_fetch_market_news())
-            with st.spinner("市場ニュース＋指標データからAIが相場観を分析中..."):
+            with helix_spinner("市場ニュース＋指標データからAIが相場観を分析中..."):
                 _outlook = _get_market_outlook(_market_text, _market_news, _outlook_provider, _outlook_key)
             _render_market_outlook(_outlook)
             st.divider()

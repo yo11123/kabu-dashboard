@@ -18,6 +18,7 @@ from modules.styles import (
 )
 from modules.data_loader import load_tickers, load_all_tse_stocks
 
+from modules.loading import helix_spinner
 apply_theme()
 
 from modules.backtest import (
@@ -213,7 +214,7 @@ def main() -> None:
     # ─── バックテスト実行 ─────────────────────────────────────────
     company_name = stock_map.get(ticker, ticker)
 
-    with st.spinner(f"{company_name} のデータを取得中..."):
+    with helix_spinner(f"{company_name} のデータを取得中..."):
         try:
             df = yf.Ticker(ticker).history(period=period_map[period], interval="1d")
             if df.empty:
@@ -326,7 +327,7 @@ def main() -> None:
             st.stop()
 
         # まず全戦略をバックテスト
-        with st.spinner("全戦略をバックテスト中..."):
+        with helix_spinner("全戦略をバックテスト中..."):
             results_all = {}
             for name, strat in PRESET_STRATEGIES.items():
                 result = run_backtest(bt_df, strat["buy_condition"], strat["sell_condition"], capital)
@@ -340,7 +341,7 @@ def main() -> None:
                     "buy_and_hold_return": result["buy_and_hold_return"],
                 }
 
-        with st.spinner("AIが最適戦略を分析中..."):
+        with helix_spinner("AIが最適戦略を分析中..."):
             ai_result = _ai_strategy_suggestion(
                 ticker=ticker,
                 company_name=company_name,

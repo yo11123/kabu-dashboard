@@ -14,6 +14,7 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from modules.styles import apply_theme
 
+from modules.loading import helix_spinner
 apply_theme()
 
 from modules.persistence import load_into_session, save_from_session, save_daily, load_daily, try_restore_from_cookies
@@ -644,7 +645,7 @@ def main() -> None:
                 # 全画像から銘柄を収集（情報をマージ）
                 all_parsed: dict[str, dict] = {}
                 for i, uploaded in enumerate(uploaded_files):
-                    with st.spinner(f"画像 {i + 1}/{len(uploaded_files)} を解析中..."):
+                    with helix_spinner(f"画像 {i + 1}/{len(uploaded_files)} を解析中..."):
                         parsed = _parse_portfolio_image(uploaded.read(), _api_key)
                     if parsed:
                         for item in parsed:

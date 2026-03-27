@@ -21,6 +21,7 @@ from modules.market_context import (
 from modules.market_hours import market_status_label
 from modules.styles import BG_BASE, BG_PANEL, GRID_COLOR, TEXT_MUTED, apply_theme
 
+from modules.loading import helix_spinner
 apply_theme()
 
 
@@ -125,7 +126,7 @@ def _render_live_indicator(name: str, data: dict, period: str) -> None:
     st.metric(name, val_str, f"{change_pct:+.2f}%")
 
     if ticker:
-        with st.spinner("チャート読込中..."):
+        with helix_spinner("チャート読込中..."):
             df = fetch_indicator_history(ticker, period)
         if df is not None and not df.empty:
             fig = _make_chart(df, color=color)
@@ -145,7 +146,7 @@ def main() -> None:
     st.title("🌐 市場指標ダッシュボード")
     st.caption("テクニカル・センチメント・マクロ経済まで網羅した全58指標ガイド")
 
-    with st.spinner("市場データを取得中..."):
+    with helix_spinner("市場データを取得中..."):
         snapshot = fetch_market_snapshot()
         derived  = calc_derived_indicators(snapshot)
 

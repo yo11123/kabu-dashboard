@@ -16,6 +16,7 @@ from modules.styles import (
     ACCENT, UP_COLOR, DOWN_COLOR,
 )
 
+from modules.loading import helix_spinner
 apply_theme()
 
 from modules.sector_analysis import (
@@ -134,7 +135,7 @@ def main() -> None:
             st.rerun()
 
     # ─── データ取得 ───────────────────────────────────────────────
-    with st.spinner("セクターデータを取得中..."):
+    with helix_spinner("セクターデータを取得中..."):
         perf_df = fetch_sector_performance()
         flow_df = calc_fund_flow()
         monthly_df = calc_monthly_sector_returns()
