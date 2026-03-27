@@ -4,6 +4,8 @@ from streamlit_autorefresh import st_autorefresh
 
 import pandas as pd
 
+from modules.persistence import save_daily, load_daily
+
 from modules.data_loader import (
     fetch_stock_data_max,
     fetch_stock_data_max_realtime,
@@ -774,31 +776,38 @@ def main() -> None:
     # TAB 2: AI 総合分析
     # ════════════════════════════════════════════════════════════════
     with tab_ai:
-        if "analyzed_tickers" not in st.session_state:
-            st.session_state.analyzed_tickers = set()
+        # ── 分析結果のキャッシュ管理 ──
+        _cache_key = "dashboard_ai_cache"
+        if _cache_key not in st.session_state:
+            st.session_state[_cache_key] = load_daily(_cache_key, default={})
 
         _analyzed_key = f"{ticker}::{ai_provider}"
-        already_analyzed = _analyzed_key in st.session_state.analyzed_tickers
+        _cached_result = st.session_state[_cache_key].get(_analyzed_key)
 
         btn_col, clear_col = st.columns([3, 1])
-        if btn_col.button("🤖 AI総合分析を実行", type="primary", key="main_ai_btn", use_container_width=True):
-            st.session_state.analyzed_tickers.add(_analyzed_key)
-            already_analyzed = True
+
+        if _cached_result:
+            st.caption("✅ 本日の分析結果を表示中（キャッシュ済み・API消費なし）")
+            if btn_col.button("再分析を実行（API消費あり）", key="main_ai_btn", use_container_width=True):
+                _cached_result = None
+                if _analyzed_key in st.session_state[_cache_key]:
+                    del st.session_state[_cache_key][_analyzed_key]
+                get_comprehensive_analysis.clear()
+        else:
+            if btn_col.button("AI総合分析を実行", type="primary", key="main_ai_btn", use_container_width=True):
+                _cached_result = "__run__"
 
         if clear_col.button("🗑️ キャッシュクリア", key="main_ai_clear_btn", use_container_width=True,
                             help="前回の分析結果を削除して再実行します"):
             get_comprehensive_analysis.clear()
-            st.session_state.analyzed_tickers.discard(_analyzed_key)
-            already_analyzed = False
+            if _analyzed_key in st.session_state[_cache_key]:
+                del st.session_state[_cache_key][_analyzed_key]
+                save_daily(_cache_key, st.session_state[_cache_key])
             st.rerun()
 
-        if not already_analyzed:
-            st.info(
-                "**AI総合分析を実行** ボタンを押すと、テクニカル・ファンダメンタル・ニュース・マーケット環境を"
-                f"統合した分析レポートを {_provider_label} が生成します。"
-            )
-
-        if already_analyzed:
+        if _cached_result and _cached_result != "__run__":
+            _render_ai_results(_cached_result)
+        elif _cached_result == "__run__":
             with st.spinner("AI 分析を実行中..."):
                 _ai_result = get_comprehensive_analysis(
                     ticker=ticker,
@@ -811,7 +820,14 @@ def main() -> None:
                     provider=ai_provider,
                     api_key=ai_api_key,
                 )
+            st.session_state[_cache_key][_analyzed_key] = _ai_result
+            save_daily(_cache_key, st.session_state[_cache_key])
             _render_ai_results(_ai_result)
+        else:
+            st.info(
+                "**AI総合分析を実行** ボタンを押すと、テクニカル・ファンダメンタル・ニュース・マーケット環境を"
+                f"統合した分析レポートを {_provider_label} が生成します。"
+            )
 
     # ════════════════════════════════════════════════════════════════
     # TAB 3: AI チャット
