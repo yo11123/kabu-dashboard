@@ -533,6 +533,14 @@ hr {
 [data-testid="stStatusWidget"] {
     display: none !important;
 }
+
+/* ページタイトル横の Material Icon を非表示 */
+[data-testid="stPageLink-NavLink"] img,
+span[data-testid="stIconMaterial"]:has(+ h1),
+h1 .material-symbols-rounded,
+[data-testid="stHeader"] .material-symbols-rounded {
+    display: none !important;
+}
 </style>
 """
 
