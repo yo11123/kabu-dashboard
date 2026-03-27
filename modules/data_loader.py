@@ -15,10 +15,10 @@ def fetch_stock_data_max_realtime(ticker: str) -> pd.DataFrame | None:
     return _fetch(ticker, "max", "1d")
 
 
-@st.cache_data(ttl=21600)
+@st.cache_data(ttl=3600)
 def fetch_stock_data_max(ticker: str) -> pd.DataFrame | None:
     """
-    上場来全データを取得（TTL=6時間）。東証閉場中に使用する。
+    上場来全データを取得（TTL=1時間）。東証閉場中に使用する。
     """
     return _fetch(ticker, "max", "1d")
 
