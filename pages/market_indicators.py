@@ -28,22 +28,46 @@ apply_theme()
 # ─── スパークラインチャート生成 ────────────────────────────────────────
 
 def _make_chart(df, title: str = "", color: str = "#4caf50") -> go.Figure:
-    """指標のラインチャートを生成する。"""
+    """指標のローソク足チャートを生成する。OHLCがなければラインで表示。"""
     fig = go.Figure()
-    fig.add_trace(go.Scatter(
-        x=df.index,
-        y=df["Close"],
-        mode="lines",
-        line=dict(color=color, width=1.5),
-        fill="tozeroy",
-        fillcolor=f"rgba({int(color[1:3], 16)},{int(color[3:5], 16)},{int(color[5:7], 16)},0.08)",
-        hovertemplate="%{x|%Y-%m-%d}: %{y:,.2f}<extra></extra>",
-    ))
+    has_ohlc = all(c in df.columns for c in ["Open", "High", "Low", "Close"])
+
+    if has_ohlc:
+        fig.add_trace(go.Candlestick(
+            x=df.index,
+            open=df["Open"], high=df["High"],
+            low=df["Low"], close=df["Close"],
+            increasing_line_color="#5ca08b",
+            decreasing_line_color="#c45c5c",
+            increasing_fillcolor="#5ca08b",
+            decreasing_fillcolor="#c45c5c",
+            showlegend=False,
+        ))
+        # SMA25
+        if len(df) >= 25:
+            sma = df["Close"].rolling(25).mean()
+            fig.add_trace(go.Scatter(
+                x=df.index, y=sma,
+                mode="lines",
+                line=dict(color="#d4af37", width=1),
+                name="SMA25",
+                showlegend=False,
+            ))
+    else:
+        fig.add_trace(go.Scatter(
+            x=df.index, y=df["Close"],
+            mode="lines",
+            line=dict(color=color, width=1.5),
+            fill="tozeroy",
+            fillcolor=f"rgba({int(color[1:3], 16)},{int(color[3:5], 16)},{int(color[5:7], 16)},0.08)",
+            hovertemplate="%{x|%Y-%m-%d}: %{y:,.2f}<extra></extra>",
+        ))
+
     fig.update_layout(
         title=dict(text=title, font=dict(size=12, color=TEXT_MUTED)),
         margin=dict(l=40, r=10, t=30, b=20),
-        height=180,
-        xaxis=dict(showgrid=False, tickfont=dict(size=9, color=TEXT_MUTED)),
+        height=220,
+        xaxis=dict(showgrid=False, rangeslider_visible=False, tickfont=dict(size=9, color=TEXT_MUTED)),
         yaxis=dict(showgrid=True, gridcolor=GRID_COLOR, tickfont=dict(size=9, color=TEXT_MUTED)),
         plot_bgcolor=BG_BASE,
         paper_bgcolor=BG_PANEL,
