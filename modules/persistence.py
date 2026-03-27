@@ -223,7 +223,20 @@ def init_persistence() -> None:
     )
 
     if not has_file_data and not st.session_state.get("_gist_restore_done"):
+        token = _get_github_token()
+        gist_id = _get_gist_id()
+        found_id = ""
+        if not gist_id:
+            found_id = _find_gist()
+
         gist_data = _gist_load_all()
+
+        st.session_state["_gist_status"] = (
+            f"🔍 復元試行: token={'あり' if token else 'なし'}, "
+            f"gist_id={gist_id or found_id or 'なし'}, "
+            f"データ={'あり' if gist_data else 'なし'}"
+        )
+
         if gist_data:
             for key, default in PERSISTENT_KEYS.items():
                 val = gist_data.get(key, default)

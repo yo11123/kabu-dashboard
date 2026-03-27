@@ -1,15 +1,7 @@
 """
 日本株ダッシュボード — エントリーポイント
-st.navigation() で全ページを Material Icons 付きで登録する。
 """
 import streamlit as st
-
-st.set_page_config(
-    page_title="日本株ダッシュボード",
-    page_icon=":material/candlestick_chart:",
-    layout="wide",
-)
-
 from modules.styles import apply_theme
 from modules.persistence import init_persistence
 
@@ -30,11 +22,7 @@ pages = [
 ]
 
 pg = st.navigation(pages)
-
+st.set_page_config(page_title="日本株ダッシュボード", page_icon=":material/candlestick_chart:", layout="wide")
 apply_theme()
-
-# ─── データ復元 ───────────────────────────────────────────────────────────
 init_persistence()
-
-# ─── 選択されたページを実行 ───────────────────────────────────────────────
 pg.run()
