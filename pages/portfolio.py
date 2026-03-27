@@ -571,8 +571,8 @@ def main() -> None:
             if not _api_key:
                 st.error("APIキーが必要です")
             else:
-                # 全画像から銘柄を収集（重複排除）
-                all_parsed: dict[str, dict] = {}  # code → item（後勝ち）
+                # 全画像から銘柄を収集（情報をマージ）
+                all_parsed: dict[str, dict] = {}
                 for i, uploaded in enumerate(uploaded_files):
                     with st.spinner(f"画像 {i + 1}/{len(uploaded_files)} を解析中..."):
                         parsed = _parse_portfolio_image(uploaded.read(), _api_key)
@@ -583,15 +583,41 @@ def main() -> None:
                                 continue
                             if not code.endswith(".T"):
                                 code = f"{code}.T"
-                            # 同じ銘柄が複数画像にあっても1つにまとめる
-                            all_parsed[code] = item
+                            if code in all_parsed:
+                                # 既に別画像で読み取り済み → 足りない情報を補完
+                                prev = all_parsed[code]
+                                if not prev.get("name") and item.get("name"):
+                                    prev["name"] = item["name"]
+                                if (not prev.get("shares") or prev["shares"] == 0) and item.get("shares"):
+                                    prev["shares"] = item["shares"]
+                                if (not prev.get("avg_cost") or prev["avg_cost"] == 0) and item.get("avg_cost"):
+                                    prev["avg_cost"] = item["avg_cost"]
+                            else:
+                                all_parsed[code] = item
 
                 if all_parsed:
                     _added = 0
-                    _skipped = 0
+                    _updated = 0
                     for code, item in all_parsed.items():
-                        existing = [h for h in st.session_state.portfolio_holdings if h["code"] == code]
-                        if not existing:
+                        existing = next(
+                            (h for h in st.session_state.portfolio_holdings if h["code"] == code),
+                            None,
+                        )
+                        if existing:
+                            # 既存銘柄 → 足りない情報を補完
+                            changed = False
+                            if (not existing.get("name") or existing["name"] == "") and item.get("name"):
+                                existing["name"] = item["name"]
+                                changed = True
+                            if existing.get("shares", 0) == 0 and item.get("shares"):
+                                existing["shares"] = int(item["shares"])
+                                changed = True
+                            if existing.get("avg_cost", 0) == 0 and item.get("avg_cost"):
+                                existing["avg_cost"] = float(item["avg_cost"])
+                                changed = True
+                            if changed:
+                                _updated += 1
+                        else:
                             st.session_state.portfolio_holdings.append({
                                 "code": code,
                                 "name": stock_map.get(code, item.get("name", "")),
@@ -599,17 +625,17 @@ def main() -> None:
                                 "avg_cost": float(item.get("avg_cost", 0)),
                             })
                             _added += 1
-                        else:
-                            _skipped += 1
-                    if _added:
+                    if _added or _updated:
                         save_from_session("portfolio_holdings", "portfolio_holdings")
-                        msg = f"{_added}銘柄を追加しました"
-                        if _skipped:
-                            msg += f"（{_skipped}銘柄は登録済みのためスキップ）"
-                        st.success(msg)
+                        parts = []
+                        if _added:
+                            parts.append(f"{_added}銘柄を追加")
+                        if _updated:
+                            parts.append(f"{_updated}銘柄の情報を補完")
+                        st.success("、".join(parts) + "しました")
                         st.rerun()
                     else:
-                        st.warning(f"新規の銘柄がありませんでした（{_skipped}銘柄すべて登録済み）")
+                        st.info("すべての銘柄が登録済みで、新しい情報もありませんでした")
                 else:
                     st.error("画像から銘柄情報を読み取れませんでした")
 
