@@ -529,9 +529,16 @@ hr {
     color: var(--ivory);
 }
 
-/* Streamlit デフォルトの Running/spinner 表示を非表示 */
-[data-testid="stStatusWidget"] {
+/* Streamlit デフォルトの Running/spinner/status 表示を完全非表示 */
+[data-testid="stStatusWidget"],
+[data-testid="stSpinner"],
+.stSpinner,
+[data-testid="stAppRunningStatus"],
+div:has(> [data-testid="stStatusWidget"]) {
     display: none !important;
+    visibility: hidden !important;
+    height: 0 !important;
+    overflow: hidden !important;
 }
 
 </style>
