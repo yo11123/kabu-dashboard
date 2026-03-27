@@ -507,14 +507,27 @@ def main() -> None:
         price_str = f"¥{price:,.0f} ({chg:+.2f}%)" if price else "取得中..."
         shares_str = f"{h['shares']:,}株"
         cost_str = f"取得単価 ¥{h['avg_cost']:,.0f}" if h["avg_cost"] > 0 else "取得単価: 未設定"
-        pnl_str = ""
+        pnl_html = ""
         if h["avg_cost"] > 0 and price > 0:
             pnl_val = (price - h["avg_cost"]) * h["shares"]
             pnl_pct = (price / h["avg_cost"] - 1) * 100
+            pnl_color = "#5ca08b" if pnl_val >= 0 else "#c45c5c"
             pnl_label = "含み益" if pnl_val >= 0 else "含み損"
-            pnl_str = f"　{pnl_label} ¥{abs(pnl_val):,.0f} ({pnl_pct:+.1f}%)"
+            pnl_html = f"　<span style='color:{pnl_color};font-weight:600;'>{pnl_label} ¥{abs(pnl_val):,.0f} ({pnl_pct:+.1f}%)</span>"
 
-        with st.expander(f"**{name_display}**　`{h['code']}`　　{shares_str}　{cost_str}　　{price_str}{pnl_str}", expanded=False):
+        chg_html = f"<span style='color:{chg_color};'>¥{price:,.0f} ({chg:+.2f}%)</span>" if price else "取得中..."
+
+        st.markdown(
+            f"<details><summary style='cursor:pointer;list-style:none;padding:8px 0;'>"
+            f"<b>{name_display}</b>　"
+            f"<span style='color:#6b7280;font-size:0.85em;'>{h['code']}</span>　　"
+            f"<span style='font-size:0.9em;'>{shares_str}　{cost_str}</span>　　"
+            f"{chg_html}{pnl_html}"
+            f"</summary></details>",
+            unsafe_allow_html=True,
+        )
+
+        with st.expander(f"{name_display} を編集", expanded=False):
             c1, c2, c3 = st.columns([2, 2, 1])
             new_shares = c1.number_input(
                 "株数", min_value=1, value=h["shares"], step=100,
