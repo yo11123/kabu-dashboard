@@ -534,11 +534,15 @@ hr {
     display: none !important;
 }
 
-/* ページタイトル横の Material Icon を非表示 */
-[data-testid="stPageLink-NavLink"] img,
-span[data-testid="stIconMaterial"]:has(+ h1),
-h1 .material-symbols-rounded,
-[data-testid="stHeader"] .material-symbols-rounded {
+/* ページタイトル横のアイコンを非表示（サイドバー以外） */
+[data-testid="stMain"] .material-symbols-rounded,
+[data-testid="stMain"] [data-testid="stIconMaterial"],
+[data-testid="stAppViewBlockContainer"] .material-symbols-rounded,
+.stAppViewBlockContainer span.material-symbols-rounded,
+h1 span.material-symbols-rounded,
+[data-testid="stMarkdown"] + h1 span,
+.main h1 img,
+.main h1 span[style*="font-family"] {
     display: none !important;
 }
 </style>
