@@ -325,14 +325,12 @@ def get_cycle_sector_map() -> dict:
 # ---------------------------------------------------------------------------
 
 @st.cache_data(ttl=7200)
-def calc_monthly_sector_returns(stocks: list[dict], months: int = 6) -> pd.DataFrame:
+def calc_monthly_sector_returns(months: int = 6) -> pd.DataFrame:
     """
     セクター ETF を使って月次リターンを算出する。
 
     Parameters
     ----------
-    stocks : list[dict]
-        未使用 (セクター ETF で代替するため)。互換性のために残す。
     months : int
         遡る月数。デフォルト 6。
 
