@@ -61,14 +61,17 @@ def _fetch_current_price(ticker: str) -> dict:
     """現在の株価情報を取得する。"""
     try:
         t = yf.Ticker(ticker)
-        info = t.info or {}
         hist = t.history(period="5d")
-        if hist.empty:
+        if hist is None or hist.empty:
             return {}
         last_close = float(hist["Close"].iloc[-1])
         prev_close = float(hist["Close"].iloc[-2]) if len(hist) >= 2 else last_close
         change = last_close - prev_close
         change_pct = (change / prev_close * 100) if prev_close else 0
+        try:
+            info = t.info or {}
+        except Exception:
+            info = {}
         return {
             "price": last_close,
             "change": change,
