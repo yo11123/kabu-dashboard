@@ -222,7 +222,14 @@ def init_persistence() -> None:
         for key in PERSISTENT_KEYS
     )
 
-    if not has_file_data and not st.session_state.get("_gist_restore_done"):
+    restore_done = st.session_state.get("_gist_restore_done", False)
+
+    st.session_state["_gist_status"] = (
+        f"🔍 状態: files={'あり' if has_file_data else 'なし'}, "
+        f"restore_done={restore_done}"
+    )
+
+    if not has_file_data and not restore_done:
         token = _get_github_token()
         gist_id = _get_gist_id()
         found_id = ""

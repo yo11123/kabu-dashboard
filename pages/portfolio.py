@@ -504,7 +504,9 @@ def _hex_to_rgb(hex_color: str) -> str:
 
 
 def main() -> None:
-    try_restore_from_cookies()
+    from modules.persistence import init_persistence
+    init_persistence()  # ページ内でも復元を再試行
+
     st.title("💼 ポートフォリオ分析")
     st.caption(
         "保有銘柄と株数を入力し、最新ニュース・テクニカル・ファンダメンタルを"
