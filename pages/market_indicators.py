@@ -69,7 +69,7 @@ def _make_chart(df, title: str = "", color: str = "#4caf50") -> go.Figure:
         height=220,
         xaxis=dict(showgrid=False, rangeslider_visible=False,
                    tickfont=dict(size=9, color=TEXT_MUTED),
-                   tickformat="%Y/%m/%d"),
+                   tickformat="%Y/%m/%d" if len(df) <= 90 else "%Y/%m"),
         yaxis=dict(showgrid=True, gridcolor=GRID_COLOR, tickfont=dict(size=9, color=TEXT_MUTED)),
         plot_bgcolor=BG_BASE,
         paper_bgcolor=BG_PANEL,
