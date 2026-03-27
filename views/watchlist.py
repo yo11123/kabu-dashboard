@@ -39,19 +39,27 @@ def _fetch_quote(ticker: str) -> dict:
     try:
         t = yf.Ticker(ticker)
 
-        # まず株価データ（これが取れないと何も表示できない）
-        hist = t.history(period="1mo")
-        if hist is None or hist.empty:
-            return {}
-        close = float(hist["Close"].iloc[-1])
-        prev = float(hist["Close"].iloc[-2]) if len(hist) >= 2 else close
+        # fast_info で最新価格を取得（NaN・古いデータ対策）
+        fi = t.fast_info
+        close = float(fi.last_price) if fi.last_price else 0
+        prev = float(fi.previous_close) if fi.previous_close else close
+        if close != close:  # NaN check
+            close = 0
+        if prev != prev:
+            prev = close
         chg = close - prev
         chg_pct = (chg / prev * 100) if prev else 0
 
+        # RSI・出来高用にヒストリカルデータも取得
+        hist = t.history(period="1mo")
+        if hist is None or hist.empty:
+            hist = None
+
         # RSI 簡易計算
         rsi = None
-        if len(hist) >= 15:
-            delta = hist["Close"].diff()
+        vol_ratio = None
+        if hist is not None and len(hist) >= 15:
+            delta = hist["Close"].dropna().diff()
             gain = delta.clip(lower=0).rolling(14).mean()
             loss = (-delta.clip(upper=0)).rolling(14).mean()
             loss = loss.replace(0, float("nan"))
@@ -62,8 +70,7 @@ def _fetch_quote(ticker: str) -> dict:
                 rsi = round(float(val), 1)
 
         # 出来高比
-        vol_ratio = None
-        if len(hist) >= 30:
+        if hist is not None and len(hist) >= 30:
             v5 = hist["Volume"].iloc[-5:].mean()
             v30 = hist["Volume"].iloc[-30:].mean()
             if v30 > 0:
@@ -274,6 +281,10 @@ def _render_watch_card(item: dict, alert: bool) -> None:
 
     price = q.get("price", 0)
     chg_pct = q.get("change_pct", 0)
+    if price != price:  # NaN
+        price = 0
+    if chg_pct != chg_pct:
+        chg_pct = 0
     chg_color = "#5ca08b" if chg_pct >= 0 else "#c45c5c"
     border_color = "#d4af37" if alert else "rgba(212,175,55,0.06)"
     name = w["name"] or w["code"]
