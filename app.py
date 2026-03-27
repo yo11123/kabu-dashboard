@@ -4,6 +4,7 @@ st.navigation() で全ページを Material Icons 付きで登録する。
 """
 import streamlit as st
 from modules.styles import apply_theme
+from modules.persistence import init_persistence
 
 # ─── ページ定義 ───────────────────────────────────────────────────────────
 
@@ -31,6 +32,9 @@ st.set_page_config(
 )
 
 apply_theme()
+
+# ─── Cookie から全永続データを復元（JS準備完了まで待機）─
+init_persistence()
 
 # ─── 選択されたページを実行 ───────────────────────────────────────────────
 pg.run()
