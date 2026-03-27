@@ -21,11 +21,6 @@ from modules.market_context import (
 from modules.market_hours import market_status_label
 from modules.styles import BG_BASE, BG_PANEL, GRID_COLOR, TEXT_MUTED, apply_theme
 
-st.set_page_config(
-    page_title="市場指標 | 日本株ダッシュボード",
-    page_icon="🌐",
-    layout="wide",
-)
 apply_theme()
 
 

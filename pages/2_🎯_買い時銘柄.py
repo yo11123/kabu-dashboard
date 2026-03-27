@@ -23,11 +23,6 @@ from modules.market_context import fetch_market_context_text, fetch_market_snaps
 from modules.market_hours import market_status_label
 from modules.styles import apply_theme
 
-st.set_page_config(
-    page_title="買い時銘柄 | 日本株ダッシュボード",
-    page_icon="🎯",
-    layout="wide",
-)
 apply_theme()
 
 TICKERS_PATH = os.path.join(os.path.dirname(__file__), "..", "data", "nikkei225_tickers.txt")
@@ -541,7 +536,7 @@ def _render_card(rank: int, item: dict) -> None:
             type="primary",
         ):
             st.session_state["calendar_selected_ticker"] = item["ticker"]
-            st.switch_page("app.py")
+            st.switch_page("pages/dashboard.py")
 
     st.write("")  # カード間の余白
 

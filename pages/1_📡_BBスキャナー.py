@@ -16,11 +16,6 @@ except ImportError:
     def _lstm_predict(*_a, **_kw):
         return None
 
-st.set_page_config(
-    page_title="BBスキャナー | 日本株ダッシュボード",
-    page_icon="📡",
-    layout="wide",
-)
 apply_theme()
 
 TICKERS_PATH = os.path.join(os.path.dirname(__file__), "..", "data", "nikkei225_tickers.txt")
@@ -403,7 +398,7 @@ def main() -> None:
                     ),
                 ):
                     st.session_state["calendar_selected_ticker"] = row["コード"]
-                    st.switch_page("app.py")
+                    st.switch_page("pages/dashboard.py")
 
 
 if __name__ == "__main__":

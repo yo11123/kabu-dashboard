@@ -18,7 +18,6 @@ from modules.styles import (
 )
 from modules.data_loader import load_tickers, load_all_tse_stocks
 
-st.set_page_config(page_title="バックテスト", page_icon="📊", layout="wide")
 apply_theme()
 
 from modules.backtest import (

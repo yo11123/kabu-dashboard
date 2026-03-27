@@ -16,7 +16,6 @@ from modules.styles import (
     ACCENT, UP_COLOR, DOWN_COLOR,
 )
 
-st.set_page_config(page_title="セクター分析", page_icon="🔄", layout="wide")
 apply_theme()
 
 from modules.sector_analysis import (

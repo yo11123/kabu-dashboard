@@ -14,7 +14,6 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from modules.styles import apply_theme
 from modules.data_loader import load_tickers, load_all_tse_stocks
 
-st.set_page_config(page_title="カスタムスクリーナー", page_icon="🔍", layout="wide")
 apply_theme()
 
 TICKERS_PATH = os.path.join(os.path.dirname(__file__), "..", "data", "nikkei225_tickers.txt")
@@ -404,7 +403,7 @@ def main() -> None:
             use_container_width=True,
         ):
             st.session_state["selected_ticker"] = item["code"]
-            st.switch_page("app.py")
+            st.switch_page("pages/dashboard.py")
 
 
 main()

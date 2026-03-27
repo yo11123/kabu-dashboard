@@ -14,7 +14,6 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from modules.styles import apply_theme
 
-st.set_page_config(page_title="ポートフォリオ分析", page_icon="💼", layout="wide")
 apply_theme()
 
 from streamlit_cookies_controller import CookieController

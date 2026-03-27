@@ -15,7 +15,6 @@ from modules.styles import apply_theme
 from modules.data_loader import load_tickers, load_all_tse_stocks
 from streamlit_cookies_controller import CookieController
 
-st.set_page_config(page_title="ウォッチリスト", page_icon="👁", layout="wide")
 apply_theme()
 
 TICKERS_PATH = os.path.join(os.path.dirname(__file__), "..", "data", "nikkei225_tickers.txt")
@@ -320,7 +319,7 @@ def _render_watch_card(item: dict, alert: bool) -> None:
     c1, c2, c3 = st.columns([1, 1, 6])
     if c1.button("📊 チャート", key=f"wl_chart_{idx}"):
         st.session_state["selected_ticker"] = w["code"]
-        st.switch_page("app.py")
+        st.switch_page("pages/dashboard.py")
     if c2.button("✕ 削除", key=f"wl_del_{idx}"):
         st.session_state.wl_remove = idx
         st.rerun()
