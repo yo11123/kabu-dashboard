@@ -19,6 +19,17 @@ apply_theme()
 
 TICKERS_PATH = os.path.join(os.path.dirname(__file__), "..", "data", "nikkei225_tickers.txt")
 
+# ─── ヘルパー ─────────────────────────────────────────────────────────────
+
+def _normalize_div_yield(raw) -> float | None:
+    """yfinance の dividendYield を正規化（%値で返す）。"""
+    if raw is None:
+        return None
+    val = float(raw)
+    pct = val * 100 if val < 1 else val
+    return pct if pct <= 30 else None
+
+
 # ─── データ取得 ───────────────────────────────────────────────────────────
 
 @st.cache_data(ttl=300)
@@ -64,7 +75,7 @@ def _fetch_quote(ticker: str) -> dict:
             "name": info.get("longName") or info.get("shortName", ""),
             "per": info.get("trailingPE"),
             "pbr": info.get("priceToBook"),
-            "div_yield": info.get("dividendYield"),
+            "div_yield": _normalize_div_yield(info.get("dividendYield")),
             "rsi": rsi,
             "volume_ratio": vol_ratio,
             "high_52w": info.get("fiftyTwoWeekHigh"),
@@ -259,7 +270,7 @@ def _render_watch_card(item: dict, alert: bool) -> None:
     if q.get("per") is not None:
         info_parts.append(f"PER {q['per']:.1f}")
     if q.get("div_yield") is not None:
-        info_parts.append(f"配当 {q['div_yield'] * 100:.2f}%")
+        info_parts.append(f"配当 {q['div_yield']:.2f}%")
     if q.get("volume_ratio") is not None:
         vr = q["volume_ratio"]
         vr_color = "#d4af37" if vr >= 2.0 else "#6b7280"

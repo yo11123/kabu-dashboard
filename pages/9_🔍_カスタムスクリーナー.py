@@ -85,7 +85,14 @@ def _scan_stock(ticker: str, name: str, sector: str) -> dict | None:
         # ファンダメンタル
         per = info.get("trailingPE")
         pbr = info.get("priceToBook")
-        div_yield = info.get("dividendYield")
+        div_yield_raw = info.get("dividendYield")
+        # yfinance は通常 0.05 (=5%) だが、日本株で既に % 値 (5.0) が返る場合がある
+        if div_yield_raw is not None:
+            div_yield = div_yield_raw * 100 if div_yield_raw < 1 else div_yield_raw
+            if div_yield > 30:  # 30% 超は異常値として除外
+                div_yield = None
+        else:
+            div_yield = None
         roe = info.get("returnOnEquity")
         market_cap = info.get("marketCap")
         rev_growth = info.get("revenueGrowth")
@@ -111,7 +118,7 @@ def _scan_stock(ticker: str, name: str, sector: str) -> dict | None:
             "ret_3m": ret_3m,
             "per": per,
             "pbr": pbr,
-            "div_yield": (div_yield * 100) if div_yield else None,
+            "div_yield": div_yield,
             "roe": (roe * 100) if roe else None,
             "market_cap": market_cap,
             "rev_growth": (rev_growth * 100) if rev_growth else None,
