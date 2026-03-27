@@ -60,18 +60,27 @@ def _parse_portfolio_image(image_bytes: bytes, api_key: str) -> list[dict] | Non
         media_type = "image/png"
 
     prompt = """この画像は日本の証券アプリのポートフォリオ（保有銘柄一覧）のスクリーンショットです。
-画像から以下の情報を読み取ってください:
-- 銘柄コード（4桁の数字）
-- 銘柄名
-- 保有株数
-- 平均取得単価（取得価格、買付単価など）
+画像に表示されている情報を正確に読み取ってください。
 
-以下のJSON配列 **のみ** を出力してください。読み取れない項目は0にしてください。
+## 読み取る項目
+1. **銘柄コード**: 4桁の数字（例: 7203, 3350）
+2. **銘柄名**: 正式名称
+3. **保有株数**: 「数量」「保有数」「株数」などのラベルの数字
+4. **平均取得単価**: 「取得単価」「平均取得価格」「買付単価」「取得価額」などのラベルの数字
+
+## 重要な注意事項
+- 「現在値」「時価」「評価額」「前日比」「損益」は取得単価ではありません。絶対に混同しないでください
+- 「取得単価」「平均取得価格」と明確にラベルされた数字だけを avg_cost として使ってください
+- 取得単価がわからない場合は avg_cost を 0 にしてください（推測しないこと）
+- 数値にカンマ(,)が含まれる場合は除去して数値に変換してください
+- 株数は整数です
+
+## 出力形式
+以下のJSON配列 **のみ** を出力してください。
 
 ```json
 [
-  {"code": "7203", "name": "トヨタ自動車", "shares": 100, "avg_cost": 2500},
-  {"code": "9984", "name": "ソフトバンクG", "shares": 200, "avg_cost": 6800}
+  {"code": "7203", "name": "トヨタ自動車", "shares": 100, "avg_cost": 2500}
 ]
 ```"""
 
@@ -120,20 +129,17 @@ def _get_api_key() -> str:
 
 @st.cache_data(ttl=60)
 def _fetch_current_price(ticker: str) -> dict:
-    """現在の株価情報を取得する。ダッシュボードと同じ手法で取得。"""
+    """現在の株価情報を取得する。"""
     try:
-        from modules.data_loader import fetch_stock_data_max
-
-        # ダッシュボードと同じデータソースを使用
-        df = fetch_stock_data_max(ticker)
-        if df is None or df.empty:
-            # フォールバック: 直接取得
-            t = yf.Ticker(ticker)
-            df = t.history(period="1mo")
-        if df is None or df.empty:
+        t = yf.Ticker(ticker)
+        hist = t.history(period="5d")
+        # 5日で取れなければ1ヶ月に拡大
+        if hist is None or hist.empty:
+            hist = t.history(period="1mo")
+        if hist is None or hist.empty:
             return {}
 
-        close = df["Close"].dropna()
+        close = hist["Close"].dropna()
         if close.empty:
             return {}
         last_close = float(close.iloc[-1])
@@ -146,7 +152,7 @@ def _fetch_current_price(ticker: str) -> dict:
         date_str = last_date.strftime("%m/%d") if hasattr(last_date, "strftime") else ""
 
         try:
-            info = yf.Ticker(ticker).info or {}
+            info = t.info or {}
         except Exception:
             info = {}
         return {
