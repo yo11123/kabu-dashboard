@@ -52,6 +52,28 @@ def _make_chart(df, title: str = "", color: str = "#4caf50") -> go.Figure:
     return fig
 
 
+def _make_sparkline(df, color: str = "#5ca08b") -> go.Figure:
+    """サマリー行用の極小スパークラインチャート。"""
+    fig = go.Figure()
+    fig.add_trace(go.Scatter(
+        x=df.index, y=df["Close"],
+        mode="lines",
+        line=dict(color=color, width=1),
+        fill="tozeroy",
+        fillcolor=f"rgba({int(color[1:3], 16)},{int(color[3:5], 16)},{int(color[5:7], 16)},0.06)",
+        hoverinfo="skip",
+    ))
+    fig.update_layout(
+        margin=dict(l=0, r=0, t=0, b=0),
+        height=60,
+        xaxis=dict(visible=False),
+        yaxis=dict(visible=False),
+        plot_bgcolor="rgba(0,0,0,0)",
+        paper_bgcolor="rgba(0,0,0,0)",
+    )
+    return fig
+
+
 def _render_live_indicator(name: str, data: dict, period: str) -> None:
     """ライブデータ付き指標カードを描画する。"""
     value      = data["value"]
@@ -105,36 +127,28 @@ def main() -> None:
         st.error("市場データの取得に失敗しました。しばらく経ってから再試行してください。")
         return
 
-    # ─── サマリー行 ──────────────────────────────────────────
-    c1, c2, c3, c4, c5, c6 = st.columns(6)
-
-    vix = snapshot.get("VIX（恐怖指数）")
-    if vix:
-        vix_label = derived.get("VIX解釈", {}).get("label", "")
-        c1.metric("VIX", f"{vix['value']:.1f}", f"{vix['change_pct']:+.1f}%",
-                  delta_color="inverse")
-        c1.caption(f"恐怖指数: {vix_label}")
-
-    yc = derived.get("長短金利差（10Y-13W）")
-    if yc:
-        c2.metric("長短金利差", f"{yc['value']:+.3f}%")
-        c2.caption(yc["label"])
-
-    nt = derived.get("NT倍率")
-    if nt:
-        c3.metric("NT倍率", f"{nt['value']:.2f}")
-
-    usdjpy = snapshot.get("ドル円（USD/JPY）")
-    if usdjpy:
-        c4.metric("ドル円", f"¥{usdjpy['value']:.1f}", f"{usdjpy['change_pct']:+.1f}%")
-
-    gold = snapshot.get("金（Gold）")
-    if gold:
-        c5.metric("Gold", f"${gold['value']:,.0f}", f"{gold['change_pct']:+.1f}%")
-
-    oil = snapshot.get("WTI原油")
-    if oil:
-        c6.metric("WTI", f"${oil['value']:.1f}", f"{oil['change_pct']:+.1f}%")
+    # ─── サマリー行（メトリクス + ミニチャート）────────────────
+    summary_items = [
+        ("VIX", "VIX（恐怖指数）", lambda v: f"{v:.1f}", "inverse"),
+        ("ドル円", "ドル円（USD/JPY）", lambda v: f"¥{v:.1f}", "normal"),
+        ("Gold", "金（Gold）", lambda v: f"${v:,.0f}", "normal"),
+        ("WTI", "WTI原油", lambda v: f"${v:.1f}", "normal"),
+        ("S&P500", "S&P 500", lambda v: f"{v:,.0f}", "normal"),
+        ("日経平均", "日経平均", lambda v: f"¥{v:,.0f}", "normal"),
+    ]
+    cols = st.columns(len(summary_items))
+    for col, (label, key, fmt, delta_color) in zip(cols, summary_items):
+        data = snapshot.get(key)
+        if data:
+            col.metric(label, fmt(data["value"]), f"{data['change_pct']:+.1f}%",
+                       delta_color=delta_color)
+            ticker = data.get("ticker", "")
+            if ticker:
+                df = fetch_indicator_history(ticker, "3mo")
+                if df is not None and not df.empty:
+                    color = "#5ca08b" if data["change_pct"] >= 0 else "#c45c5c"
+                    fig = _make_sparkline(df, color)
+                    col.plotly_chart(fig, use_container_width=True, key=f"sum_{key}")
 
     st.divider()
 
@@ -287,44 +301,67 @@ def main() -> None:
     with tabs[5]:
         st.subheader("バリュエーション・市場全体指標")
 
-        _vc1, _vc2, _vc3, _vc4 = st.columns(4)
+        vc1, vc2 = st.columns(2)
 
         # NT倍率
         nt = derived.get("NT倍率")
         if nt:
-            _vc1.metric("NT倍率", f"{nt['value']:.2f} 倍")
-            _vc1.caption("日経225÷TOPIX")
+            with vc1:
+                with st.container(border=True):
+                    st.metric("NT倍率", f"{nt['value']:.2f} 倍")
+                    st.caption("日経225÷TOPIX。14倍超で日経優位、13倍以下でTOPIX優位")
+                    # 日経とTOPIXのチャートを重ねて表示
+                    nk = snapshot.get("日経平均")
+                    if nk and nk.get("ticker"):
+                        df_nk = fetch_indicator_history(nk["ticker"], period)
+                        if df_nk is not None and not df_nk.empty:
+                            fig = _make_chart(df_nk, title="日経平均", color="#d4af37")
+                            st.plotly_chart(fig, use_container_width=True, key="val_nk225")
 
         # イールドスプレッド
-        tnx = snapshot.get("米10年債利回り", {}).get("value")
-        sp500 = snapshot.get("S&P 500", {}).get("value")
-        if tnx and sp500:
+        tnx_data = snapshot.get("米10年債利回り", {})
+        sp500_data = snapshot.get("S&P 500", {})
+        if tnx_data.get("value") and sp500_data.get("value"):
             earnings_yield = 100 / 22
-            eq_spread = round(earnings_yield - tnx, 2)
-            _vc2.metric("益回りスプレッド", f"{eq_spread:+.2f}%")
-            _vc2.caption("株式益回り - 米10年債")
+            eq_spread = round(earnings_yield - tnx_data["value"], 2)
+            with vc2:
+                with st.container(border=True):
+                    st.metric("益回りスプレッド", f"{eq_spread:+.2f}%")
+                    st.caption("株式益回り - 米10年債。プラスで株式有利、マイナスで債券有利")
+                    if tnx_data.get("ticker"):
+                        df_tnx = fetch_indicator_history(tnx_data["ticker"], period)
+                        if df_tnx is not None and not df_tnx.empty:
+                            fig = _make_chart(df_tnx, title="米10年債利回り", color="#ff9800")
+                            st.plotly_chart(fig, use_container_width=True, key="val_tnx")
+
+        vc3, vc4 = st.columns(2)
 
         # CAPEレシオ
         _cape = fetch_cape_ratio()
         if _cape:
             _cape_val = _cape["value"]
-            _cape_color = "inverse" if _cape_val > 30 else "normal"
-            _vc3.metric("CAPEレシオ", f"{_cape_val:.1f} 倍",
-                        "割高警戒" if _cape_val > 30 else "通常範囲",
-                        delta_color=_cape_color)
-            _vc3.caption(f"シラーPER（{_cape['date']}）")
+            with vc3:
+                with st.container(border=True):
+                    _cape_color = "inverse" if _cape_val > 30 else "normal"
+                    st.metric("CAPEレシオ", f"{_cape_val:.1f} 倍",
+                              "割高警戒" if _cape_val > 30 else "通常範囲",
+                              delta_color=_cape_color)
+                    st.caption(f"シラーPER（{_cape['date']}）。25倍以上で割高圏")
 
         # バフェット指標
         _buffett = fetch_buffett_indicator()
         if _buffett:
             _bv = _buffett["value"]
-            _vc4.metric("バフェット指標", f"{_bv:.0f}%",
-                        "割高圏" if _bv > 150 else ("警戒圏" if _bv > 100 else "割安圏"),
-                        delta_color="inverse" if _bv > 100 else "normal")
-            _vc4.caption(f"時価総額/GDP（GDP: {_buffett['date']}）")
+            with vc4:
+                with st.container(border=True):
+                    st.metric("バフェット指標", f"{_bv:.0f}%",
+                              "割高圏" if _bv > 150 else ("警戒圏" if _bv > 100 else "割安圏"),
+                              delta_color="inverse" if _bv > 100 else "normal")
+                    st.caption(f"時価総額/GDP（{_buffett['date']}）。100%超で割高")
 
         # 主要指数チャート
         st.divider()
+        st.markdown("**主要指数**")
         index_names = ["日経平均", "S&P 500", "ナスダック総合", "ダウ平均"]
         cols = st.columns(2)
         col_idx = 0
