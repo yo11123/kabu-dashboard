@@ -13,7 +13,7 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from modules.styles import apply_theme
 from modules.data_loader import load_tickers, load_all_tse_stocks
-from streamlit_cookies_controller import CookieController
+from modules.persistence import load_into_session, save_from_session
 
 apply_theme()
 
@@ -128,23 +128,11 @@ def main() -> None:
     all_stocks = all_tse if all_tse else nikkei225
     stock_map = {s["code"]: s["name"] for s in all_stocks}
 
-    # ─── Cookie コントローラー ──────────────────────────────────
-    _cookies = CookieController()
-
-    if "watchlist" not in st.session_state:
-        saved = _cookies.get("watchlist_data")
-        if saved:
-            try:
-                st.session_state.watchlist = json.loads(saved) if isinstance(saved, str) else saved
-            except Exception:
-                st.session_state.watchlist = []
-        else:
-            st.session_state.watchlist = []
+    # ─── データ復元 ─────────────────────────────────────────────
+    load_into_session("watchlist_data", "watchlist", default=[])
 
     def _save_watchlist():
-        _cookies.set("watchlist_data", json.dumps(
-            st.session_state.watchlist, ensure_ascii=False,
-        ))
+        save_from_session("watchlist_data", "watchlist")
 
     # ─── サイドバー：銘柄追加 ─────────────────────────────────────
     with st.sidebar:

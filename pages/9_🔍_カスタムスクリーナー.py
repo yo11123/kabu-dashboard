@@ -13,6 +13,7 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from modules.styles import apply_theme
 from modules.data_loader import load_tickers, load_all_tse_stocks
+from modules.persistence import load_into_session, save_from_session
 
 apply_theme()
 
@@ -265,8 +266,7 @@ def main() -> None:
 
         else:
             # カスタム条件入力
-            if "custom_conditions" not in st.session_state:
-                st.session_state.custom_conditions = []
+            load_into_session("screener_conditions", "custom_conditions", default=[])
 
             # 条件追加
             field = st.selectbox("指標", list(FILTER_FIELDS.keys()), key="cs_field")
@@ -281,6 +281,7 @@ def main() -> None:
 
             if st.button("条件を追加", use_container_width=True):
                 st.session_state.custom_conditions.append((field, operator, value))
+                save_from_session("screener_conditions", "custom_conditions")
                 st.rerun()
 
             # 現在の条件表示
@@ -292,10 +293,12 @@ def main() -> None:
                     c1.markdown(f"- {f} {o} {v}{unit}")
                     if c2.button("✕", key=f"rm_cond_{i}"):
                         st.session_state.custom_conditions.pop(i)
+                        save_from_session("screener_conditions", "custom_conditions")
                         st.rerun()
 
                 if st.button("条件をクリア", use_container_width=True):
                     st.session_state.custom_conditions = []
+                    save_from_session("screener_conditions", "custom_conditions")
                     st.rerun()
 
             conditions = st.session_state.custom_conditions
