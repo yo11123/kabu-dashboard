@@ -61,7 +61,7 @@ def _fetch_current_price(ticker: str) -> dict:
     """現在の株価情報を取得する。"""
     try:
         t = yf.Ticker(ticker)
-        hist = t.history(period="5d")
+        hist = t.history(period="1mo")
         if hist is None or hist.empty:
             return {}
         last_close = float(hist["Close"].iloc[-1])
@@ -514,7 +514,7 @@ def main() -> None:
         price = price_info.get("price", 0) if price_info else 0
         chg = price_info.get("change_pct", 0) if price_info else 0
         chg_color = "#5ca08b" if chg >= 0 else "#c45c5c"
-        price_str = f"¥{price:,.0f} ({chg:+.2f}%)" if price else "取得中..."
+        price_str = f"¥{price:,.0f} ({chg:+.2f}%)" if price > 0 else "価格取得中..."
         shares_str = f"{h['shares']:,}株"
         cost_str = f"取得単価 ¥{h['avg_cost']:,.0f}" if h["avg_cost"] > 0 else "取得単価: 未設定"
         pnl_html = ""
