@@ -56,7 +56,7 @@ def _get_api_key() -> str:
     return key
 
 
-@st.cache_data(ttl=300)
+@st.cache_data(ttl=120)
 def _fetch_current_price(ticker: str) -> dict:
     """現在の株価情報を取得する。"""
     try:
@@ -75,6 +75,11 @@ def _fetch_current_price(ticker: str) -> dict:
             return {}
         change = last_close - prev_close
         change_pct = (change / prev_close * 100) if prev_close else 0
+        last_date = close.index[-1]
+        if hasattr(last_date, "strftime"):
+            date_str = last_date.strftime("%m/%d")
+        else:
+            date_str = ""
         try:
             info = t.info or {}
         except Exception:
@@ -83,6 +88,7 @@ def _fetch_current_price(ticker: str) -> dict:
             "price": last_close,
             "change": change,
             "change_pct": change_pct,
+            "date": date_str,
             "name": info.get("longName") or info.get("shortName", ""),
             "currency": info.get("currency", "JPY"),
         }
@@ -526,7 +532,8 @@ def main() -> None:
         if chg != chg:
             chg = 0
         chg_color = "#5ca08b" if chg >= 0 else "#c45c5c"
-        price_str = f"¥{price:,.0f} ({chg:+.2f}%)" if price > 0 else "価格取得中..."
+        price_date = price_info.get("date", "") if price_info else ""
+        price_str = f"¥{price:,.0f} ({chg:+.2f}%) {price_date}" if price > 0 else "価格取得中..."
         shares_str = f"{h['shares']:,}株"
         cost_str = f"取得単価 ¥{h['avg_cost']:,.0f}" if h["avg_cost"] > 0 else "取得単価: 未設定"
         pnl_html = ""
