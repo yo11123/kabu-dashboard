@@ -19,8 +19,30 @@ def fetch_stock_data_max_realtime(ticker: str) -> pd.DataFrame | None:
 def fetch_stock_data_max(ticker: str) -> pd.DataFrame | None:
     """
     上場来全データを取得（TTL=1時間）。東証閉場中に使用する。
+    yfinance のキャッシュ対策として、まず最新5日分を取得して
+    max データの末尾と比較・補正する。
     """
-    return _fetch(ticker, "max", "1d")
+    df = _fetch(ticker, "max", "1d")
+    if df is None or df.empty:
+        return df
+    # 最新データで補正（yfinance の max が古い場合の対策）
+    try:
+        recent = yf.Ticker(ticker).history(period="5d")
+        if recent is not None and not recent.empty:
+            if recent.index.tz is not None:
+                recent.index = recent.index.tz_localize(None)
+            recent.columns = [c.capitalize() for c in recent.columns]
+            last_max_date = df.index[-1]
+            last_recent_date = recent.index[-1]
+            if last_recent_date > last_max_date:
+                # max が古い → recent の新しい行を追加
+                new_rows = recent[recent.index > last_max_date]
+                cols = [c for c in ["Open", "High", "Low", "Close", "Volume"] if c in new_rows.columns]
+                if not new_rows.empty:
+                    df = pd.concat([df, new_rows[cols]])
+    except Exception:
+        pass
+    return df
 
 
 def _fetch(ticker: str, period: str, interval: str) -> pd.DataFrame | None:
