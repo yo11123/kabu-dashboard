@@ -270,7 +270,7 @@ def _portfolio_ai_analysis(
         elif provider == "gemini":
             text = _call_gemini(prompt, api_key)
         else:
-            text = _call_claude(prompt, api_key, model="claude-sonnet-4-5-20241022")
+            text = _call_claude(prompt, api_key, model="claude-3-5-sonnet-20241022")
         return {**_parse_json(text), "error": False}
     except Exception as e:
         return {
@@ -334,7 +334,7 @@ def _portfolio_overall_analysis(
         elif provider == "gemini":
             text = _call_gemini(prompt, api_key)
         else:
-            text = _call_claude(prompt, api_key, model="claude-sonnet-4-5-20241022")
+            text = _call_claude(prompt, api_key, model="claude-3-5-sonnet-20241022")
         return {**_parse_json(text), "error": False}
     except Exception as e:
         return {

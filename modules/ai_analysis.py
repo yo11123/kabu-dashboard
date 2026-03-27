@@ -487,7 +487,7 @@ def get_comprehensive_analysis(
                     "overall_detail": "Anthropic API キーが設定されていません。サイドバーにキーを入力するか、secrets.toml を確認してください。",
                     "error": True,
                 }
-            text = _call_claude(prompt, key, model="claude-sonnet-4-5-20241022")
+            text = _call_claude(prompt, key, model="claude-3-5-sonnet-20241022")
 
         elif provider == "openai":
             key = api_key.strip()
