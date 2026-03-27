@@ -15,6 +15,7 @@ PERSISTENT_KEYS = {
     "portfolio_holdings": [],
     "watchlist_data": [],
     "screener_conditions": [],
+    "portfolio_results": {},
 }
 
 
@@ -60,3 +61,21 @@ def load_into_session(cookie_key: str, session_key: str, default=None) -> None:
     """ファイル → session_state にロード（未設定の場合のみ）。"""
     if session_key not in st.session_state:
         st.session_state[session_key] = load(cookie_key, default)
+
+
+def save_daily(key: str, data) -> None:
+    """日付付きでデータを保存。当日分のみ有効。"""
+    from datetime import date
+    wrapped = {"date": date.today().isoformat(), "data": data}
+    save(key, wrapped)
+
+
+def load_daily(key: str, default=None):
+    """当日分のデータのみ読み込む。日付が違えば default を返す。"""
+    from datetime import date
+    wrapped = load(key)
+    if wrapped is None:
+        return default
+    if not isinstance(wrapped, dict) or wrapped.get("date") != date.today().isoformat():
+        return default
+    return wrapped.get("data", default)

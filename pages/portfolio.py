@@ -16,7 +16,7 @@ from modules.styles import apply_theme
 
 apply_theme()
 
-from modules.persistence import load_into_session, save_from_session
+from modules.persistence import load_into_session, save_from_session, save_daily, load_daily
 from modules.data_loader import load_all_tse_stocks, load_tickers
 from modules.events import fetch_latest_news
 from modules.ai_analysis import (
@@ -408,10 +408,11 @@ def main() -> None:
     all_stocks = all_tse if all_tse else nikkei225
     stock_map = {s["code"]: s["name"] for s in all_stocks}
 
-    # ─── セッションステート初期化（Cookieから復元）─────────────────
+    # ─── セッションステート初期化（ファイルから復元）─────────────────
     load_into_session("portfolio_holdings", "portfolio_holdings", default=[])
     if "portfolio_results" not in st.session_state:
-        st.session_state.portfolio_results = {}
+        # 当日分の分析結果をファイルから復元
+        st.session_state.portfolio_results = load_daily("portfolio_results", default={})
 
     # ─── サイドバー: 銘柄追加 ─────────────────────────────────────
     with st.sidebar:
@@ -701,6 +702,7 @@ def main() -> None:
         progress.progress(1.0, text="分析完了")
 
         st.session_state.portfolio_results = results
+        save_daily("portfolio_results", results)
         st.rerun()
 
     # ─── 分析結果表示 ─────────────────────────────────────────────
