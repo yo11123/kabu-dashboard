@@ -558,28 +558,38 @@ def main() -> None:
 
         # 画像から自動入力
         st.header("画像から一括登録")
-        st.caption("証券アプリのスクリーンショットをアップロードすると、AIが銘柄・株数・取得単価を読み取ります")
-        uploaded = st.file_uploader(
-            "スクリーンショット",
+        st.caption("証券アプリのスクリーンショットを複数枚まとめてアップロード可能。同じ銘柄は自動で重複排除されます。")
+        uploaded_files = st.file_uploader(
+            "スクリーンショット（複数選択可）",
             type=["png", "jpg", "jpeg", "webp"],
             key="pf_image_upload",
+            accept_multiple_files=True,
             label_visibility="collapsed",
         )
-        if uploaded and st.button("画像を読み取る", use_container_width=True):
+        if uploaded_files and st.button("画像を読み取る", use_container_width=True):
             _api_key = _get_api_key()
             if not _api_key:
                 st.error("APIキーが必要です")
             else:
-                with st.spinner("画像を解析中..."):
-                    _parsed = _parse_portfolio_image(uploaded.read(), _api_key)
-                if _parsed:
+                # 全画像から銘柄を収集（重複排除）
+                all_parsed: dict[str, dict] = {}  # code → item（後勝ち）
+                for i, uploaded in enumerate(uploaded_files):
+                    with st.spinner(f"画像 {i + 1}/{len(uploaded_files)} を解析中..."):
+                        parsed = _parse_portfolio_image(uploaded.read(), _api_key)
+                    if parsed:
+                        for item in parsed:
+                            code = item.get("code", "").strip()
+                            if not code:
+                                continue
+                            if not code.endswith(".T"):
+                                code = f"{code}.T"
+                            # 同じ銘柄が複数画像にあっても1つにまとめる
+                            all_parsed[code] = item
+
+                if all_parsed:
                     _added = 0
-                    for item in _parsed:
-                        code = item.get("code", "").strip()
-                        if not code:
-                            continue
-                        if not code.endswith(".T"):
-                            code = f"{code}.T"
+                    _skipped = 0
+                    for code, item in all_parsed.items():
                         existing = [h for h in st.session_state.portfolio_holdings if h["code"] == code]
                         if not existing:
                             st.session_state.portfolio_holdings.append({
@@ -589,12 +599,17 @@ def main() -> None:
                                 "avg_cost": float(item.get("avg_cost", 0)),
                             })
                             _added += 1
+                        else:
+                            _skipped += 1
                     if _added:
                         save_from_session("portfolio_holdings", "portfolio_holdings")
-                        st.success(f"{_added}銘柄を追加しました")
+                        msg = f"{_added}銘柄を追加しました"
+                        if _skipped:
+                            msg += f"（{_skipped}銘柄は登録済みのためスキップ）"
+                        st.success(msg)
                         st.rerun()
                     else:
-                        st.warning("新規の銘柄が見つかりませんでした（既に登録済みの可能性）")
+                        st.warning(f"新規の銘柄がありませんでした（{_skipped}銘柄すべて登録済み）")
                 else:
                     st.error("画像から銘柄情報を読み取れませんでした")
 
