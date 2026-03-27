@@ -639,6 +639,9 @@ def _get_market_outlook(market_text: str, news_tuple: tuple, provider: str, api_
     derived = calc_derived_indicators(snapshot)
     prompt = _build_market_outlook_prompt(market_text, snapshot, derived, list(news_tuple))
 
+    if not snapshot:
+        return {"error": "市場データを取得できませんでした（休場日の可能性があります）"}
+
     try:
         if provider == "claude":
             import anthropic
@@ -683,6 +686,9 @@ def _get_market_outlook(market_text: str, news_tuple: tuple, provider: str, api_
             return {"error": f"不明なプロバイダー: {provider}"}
 
         # JSONパース
+        if not text or not text.strip():
+            return {"error": "AIから空の応答が返されました"}
+
         text = text.strip()
         if "```" in text:
             for part in text.split("```"):
@@ -693,11 +699,20 @@ def _get_market_outlook(market_text: str, news_tuple: tuple, provider: str, api_
                     continue
         match = re.search(r"\{[\s\S]*\}", text)
         if match:
-            return json.loads(match.group())
-        return json.loads(text)
+            try:
+                return json.loads(match.group())
+            except json.JSONDecodeError:
+                pass
+        try:
+            return json.loads(text)
+        except json.JSONDecodeError:
+            return {"error": "AIの応答をパースできませんでした。しばらく待ってから再試行してください。"}
 
     except Exception as e:
-        return {"error": str(e)[:300]}
+        err = str(e)[:300]
+        if "Expecting value" in err:
+            return {"error": "市場データの取得に失敗しました。しばらく待ってから再試行してください。"}
+        return {"error": err}
 
 
 _MARKET_JUDGMENT_CONFIG = {
