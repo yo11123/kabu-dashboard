@@ -306,8 +306,8 @@ def _render_holding_card(
             <div style="display:flex; gap:28px; margin-top:10px; font-family:'Inter',sans-serif; font-size:0.65em; color:#6b7280; letter-spacing:0.06em;">
                 <span>{shares:,}株</span>
                 <span>評価額 <b style="color:#f0ece4;">¥{position_value:,.0f}</b></span>
-                {"<span>取得単価 <b style='color:#b8b0a2;'>¥" + f"{avg_cost:,.0f}" + "</b></span>" if avg_cost > 0 else ""}
-                {"<span>含み損益 <b style='color:" + pnl_color + ";'>¥" + f"{pnl:,.0f}" + f" ({pnl_pct:+.1f}%)" + "</b></span>" if avg_cost > 0 else ""}
+                {f"<span>取得単価 <b style='color:#b8b0a2;'>¥{avg_cost:,.0f}</b></span>" if avg_cost > 0 else ""}
+                {f"<span>含み損益 <b style='color:{pnl_color};'>¥{pnl:,.0f} ({pnl_pct:+.1f}%)</b></span>" if avg_cost > 0 else ""}
             </div>
         </div>""",
         unsafe_allow_html=True,
