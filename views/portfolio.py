@@ -962,10 +962,9 @@ def main() -> None:
 
     if not results:
         st.info("「AI分析を実行」ボタンを押すと、全銘柄を最新ニュースで分析します。")
-        st.stop()
 
     # ポートフォリオ全体
-    overall = results.get("__portfolio_overall__")
+    overall = results.get("__portfolio_overall__") if results else None
     if overall and not overall.get("error"):
         st.subheader("ポートフォリオ全体診断")
         pf_score = int(overall.get("portfolio_score", 50))
@@ -1015,10 +1014,11 @@ def main() -> None:
         st.divider()
 
     # 個別銘柄結果
-    st.subheader("個別銘柄分析")
+    if results:
+        st.subheader("個別銘柄分析")
     for h in holdings:
         ticker = h["code"]
-        analysis = results.get(ticker)
+        analysis = results.get(ticker) if results else None
         price_info = analysis.get("price_info", {}) if analysis else {}
         if not price_info:
             price_info = _fetch_current_price(ticker)
