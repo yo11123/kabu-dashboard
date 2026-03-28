@@ -843,7 +843,8 @@ def main() -> None:
     # TAB 3: AI チャット
     # ════════════════════════════════════════════════════════════════
     with tab_chat:
-        from modules.icons import robot_avatar
+        import markdown as _md
+        from modules.icons import robot_avatar, render_user_bubble, render_ai_bubble, robot_chat_avatar
 
         _chat_key = f"chat_{ticker}_{ai_provider}"
         if _chat_key not in st.session_state:
@@ -874,29 +875,39 @@ def main() -> None:
                         </span></div>""",
                     unsafe_allow_html=True,
                 )
+            # カスタムバブルで描画
             for _msg in st.session_state[_chat_key]:
-                with st.chat_message(_msg["role"]):
-                    st.markdown(_msg["content"])
+                if _msg["role"] == "user":
+                    st.markdown(render_user_bubble(_msg["content"]), unsafe_allow_html=True)
+                else:
+                    _ai_html = _md.markdown(_msg["content"], extensions=["tables", "fenced_code"])
+                    st.markdown(render_ai_bubble(_ai_html, talking=False), unsafe_allow_html=True)
 
         if _user_input := st.chat_input(
             f"{company_name} について質問...", key="stock_chat_input"
         ):
             st.session_state[_chat_key].append({"role": "user", "content": _user_input})
             with _chat_window:
-                with st.chat_message("user"):
-                    st.markdown(_user_input)
-                with st.chat_message("assistant"):
-                    with helix_spinner("アナリストが回答を生成中..."):
-                        _sys_prompt = build_chat_system_prompt(
-                            ticker, company_name, tech_json, fund_text, _margin_text
-                        )
-                        _response = get_chat_response(
-                            messages=st.session_state[_chat_key],
-                            system_prompt=_sys_prompt,
-                            provider=ai_provider,
-                            api_key=ai_api_key,
-                        )
-                    st.markdown(_response)
+                st.markdown(render_user_bubble(_user_input), unsafe_allow_html=True)
+                # 口パクロボット + スピナー
+                _thinking_html = render_ai_bubble(
+                    '<span style="color:#6b7280;font-style:italic;">回答を生成中...</span>',
+                    talking=True,
+                )
+                _spinner_placeholder = st.empty()
+                _spinner_placeholder.markdown(_thinking_html, unsafe_allow_html=True)
+                _sys_prompt = build_chat_system_prompt(
+                    ticker, company_name, tech_json, fund_text, _margin_text
+                )
+                _response = get_chat_response(
+                    messages=st.session_state[_chat_key],
+                    system_prompt=_sys_prompt,
+                    provider=ai_provider,
+                    api_key=ai_api_key,
+                )
+                # 口パク停止 → 通常表示に置換
+                _resp_html = _md.markdown(_response, extensions=["tables", "fenced_code"])
+                _spinner_placeholder.markdown(render_ai_bubble(_resp_html, talking=False), unsafe_allow_html=True)
             st.session_state[_chat_key].append({"role": "assistant", "content": _response})
 
 

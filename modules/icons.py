@@ -165,3 +165,59 @@ def robot_avatar(size: str = "sm") -> str:
         '<circle cx="20" cy="29.5" r="1.5" fill="#2d333b" stroke="#444c56" stroke-width=".5"/>'
         '</g></svg></span>'
     )
+
+
+def robot_chat_avatar(talking: bool = False) -> str:
+    """チャット用小型ロボットアバター（24x28）。talking=True で口パク。"""
+    talk_cls = ' talking' if talking else ''
+    mouth_anim = ' style="animation:mouthTalk .3s ease-in-out infinite"' if talking else ''
+    antenna_dur = '.5s' if talking else '2s'
+    return (
+        f'<span class="anim-icon chat-avatar-ai{talk_cls}">'
+        '<svg width="24" height="28" viewBox="0 0 28 32" fill="none">'
+        '<g style="animation:floatBot 3s ease-in-out infinite">'
+        '<line x1="14" y1="1" x2="14" y2="6" stroke="#8b949e" stroke-width="1.2" stroke-linecap="round"/>'
+        f'<circle cx="14" cy="1" r="2" fill="#d2a8ff" fill-opacity=".5" stroke="#d2a8ff" stroke-width=".6" style="animation:antennaPulse {antenna_dur} ease-in-out infinite"/>'
+        '<rect x="4" y="6" width="20" height="18" rx="6" fill="#2d333b" stroke="#444c56" stroke-width="1"/>'
+        '<circle cx="4" cy="14" r="2" fill="#2d333b" stroke="#444c56" stroke-width=".6"/>'
+        '<circle cx="4" cy="14" r=".8" fill="#3fb950" opacity=".4" style="animation:earGlow 2s ease-in-out infinite"/>'
+        '<circle cx="24" cy="14" r="2" fill="#2d333b" stroke="#444c56" stroke-width=".6"/>'
+        '<circle cx="24" cy="14" r=".8" fill="#3fb950" opacity=".4" style="animation:earGlow 2s ease-in-out .5s infinite"/>'
+        '<g style="animation:blink 4s ease-in-out infinite;transform-origin:10.5px 14px">'
+        '<circle cx="10.5" cy="14" r="3.5" fill="#fff"/>'
+        '<circle cx="10.5" cy="14" r="2.5" fill="#58a6ff"/>'
+        '<g style="animation:pupilDrift 5s ease-in-out infinite"><circle cx="10.5" cy="14" r="1" fill="#0d1117"/></g>'
+        '<circle cx="11.5" cy="13" r=".6" fill="#fff" opacity=".6"/>'
+        '</g>'
+        '<g style="animation:blink 4s ease-in-out .1s infinite;transform-origin:17.5px 14px">'
+        '<circle cx="17.5" cy="14" r="3.5" fill="#fff"/>'
+        '<circle cx="17.5" cy="14" r="2.5" fill="#58a6ff"/>'
+        '<g style="animation:pupilDrift 5s ease-in-out infinite"><circle cx="17.5" cy="14" r="1" fill="#0d1117"/></g>'
+        '<circle cx="18.5" cy="13" r=".6" fill="#fff" opacity=".6"/>'
+        '</g>'
+        f'<ellipse cx="14" cy="20" rx="2.5" ry="1" fill="#2d333b" stroke="#444c56" stroke-width=".6"{mouth_anim}/>'
+        '</g></svg></span>'
+    )
+
+
+def render_user_bubble(text: str, time_str: str = "") -> str:
+    """ユーザーメッセージのバブルHTMLを返す。"""
+    import html as _html
+    escaped = _html.escape(text).replace("\n", "<br>")
+    time_html = f'<div class="chat-time">{time_str}</div>' if time_str else ""
+    return (
+        f'<div class="chat-row-user">'
+        f'<div class="chat-bubble-user">{escaped}{time_html}</div>'
+        f'</div>'
+    )
+
+
+def render_ai_bubble(content: str, talking: bool = False) -> str:
+    """AIメッセージのバブルHTMLを返す。contentはMarkdown変換済みHTMLを想定。"""
+    avatar = robot_chat_avatar(talking=talking)
+    return (
+        f'<div class="chat-row-ai">'
+        f'{avatar}'
+        f'<div class="chat-bubble-ai">{content}</div>'
+        f'</div>'
+    )

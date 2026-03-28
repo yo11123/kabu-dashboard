@@ -542,6 +542,37 @@ div:has(> [data-testid="stStatusWidget"]) {
 }
 
 /* ═══════════════════════════════════════════
+   Chat Bubble UI
+═══════════════════════════════════════════ */
+.chat-scroll { display: flex; flex-direction: column; gap: 12px; }
+.chat-row-user { display: flex; justify-content: flex-end; }
+.chat-row-ai   { display: flex; justify-content: flex-start; align-items: flex-start; gap: 10px; }
+.chat-bubble-user {
+  background: #1e2530; border: 1px solid #2a3040; border-radius: 16px 16px 4px 16px;
+  padding: 10px 16px; max-width: 75%; color: #f0ece4;
+  font-family: 'Inter','Noto Sans JP',sans-serif; font-size: 0.88em; line-height: 1.6;
+}
+.chat-bubble-user .chat-time {
+  font-size: 0.7em; color: #505868; text-align: right; margin-top: 4px;
+  font-family: 'IBM Plex Mono',monospace;
+}
+.chat-bubble-ai {
+  background: #111620; border: 1px solid #1a1f2e; border-radius: 4px 16px 16px 16px;
+  padding: 12px 16px; max-width: 85%; color: #d0ccc4;
+  font-family: 'Inter','Noto Sans JP',sans-serif; font-size: 0.88em; line-height: 1.7;
+}
+.chat-bubble-ai h1,.chat-bubble-ai h2,.chat-bubble-ai h3,.chat-bubble-ai h4 {
+  font-family: 'Cormorant Garamond',serif; color: #f0ece4; margin: 8px 0 4px 0;
+  font-weight: 400; letter-spacing: 0.04em;
+}
+.chat-bubble-ai h4 { font-size: 1em; }
+.chat-bubble-ai ul { padding-left: 1.2em; margin: 4px 0; }
+.chat-bubble-ai li { margin-bottom: 2px; }
+.chat-bubble-ai strong { color: #e3b341; }
+.chat-bubble-ai code { background: #1a1f2e; padding: 1px 5px; border-radius: 3px; font-size: 0.9em; }
+.chat-avatar-ai { flex-shrink: 0; margin-top: 2px; }
+
+/* ═══════════════════════════════════════════
    Animated SVG Icons
 ═══════════════════════════════════════════ */
 @keyframes glowG {
