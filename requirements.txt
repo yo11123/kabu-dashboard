@@ -15,6 +15,7 @@ fredapi>=0.5.0
 openai>=1.0.0
 streamlit-cookies-controller>=0.0.4
 markdown>=3.5.0
+Pillow>=10.0.0
 # AI予測 (BB LSTMモデル推論用 — Cloudではサイズ制限のため省略可)
 # torch>=2.6.0
 # scikit-learn>=1.4.0
