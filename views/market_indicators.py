@@ -184,6 +184,26 @@ def main() -> None:
                     fig = _make_sparkline(df, color)
                     col.plotly_chart(fig, use_container_width=True, config=_PLOTLY_CONFIG, key=f"sum_{key}")
 
+    # ─── ウィークエンドCFD（サンデーダウ・日経）────────────────
+    from modules.market_context import fetch_weekend_cfd
+    _weekend = fetch_weekend_cfd()
+    if _weekend:
+        st.divider()
+        _wcols = st.columns(len(_weekend))
+        for _wcol, (_wname, _wdata) in zip(_wcols, _weekend.items()):
+            _ref_data = snapshot.get(_wdata.get("ref_name", ""))
+            _gap_text = ""
+            if _ref_data:
+                _gap_pct = (_wdata["value"] - _ref_data["value"]) / _ref_data["value"] * 100
+                _gap_text = f"金曜比{_gap_pct:+.2f}%"
+            _wcol.metric(
+                _wname,
+                f"{_wdata['value']:,.0f}",
+                f"{_wdata['change_pct']:+.2f}%　{_gap_text}",
+                delta_color="normal",
+            )
+            _wcol.caption(_wdata.get("description", ""))
+
     st.divider()
 
     # ─── チャート期間選択 ────────────────────────────────────
