@@ -1,5 +1,5 @@
 """
-市場指標ダッシュボード
+市場指標
 
 テクニカル・ファンダメンタルズ・センチメント・マクロ経済まで網羅した
 全58指標をカテゴリ別に表示。チャートデータが取得可能な指標はリアルタイム表示。
@@ -150,7 +150,7 @@ def _render_live_indicator(name: str, data: dict, period: str) -> None:
 # ─── メイン ─────────────────────────────────────────────────────────────
 
 def main() -> None:
-    st.markdown("<h1 style='font-family:Cormorant Garamond,serif; font-weight:300; letter-spacing:0.12em; font-size:1.6rem;'>市場指標ダッシュボード</h1>", unsafe_allow_html=True)
+    st.markdown("<h1 style='font-family:Cormorant Garamond,serif; font-weight:300; letter-spacing:0.12em; font-size:1.6rem;'>市場指標</h1>", unsafe_allow_html=True)
     st.caption("テクニカル・センチメント・マクロ経済まで網羅した全58指標ガイド")
 
     with helix_spinner("市場データを取得中..."):
