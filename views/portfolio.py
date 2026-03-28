@@ -1041,5 +1041,175 @@ def main() -> None:
         if news_info:
             st.caption(news_info)
 
+    # ════════════════════════════════════════════════════════════════
+    # ポートフォリオAIアドバイザーチャット
+    # ════════════════════════════════════════════════════════════════
+    if holdings:
+        st.divider()
+        st.markdown(
+            "<h2 style='font-family:Cormorant Garamond,serif; font-weight:300;"
+            " letter-spacing:0.08em; font-size:1.3rem;'>ポートフォリオ AIアドバイザー</h2>",
+            unsafe_allow_html=True,
+        )
+        st.caption(
+            "保有銘柄・分析結果・マーケット環境をもとに、証券アナリストとして"
+            "ポートフォリオに関するあらゆる質問に回答します。"
+        )
+        _render_portfolio_chat(holdings, results, market_text)
+
+
+def _build_portfolio_chat_context(
+    holdings: list[dict],
+    results: dict,
+    market_text: str,
+) -> str:
+    """ポートフォリオチャット用のシステムプロンプトを構築する。"""
+    # 保有銘柄一覧
+    pf_lines = []
+    total_value = 0
+    total_pnl = 0
+    for h in holdings:
+        ticker = h["code"]
+        name = h["name"] or ticker
+        shares = h["shares"]
+        avg_cost = h["avg_cost"]
+        analysis = results.get(ticker, {})
+        price_info = analysis.get("price_info", {})
+        current = price_info.get("price", 0)
+        value = current * shares if current else 0
+        pnl = (current - avg_cost) * shares if avg_cost > 0 and current else 0
+        pnl_pct = ((current / avg_cost - 1) * 100) if avg_cost > 0 and current else 0
+        total_value += value
+        total_pnl += pnl
+
+        line = f"- {name}({ticker}): {shares:,}株"
+        if avg_cost > 0:
+            line += f" 取得¥{avg_cost:,.0f} 現在¥{current:,.0f} 損益¥{pnl:,.0f}({pnl_pct:+.1f}%)"
+        elif current:
+            line += f" 現在¥{current:,.0f} 評価額¥{value:,.0f}"
+
+        # AI分析結果があれば追加
+        ai = analysis.get("ai_result") or analysis
+        action = ai.get("action", "")
+        score = ai.get("score", "")
+        if action:
+            line += f" → {action}(スコア{score})"
+        pf_lines.append(line)
+
+    pf_summary = "\n".join(pf_lines)
+
+    # 全体分析結果
+    overall = results.get("_overall", {})
+    overall_text = ""
+    if overall and not overall.get("error"):
+        pf_score = overall.get("portfolio_score", "N/A")
+        balance = overall.get("balance_assessment", "")
+        strategy = overall.get("strategic_advice", "")
+        risks = overall.get("top_risks", [])
+        overall_text = f"""
+## ポートフォリオ全体分析結果
+- ポートフォリオスコア: {pf_score}/100
+- バランス評価: {balance}
+- 戦略アドバイス: {strategy}
+- 主要リスク: {', '.join(risks) if risks else 'なし'}
+"""
+
+    # 市場ニュース
+    try:
+        from modules.market_news import format_news_for_prompt
+        news_text = format_news_for_prompt(max_per_cat=3)
+    except Exception:
+        news_text = ""
+
+    return f"""あなたはCFA資格を持つ日本株ポートフォリオの上級アドバイザーです。
+ユーザーの保有ポートフォリオについて、具体的で実践的な投資アドバイスを提供してください。
+
+## 保有ポートフォリオ
+{pf_summary}
+
+合計評価額: ¥{total_value:,.0f}　合計含み損益: ¥{total_pnl:,.0f}
+{overall_text}
+{f"## マーケット環境{chr(10)}{market_text}" if market_text else ""}
+
+{news_text}
+
+## 回答の指針
+- 具体的な数値（株価・PER・配当利回り等）を引用して回答してください
+- ポートフォリオ全体のバランスを考慮したアドバイスをしてください
+- リスクとリターンの両面から分析してください
+- 「いつ・何を・どのくらい」の具体的な行動提案を含めてください
+- 不明な点は正直に不明と答えてください
+- 簡潔で分かりやすい日本語で回答してください"""
+
+
+def _render_portfolio_chat(
+    holdings: list[dict],
+    results: dict,
+    market_text: str,
+) -> None:
+    """ポートフォリオAIチャットUIを描画する。"""
+    from modules.ai_analysis import get_chat_response
+    from modules.icons import robot_avatar
+
+    _chat_key = "portfolio_chat_messages"
+    if _chat_key not in st.session_state:
+        st.session_state[_chat_key] = []
+
+    _hdr, _clr = st.columns([5, 1])
+    with _clr:
+        if st.button("🗑️ 履歴クリア", key="pf_chat_clear", use_container_width=True):
+            st.session_state[_chat_key] = []
+            st.rerun()
+
+    _chat_window = st.container(height=500, border=True)
+    with _chat_window:
+        if not st.session_state[_chat_key]:
+            st.markdown(
+                f"""<div style='text-align:center;color:#6b7280;padding:2em 1em;
+                    font-family:Inter,Noto Sans JP,sans-serif;font-size:0.82em;letter-spacing:0.04em;'>
+                    {robot_avatar("lg")}
+                    <br><br>
+                    <b style="color:#b8b0a2;">ポートフォリオ AIアドバイザー</b><br><br>
+                    保有銘柄・市場環境・最新ニュースを踏まえて回答します。<br>
+                    <span style='font-size:0.9em;color:#505868;font-style:italic;'>
+                    例:「今のポートフォリオのリスクは？」<br>
+                    「次に買うべき銘柄は？」<br>
+                    「リバランスすべき？」<br>
+                    「ディフェンシブ銘柄を増やした方がいい？」
+                    </span></div>""",
+                unsafe_allow_html=True,
+            )
+        for _msg in st.session_state[_chat_key]:
+            with st.chat_message(_msg["role"]):
+                st.markdown(_msg["content"])
+
+    # APIキー取得
+    api_key = _get_api_key()
+    provider = "claude"
+
+    if _user_input := st.chat_input(
+        "ポートフォリオについて質問...", key="pf_chat_input"
+    ):
+        if not api_key:
+            st.error("APIキーが設定されていません。サイドバーで設定してください。")
+        else:
+            st.session_state[_chat_key].append({"role": "user", "content": _user_input})
+            with _chat_window:
+                with st.chat_message("user"):
+                    st.markdown(_user_input)
+                with st.chat_message("assistant"):
+                    with helix_spinner("アドバイザーが回答を生成中..."):
+                        _sys_prompt = _build_portfolio_chat_context(
+                            holdings, results, market_text
+                        )
+                        _response = get_chat_response(
+                            messages=st.session_state[_chat_key],
+                            system_prompt=_sys_prompt,
+                            provider=provider,
+                            api_key=api_key,
+                        )
+                    st.markdown(_response)
+            st.session_state[_chat_key].append({"role": "assistant", "content": _response})
+
 
 main()
