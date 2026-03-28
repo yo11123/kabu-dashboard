@@ -157,15 +157,16 @@ def _render_summary(summary: dict) -> None:
         unsafe_allow_html=True,
     )
 
+    from modules.icons import trend_up, trend_down, check_glow, warn_glow
     c1, c2, c3 = st.columns(3)
     with c1:
-        st.markdown("**📈 強気材料**")
-        for b in bulls:
-            st.markdown(f"<span style='color:#5ca08b'>✅</span> {b}", unsafe_allow_html=True)
+        st.markdown(f"**{trend_up()} 強気材料**", unsafe_allow_html=True)
+        for i, b in enumerate(bulls):
+            st.markdown(f"{check_glow(i * 0.3)} {b}", unsafe_allow_html=True)
     with c2:
-        st.markdown("**📉 弱気材料**")
-        for b in bears:
-            st.markdown(f"<span style='color:#c45c5c'>⚠️</span> {b}", unsafe_allow_html=True)
+        st.markdown(f"**{trend_down()} 弱気材料**", unsafe_allow_html=True)
+        for i, b in enumerate(bears):
+            st.markdown(f"{warn_glow(i * 0.3)} {b}", unsafe_allow_html=True)
     with c3:
         st.markdown("**👀 注目テーマ**")
         for w in watchlist:

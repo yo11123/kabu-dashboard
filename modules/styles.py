@@ -541,6 +541,57 @@ div:has(> [data-testid="stStatusWidget"]) {
     overflow: hidden !important;
 }
 
+/* ═══════════════════════════════════════════
+   Animated SVG Icons
+═══════════════════════════════════════════ */
+@keyframes glowG {
+  0%, 100% { filter: drop-shadow(0 0 0px transparent) }
+  50% { filter: drop-shadow(0 0 5px rgba(63, 185, 80, 0.6)) }
+}
+@keyframes glowR {
+  0%, 100% { filter: drop-shadow(0 0 0px transparent) }
+  50% { filter: drop-shadow(0 0 5px rgba(244, 112, 103, 0.6)) }
+}
+@keyframes arrowFly {
+  0% { transform: translate(14px, -14px); opacity: 0 }
+  60% { transform: translate(0, 0); opacity: 1 }
+  70% { transform: translate(0, 0) }
+  100% { transform: translate(0, 0) }
+}
+@keyframes arrowShake {
+  70% { transform: rotate(0) }
+  74% { transform: rotate(3deg) }
+  78% { transform: rotate(-2deg) }
+  82% { transform: rotate(1deg) }
+  86% { transform: rotate(0) }
+}
+@keyframes ringHit {
+  0%, 69% { r: 0; opacity: 0 }
+  70% { r: 1; opacity: 0.5 }
+  100% { r: 8; opacity: 0 }
+}
+@keyframes ringHit2 {
+  0%, 74% { r: 0; opacity: 0 }
+  75% { r: 1; opacity: 0.4 }
+  100% { r: 10; opacity: 0 }
+}
+@keyframes dotBounce1 { 0%, 60%, 100% { opacity: .3; transform: translateY(0) } 30% { opacity: 1; transform: translateY(-1.5px) } }
+@keyframes dotBounce2 { 0%, 60%, 100% { opacity: .3; transform: translateY(0) } 30% { opacity: 1; transform: translateY(-1.5px) } }
+@keyframes dotBounce3 { 0%, 60%, 100% { opacity: .3; transform: translateY(0) } 30% { opacity: 1; transform: translateY(-1.5px) } }
+@keyframes blink { 0%, 88%, 92%, 100% { transform: scaleY(1) } 90% { transform: scaleY(.1) } }
+@keyframes mouthTalk { 0%, 100% { ry: 2; rx: 4 } 30% { ry: 4; rx: 3 } 60% { ry: 1.5; rx: 5 } 85% { ry: 3.5; rx: 3 } }
+@keyframes antennaPulse { 0%, 100% { opacity: .4 } 50% { opacity: 1 } }
+@keyframes pupilDrift { 0%, 70%, 100% { transform: translate(0, 0) } 35% { transform: translate(1.2px, .5px) } 50% { transform: translate(-.8px, -.3px) } }
+@keyframes earGlow { 0%, 100% { opacity: .2 } 50% { opacity: .6 } }
+@keyframes floatBot { 0%, 100% { transform: translateY(0) } 50% { transform: translateY(-2px) } }
+.talking .robot-mouth { animation: mouthTalk .3s ease-in-out infinite; }
+.talking .robot-antenna { animation-duration: .5s; }
+.anim-icon { display: inline-flex; align-items: center; vertical-align: middle; }
+@media (prefers-reduced-motion: reduce) {
+  svg animate, svg [style*="animation"] { animation: none !important; }
+  .anim-icon svg * { animation: none !important; }
+}
+
 </style>
 """
 

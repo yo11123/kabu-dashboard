@@ -510,15 +510,16 @@ def _render_card(rank: int, item: dict) -> None:
             risk_list = ai.get("risks", [])
             if opp_list or risk_list:
                 st.divider()
+                from modules.icons import check_glow, warn_glow
                 col_opp, col_risk = st.columns(2)
                 with col_opp:
                     st.markdown("**チャンス・強み**")
-                    for o in opp_list:
-                        st.markdown(f"✅ {o}")
+                    for i, o in enumerate(opp_list):
+                        st.markdown(f"{check_glow(i * 0.3)} {o}", unsafe_allow_html=True)
                 with col_risk:
                     st.markdown("**リスク・注意点**")
-                    for r in risk_list:
-                        st.markdown(f"⚠️ {r}")
+                    for i, r in enumerate(risk_list):
+                        st.markdown(f"{warn_glow(i * 0.3)} {r}", unsafe_allow_html=True)
 
             # ルールスコア内訳
             if item.get("breakdown"):
@@ -735,15 +736,16 @@ def _render_market_outlook(result: dict) -> None:
     )
 
     # 強気・弱気要因
+    from modules.icons import trend_up, trend_down, check_glow, warn_glow, target_hit
     c1, c2 = st.columns(2)
     with c1:
-        st.markdown("**📈 強気要因**")
-        for b in bulls:
-            st.markdown(f"<span style='color:#4caf50'>✅</span> {b}", unsafe_allow_html=True)
+        st.markdown(f"**{trend_up()} 強気要因**", unsafe_allow_html=True)
+        for i, b in enumerate(bulls):
+            st.markdown(f"{check_glow(i * 0.3)} {b}", unsafe_allow_html=True)
     with c2:
-        st.markdown("**📉 弱気要因**")
-        for b in bears:
-            st.markdown(f"<span style='color:#f44336'>⚠️</span> {b}", unsafe_allow_html=True)
+        st.markdown(f"**{trend_down()} 弱気要因**", unsafe_allow_html=True)
+        for i, b in enumerate(bears):
+            st.markdown(f"{warn_glow(i * 0.3)} {b}", unsafe_allow_html=True)
 
     # 地政学リスク + 投資戦略
     c3, c4 = st.columns(2)
@@ -752,7 +754,7 @@ def _render_market_outlook(result: dict) -> None:
             st.markdown("**🌍 地政学リスク分析**")
             st.markdown(f"<div style='font-size:0.88em;line-height:1.6;'>{geopolitical}</div>", unsafe_allow_html=True)
     with c4:
-        st.markdown("**🎯 投資戦略**")
+        st.markdown(f"**{target_hit()} 投資戦略**", unsafe_allow_html=True)
         st.markdown(f"<div style='font-size:0.88em;line-height:1.6;'>{strategy}</div>", unsafe_allow_html=True)
 
     # 資金配分アドバイス
