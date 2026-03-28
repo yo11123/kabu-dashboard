@@ -254,7 +254,7 @@ def main() -> None:
         )
 
         st.divider()
-        st.caption(market_status_label())
+        st.markdown(market_status_label(), unsafe_allow_html=True)
         scan_btn = st.button("🔍 スキャン開始", type="primary", use_container_width=True)
 
     # ─── スキャン実行 ────────────────────────────────────────────────

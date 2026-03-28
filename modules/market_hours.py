@@ -53,11 +53,11 @@ def market_status_label() -> str:
         return "🔴 祝日（閉場中）"
     t = now.time()
     if _MORNING_START <= t <= _MORNING_END:
-        return "🟢 前場（開場中）"
+        return '<span class="pulse-dot"></span> 前場（開場中）'
     if _AFTERNOON_START <= t <= _AFTERNOON_END:
-        return "🟢 後場（開場中）"
+        return '<span class="pulse-dot"></span> 後場（開場中）'
     if t < _MORNING_START:
         return "🟡 開場前"
     if _MORNING_END < t < _AFTERNOON_START:
         return "🟡 昼休み"
-    return "🔴 閉場後"
+    return '<span class="pulse-dot-red"></span> 閉場後'

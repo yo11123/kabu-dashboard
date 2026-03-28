@@ -930,7 +930,7 @@ def main() -> None:
             key="force_refresh_scan",
             help="株価・ファンダメンタル・AI分析のキャッシュを全てクリアし、最新データで再スキャンします",
         )
-        st.caption(market_status_label())
+        st.markdown(market_status_label(), unsafe_allow_html=True)
         scan_btn = st.button("🔍 スキャン開始", type="primary", use_container_width=True)
 
     # ─── スキャン実行 ────────────────────────────────────────────

@@ -196,7 +196,7 @@ def main() -> None:
             format_func=lambda x: {"1mo": "1ヶ月", "3mo": "3ヶ月", "6mo": "6ヶ月", "1y": "1年", "2y": "2年"}[x],
         )
         st.divider()
-        st.caption(market_status_label())
+        st.markdown(market_status_label(), unsafe_allow_html=True)
 
     # ─── カテゴリタブ ────────────────────────────────────────
     tab_names = [

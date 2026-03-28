@@ -137,4 +137,4 @@ for i in range(0, len(INDICES), 2):
         st.divider()
 
 # ─── フッター ────────────────────────────────────────────────────────
-st.caption(market_status_label())
+st.markdown(market_status_label(), unsafe_allow_html=True)

@@ -54,18 +54,35 @@ _CSS = """
     background: var(--bg-base);
 }
 
-/* 繊細な背景ノイズテクスチャ風 */
+/* ── アンビエント光源（ゆっくり動くゴールドグラデーション）── */
 .stApp::before {
     content: '';
     position: fixed;
-    top: 0; left: 0; right: 0; bottom: 0;
-    background:
-        radial-gradient(ellipse at 20% 50%,
-            rgba(212, 175, 55, 0.015) 0%, transparent 60%),
-        radial-gradient(ellipse at 80% 20%,
-            rgba(143, 184, 160, 0.01) 0%, transparent 50%);
+    top: -30%; right: -20%;
+    width: 70%; height: 70%;
+    background: radial-gradient(ellipse, rgba(212,175,55,0.04) 0%, transparent 70%);
     pointer-events: none;
     z-index: 0;
+    animation: ambientDrift 20s ease-in-out infinite alternate;
+}
+.stApp::after {
+    content: '';
+    position: fixed;
+    bottom: -20%; left: -10%;
+    width: 50%; height: 50%;
+    background: radial-gradient(ellipse, rgba(143,184,160,0.02) 0%, transparent 70%);
+    pointer-events: none;
+    z-index: 0;
+    animation: ambientDrift2 25s ease-in-out infinite alternate;
+}
+@keyframes ambientDrift {
+    0%   { transform: translate(0, 0) scale(1); opacity: 0.6; }
+    50%  { transform: translate(-5%, 8%) scale(1.1); opacity: 1; }
+    100% { transform: translate(3%, -5%) scale(0.95); opacity: 0.7; }
+}
+@keyframes ambientDrift2 {
+    0%   { transform: translate(0, 0); opacity: 0.5; }
+    100% { transform: translate(8%, -6%); opacity: 0.8; }
 }
 
 /* ── トップヘッダーバー ── */
@@ -119,6 +136,22 @@ header[data-testid="stHeader"] {
     color: var(--ivory-muted) !important;
     transition: all 0.4s var(--ease);
 }
+[data-testid="stSidebarNav"] a {
+    position: relative;
+}
+[data-testid="stSidebarNav"] a::after {
+    content: '';
+    position: absolute;
+    bottom: 0; left: 12px; right: 12px;
+    height: 1px;
+    background: linear-gradient(90deg, var(--gold), transparent);
+    transform: scaleX(0);
+    transform-origin: left;
+    transition: transform 0.4s var(--ease);
+}
+[data-testid="stSidebarNav"] a:hover::after {
+    transform: scaleX(1);
+}
 [data-testid="stSidebarNav"] a:hover [data-testid="stMarkdownContainer"],
 [data-testid="stSidebarNav"] a:hover > span:not(.material-symbols-rounded) {
     color: var(--gold) !important;
@@ -149,15 +182,52 @@ header[data-testid="stHeader"] {
 /* ═══════════════════════════════════════════
    見出し — エレガントなセリフ体
 ═══════════════════════════════════════════ */
+/* ── ページ読み込みフェードイン ── */
+@keyframes fadeInUp {
+    from { opacity: 0; transform: translateY(16px); }
+    to   { opacity: 1; transform: translateY(0); }
+}
+.main .block-container {
+    animation: fadeInUp 0.6s var(--ease) both;
+}
+/* 各要素の連鎖フェードイン */
+.main .block-container > div > div {
+    animation: fadeInUp 0.5s var(--ease) both;
+}
+.main .block-container > div > div:nth-child(2)  { animation-delay: 0.05s; }
+.main .block-container > div > div:nth-child(3)  { animation-delay: 0.1s; }
+.main .block-container > div > div:nth-child(4)  { animation-delay: 0.15s; }
+.main .block-container > div > div:nth-child(5)  { animation-delay: 0.2s; }
+.main .block-container > div > div:nth-child(6)  { animation-delay: 0.25s; }
+.main .block-container > div > div:nth-child(7)  { animation-delay: 0.3s; }
+.main .block-container > div > div:nth-child(8)  { animation-delay: 0.35s; }
+.main .block-container > div > div:nth-child(n+9) { animation-delay: 0.4s; }
+
+/* ── ゴールドシマー見出し ── */
+@keyframes shimmerGold {
+    0%   { background-position: -200% center; }
+    100% { background-position: 200% center; }
+}
 h1 {
     font-family: var(--serif) !important;
     font-size: 1.6rem !important;
     font-weight: 300 !important;
     text-transform: none;
     letter-spacing: 0.15em;
-    color: var(--ivory) !important;
     position: relative;
     padding-bottom: 12px;
+    /* シマーテキスト */
+    background: linear-gradient(
+        90deg,
+        var(--ivory) 0%, var(--ivory) 35%,
+        var(--gold-light) 50%,
+        var(--ivory) 65%, var(--ivory) 100%
+    );
+    background-size: 200% auto;
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
+    animation: shimmerGold 6s linear infinite;
 }
 h1::after {
     content: '';
@@ -167,6 +237,7 @@ h1::after {
     width: 48px;
     height: 1px;
     background: linear-gradient(90deg, var(--gold), transparent);
+    animation: fadeInUp 0.8s var(--ease) 0.3s both;
 }
 h2 {
     font-family: var(--serif) !important;
@@ -195,11 +266,16 @@ h3 {
     padding: 20px 24px !important;
     transition: all 0.5s var(--ease);
     position: relative;
+    animation: fadeInUp 0.5s var(--ease) both;
 }
 [data-testid="metric-container"]:hover {
     border-left-color: var(--gold) !important;
+    border-color: rgba(212, 175, 55, 0.15) !important;
+    border-left-color: var(--gold) !important;
     background: rgba(10, 15, 26, 0.8) !important;
-    box-shadow: 0 8px 32px rgba(0, 0, 0, 0.2);
+    box-shadow: 0 8px 32px rgba(0, 0, 0, 0.2),
+                0 0 20px rgba(212, 175, 55, 0.03);
+    transform: translateY(-2px);
 }
 [data-testid="stMetricLabel"] p {
     font-family: var(--sans) !important;
@@ -341,7 +417,8 @@ a[data-testid="stLinkButton"] p {
 ═══════════════════════════════════════════ */
 hr {
     border: none !important;
-    border-top: 1px solid rgba(212, 175, 55, 0.06) !important;
+    height: 1px !important;
+    background: linear-gradient(90deg, transparent, rgba(212,175,55,0.15), rgba(212,175,55,0.06), transparent) !important;
     margin: 1.2rem 0 !important;
 }
 [data-testid="stCaptionContainer"] p,
@@ -361,10 +438,29 @@ hr {
     border-radius: 2px !important;
     background: rgba(10, 15, 26, 0.4) !important;
     transition: all 0.5s var(--ease);
+    position: relative;
+    overflow: hidden;
+}
+/* ホバー時のゴールドグロー */
+[data-testid="stVerticalBlockBorderWrapper"]::before {
+    content: '';
+    position: absolute;
+    top: -50%; left: -50%;
+    width: 200%; height: 200%;
+    background: radial-gradient(circle at center, rgba(212,175,55,0.03) 0%, transparent 70%);
+    opacity: 0;
+    transition: opacity 0.6s var(--ease);
+    pointer-events: none;
+    z-index: 0;
 }
 [data-testid="stVerticalBlockBorderWrapper"]:hover {
-    border-color: rgba(212, 175, 55, 0.12) !important;
-    box-shadow: 0 8px 40px rgba(0, 0, 0, 0.15);
+    border-color: rgba(212, 175, 55, 0.15) !important;
+    box-shadow: 0 8px 40px rgba(0, 0, 0, 0.15),
+                0 0 30px rgba(212, 175, 55, 0.02);
+    transform: translateY(-1px);
+}
+[data-testid="stVerticalBlockBorderWrapper"]:hover::before {
+    opacity: 1;
 }
 
 /* ═══════════════════════════════════════════
@@ -407,16 +503,32 @@ hr {
     padding: 14px 24px;
     border: none;
     transition: all 0.4s var(--ease);
+    position: relative;
+}
+.stTabs [data-baseweb="tab"]::after {
+    content: '';
+    position: absolute;
+    bottom: 0; left: 20%; right: 20%;
+    height: 1px;
+    background: var(--gold);
+    transform: scaleX(0);
+    transition: transform 0.3s var(--ease);
 }
 .stTabs [data-baseweb="tab"]:hover {
     color: var(--ivory);
-    background: transparent;
+    background: rgba(212, 175, 55, 0.02);
+}
+.stTabs [data-baseweb="tab"]:hover::after {
+    transform: scaleX(1);
 }
 .stTabs [aria-selected="true"] {
     color: var(--gold) !important;
     font-weight: 500 !important;
     border-bottom: 1px solid var(--gold) !important;
     background: transparent !important;
+}
+.stTabs [aria-selected="true"]::after {
+    display: none;
 }
 .stTabs [data-baseweb="tab-panel"] {
     border: none;
@@ -486,18 +598,42 @@ hr {
    スクロールバー
 ═══════════════════════════════════════════ */
 ::-webkit-scrollbar {
-    width: 4px;
-    height: 4px;
+    width: 5px;
+    height: 5px;
 }
 ::-webkit-scrollbar-track {
-    background: transparent;
+    background: rgba(6, 9, 15, 0.5);
 }
 ::-webkit-scrollbar-thumb {
-    background: rgba(212, 175, 55, 0.15);
-    border-radius: 0;
+    background: linear-gradient(180deg, rgba(212,175,55,0.2), rgba(212,175,55,0.08));
+    border-radius: 4px;
+    transition: background 0.3s;
 }
 ::-webkit-scrollbar-thumb:hover {
-    background: rgba(212, 175, 55, 0.3);
+    background: linear-gradient(180deg, rgba(212,175,55,0.4), rgba(212,175,55,0.15));
+}
+
+/* ── ライブパルスドット（.pulse-live クラスで使用）── */
+@keyframes pulseLive {
+    0%, 100% { opacity: 1; box-shadow: 0 0 0 0 rgba(63, 185, 80, 0.5); }
+    50% { opacity: 0.8; box-shadow: 0 0 0 6px rgba(63, 185, 80, 0); }
+}
+.pulse-dot {
+    display: inline-block;
+    width: 8px; height: 8px;
+    border-radius: 50%;
+    background: #3fb950;
+    animation: pulseLive 2s ease-in-out infinite;
+    vertical-align: middle;
+    margin-right: 6px;
+}
+.pulse-dot-red {
+    display: inline-block;
+    width: 8px; height: 8px;
+    border-radius: 50%;
+    background: #c45c5c;
+    vertical-align: middle;
+    margin-right: 6px;
 }
 
 /* ═══════════════════════════════════════════
@@ -619,8 +755,7 @@ div:has(> [data-testid="stStatusWidget"]) {
 .talking .robot-antenna { animation-duration: .5s; }
 .anim-icon { display: inline-flex; align-items: center; vertical-align: middle; }
 @media (prefers-reduced-motion: reduce) {
-  svg animate, svg [style*="animation"] { animation: none !important; }
-  .anim-icon svg * { animation: none !important; }
+  *, *::before, *::after { animation: none !important; transition: none !important; }
 }
 
 </style>

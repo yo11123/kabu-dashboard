@@ -600,7 +600,7 @@ def main() -> None:
                 st.caption("⬜ API キーを入力してください")
 
         st.divider()
-        st.caption(market_status_label())
+        st.markdown(market_status_label(), unsafe_allow_html=True)
 
     # ─── データ取得（常に上場来全データ）────────────────────────────
     # @st.cache_data の TTL でレート制限を制御するため、毎回関数を呼ぶ。
