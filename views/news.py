@@ -504,12 +504,11 @@ def main() -> None:
     # ─── サイドバー: フィルター ────────────────────────────────
     with st.sidebar:
         st.header("表示設定")
-        selected_cats = st.multiselect(
-            "カテゴリフィルター",
-            options=[c["name"] for c in NEWS_CATEGORIES],
-            default=[c["name"] for c in NEWS_CATEGORIES],
-            key="news_cat_filter",
-        )
+        st.caption("カテゴリフィルター")
+        selected_cats: list[str] = []
+        for cat in NEWS_CATEGORIES:
+            if st.checkbox(f"{cat['icon']} {cat['name']}", value=True, key=f"news_cat_{cat['name']}"):
+                selected_cats.append(cat["name"])
         max_per_cat = st.slider("カテゴリあたりの表示件数", 5, 20, 10, key="news_max_items")
 
     # ─── カテゴリ別タブ表示 ────────────────────────────────────
