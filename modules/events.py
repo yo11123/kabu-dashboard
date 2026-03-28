@@ -134,10 +134,120 @@ def _fetch_yfinance_news_raw(
 
 # ─── 決算イベント ──────────────────────────────────────────────────────────
 
+def _fetch_kabutan_earnings(ticker: str, start_dt: pd.Timestamp, end_dt: pd.Timestamp) -> list[dict]:
+    """Kabutan の決算発表日ページから決算イベントを取得する（yfinance フォールバック用）。"""
+    try:
+        import requests as _req
+        from lxml import html as _lhtml
+
+        code4 = ticker.replace(".T", "").strip().zfill(4)
+        url = f"https://kabutan.jp/stock/finance?code={code4}"
+        r = _req.get(url, timeout=10, headers={"User-Agent": "Mozilla/5.0"})
+        if r.status_code != 200:
+            return []
+
+        tree = _lhtml.fromstring(r.content)
+
+        # 決算発表日テーブル（通常 table[1] に予定/実績がある）
+        # 「決算」タブのテーブルから発表日を探す
+        events = []
+
+        # 方法1: ページ内のテキストから「決算発表日」情報を抽出
+        # kabutan の /stock/finance ページの構造に依存
+        tables = tree.xpath('//table')
+        for table in tables:
+            rows = table.xpath('.//tr')
+            for row in rows:
+                cells = row.xpath('.//td|.//th')
+                texts = [c.text_content().strip() for c in cells]
+                # 日付パターンを探す（例: "2025/02/06", "25/02/06"）
+                for text in texts:
+                    import re
+                    # YYYY/MM/DD or YY/MM/DD パターン
+                    m = re.search(r'(\d{2,4})[/\-](\d{1,2})[/\-](\d{1,2})', text)
+                    if m:
+                        try:
+                            y, mo, d = m.group(1), m.group(2), m.group(3)
+                            if len(y) == 2:
+                                y = "20" + y
+                            dt = pd.Timestamp(f"{y}-{mo}-{d}")
+                            if start_dt <= dt <= end_dt:
+                                # 同じ日付が既に追加されていないか確認
+                                date_str = dt.strftime("%Y-%m-%d")
+                                if not any(e["date"] == date_str for e in events):
+                                    # 決算に関連するテキストを探す
+                                    row_text = " ".join(texts)
+                                    if any(kw in row_text for kw in ["決算", "本決算", "中間", "1Q", "2Q", "3Q", "四半期", "通期"]):
+                                        events.append({
+                                            "date": date_str,
+                                            "period_end": _nearest_quarter_end(dt).strftime("%Y-%m-%d"),
+                                            "revenue": None,
+                                            "operating_income": None,
+                                            "eps_actual": None,
+                                            "eps_estimate": None,
+                                            "beat": None,
+                                        })
+                        except Exception:
+                            continue
+        return events
+    except Exception:
+        return []
+
+
+def _fetch_jquants_earnings(ticker: str, start_dt: pd.Timestamp, end_dt: pd.Timestamp) -> list[dict]:
+    """J-Quants API から決算発表日を取得する（yfinance フォールバック用）。"""
+    try:
+        refresh_token = st.secrets.get("JQUANTS_REFRESH_TOKEN", "")
+        if not refresh_token or len(refresh_token) < 10:
+            return []
+
+        import requests as _req
+        code = ticker.replace(".T", "").strip().zfill(4)
+
+        from modules.fundamental import _get_jquants_access_token
+        access_token = _get_jquants_access_token(refresh_token)
+
+        resp = _req.get(
+            "https://api.jquants.com/v1/fins/statements",
+            headers={"Authorization": f"Bearer {access_token}"},
+            params={"code": code},
+            timeout=15,
+        )
+        resp.raise_for_status()
+        statements = resp.json().get("statements", [])
+
+        events = []
+        for stmt in statements:
+            disc_date = stmt.get("DisclosedDate", "")
+            period_end = stmt.get("CurrentPeriodEndDate", "")
+            if not disc_date:
+                continue
+            try:
+                dt = pd.Timestamp(disc_date)
+                if start_dt <= dt <= end_dt:
+                    net_sales = stmt.get("NetSales")
+                    op_profit = stmt.get("OperatingProfit")
+                    events.append({
+                        "date": dt.strftime("%Y-%m-%d"),
+                        "period_end": period_end,
+                        "revenue": float(net_sales) if net_sales else None,
+                        "operating_income": float(op_profit) if op_profit else None,
+                        "eps_actual": None,
+                        "eps_estimate": None,
+                        "beat": None,
+                    })
+            except Exception:
+                continue
+        return events
+    except Exception:
+        return []
+
+
 @st.cache_data(ttl=3600)
 def fetch_earnings_events(ticker: str, chart_start: str, chart_end: str) -> list[dict]:
     """
     チャート表示期間内の決算日データを取得する。
+    yfinance → J-Quants → Kabutan の順にフォールバック。
 
     Returns:
         list of dict:
@@ -151,57 +261,58 @@ def fetch_earnings_events(ticker: str, chart_start: str, chart_end: str) -> list
             "beat": True,                  # 予想超過フラグ or None
         }]
     """
-    try:
-        t = yf.Ticker(ticker)
-        earn_df = t.get_earnings_dates(limit=40)
-    except Exception:
-        return []
-
-    if earn_df is None or earn_df.empty:
-        return []
-
     start_dt = pd.Timestamp(chart_start)
     end_dt = pd.Timestamp(chart_end)
 
-    # タイムゾーンを除去して比較
-    if earn_df.index.tz is not None:
-        earn_df.index = earn_df.index.tz_localize(None)
-
-    earn_df = earn_df[(earn_df.index >= start_dt) & (earn_df.index <= end_dt)]
-
-    if earn_df.empty:
-        return []
-
-    try:
-        qf = t.quarterly_income_stmt
-    except Exception:
-        qf = None
-
+    # ── ソース1: yfinance ──────────────────────────────────────
     events = []
-    for dt, row in earn_df.iterrows():
-        date_str = dt.strftime("%Y-%m-%d")
+    try:
+        t = yf.Ticker(ticker)
+        earn_df = t.get_earnings_dates(limit=40)
 
-        # カラム名は yfinance バージョンによって異なる場合があるため柔軟に対応
-        eps_est = row.get("EPS Estimate") or row.get("eps_estimate")
-        eps_act = row.get("Reported EPS") or row.get("reported_eps")
+        if earn_df is not None and not earn_df.empty:
+            if earn_df.index.tz is not None:
+                earn_df.index = earn_df.index.tz_localize(None)
 
-        rev, op_inc = _lookup_quarterly_financials(qf, dt)
+            earn_df = earn_df[(earn_df.index >= start_dt) & (earn_df.index <= end_dt)]
 
-        beat = None
-        if pd.notna(eps_act) and pd.notna(eps_est) and eps_est != 0:
-            beat = float(eps_act) > float(eps_est)
+            try:
+                qf = t.quarterly_income_stmt
+            except Exception:
+                qf = None
 
-        events.append({
-            "date": date_str,
-            "period_end": _nearest_quarter_end(dt).strftime("%Y-%m-%d"),
-            "revenue": rev,
-            "operating_income": op_inc,
-            "eps_actual": float(eps_act) if pd.notna(eps_act) else None,
-            "eps_estimate": float(eps_est) if pd.notna(eps_est) else None,
-            "beat": beat,
-        })
+            for dt, row in earn_df.iterrows():
+                date_str = dt.strftime("%Y-%m-%d")
+                eps_est = row.get("EPS Estimate") or row.get("eps_estimate")
+                eps_act = row.get("Reported EPS") or row.get("reported_eps")
+                rev, op_inc = _lookup_quarterly_financials(qf, dt)
 
-    return events
+                beat = None
+                if pd.notna(eps_act) and pd.notna(eps_est) and eps_est != 0:
+                    beat = float(eps_act) > float(eps_est)
+
+                events.append({
+                    "date": date_str,
+                    "period_end": _nearest_quarter_end(dt).strftime("%Y-%m-%d"),
+                    "revenue": rev,
+                    "operating_income": op_inc,
+                    "eps_actual": float(eps_act) if pd.notna(eps_act) else None,
+                    "eps_estimate": float(eps_est) if pd.notna(eps_est) else None,
+                    "beat": beat,
+                })
+    except Exception:
+        pass
+
+    if events:
+        return events
+
+    # ── ソース2: J-Quants（yfinance が空の場合）──────────────────
+    events = _fetch_jquants_earnings(ticker, start_dt, end_dt)
+    if events:
+        return events
+
+    # ── ソース3: Kabutan（最終フォールバック）─────────────────────
+    return _fetch_kabutan_earnings(ticker, start_dt, end_dt)
 
 
 # ─── Kabutan ニューススクレイピング ──────────────────────────────────────
