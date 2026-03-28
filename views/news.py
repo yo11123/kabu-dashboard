@@ -94,11 +94,13 @@ NEWS_CATEGORIES: list[dict] = [
 
 
 def _fetch_rss(query: str, max_items: int = 15) -> list[dict]:
-    """Google News RSS から記事を取得する。"""
+    """Google News RSS から記事を取得する（1週間以内のみ）。"""
+    cutoff = pd.Timestamp.now() - pd.Timedelta(days=7)
     try:
+        # when:7d で直近7日間に限定
         url = (
             "https://news.google.com/rss/search"
-            f"?q={urllib.parse.quote(query)}&hl=ja&gl=JP&ceid=JP:ja"
+            f"?q={urllib.parse.quote(query)}+when:7d&hl=ja&gl=JP&ceid=JP:ja"
         )
         req = urllib.request.Request(
             url,
@@ -135,6 +137,10 @@ def _fetch_rss(query: str, max_items: int = 15) -> list[dict]:
                 if pub_dt.tz is not None:
                     pub_dt = pub_dt.tz_convert("Asia/Tokyo").tz_localize(None)
             except Exception:
+                continue
+
+            # 1週間以内のみ
+            if pub_dt < cutoff:
                 continue
 
             items.append({
