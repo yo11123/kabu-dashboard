@@ -823,6 +823,7 @@ def main() -> None:
     st.divider()
 
     # ─── 分析実行 ─────────────────────────────────────────────────
+    market_text = fetch_market_context_text()
     has_cached = bool(st.session_state.portfolio_results)
     if has_cached:
         st.caption("✅ 本日の分析結果を表示中（キャッシュ済み・API消費なし）。再分析するには下のボタンを押してください。")
