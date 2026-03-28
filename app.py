@@ -29,7 +29,8 @@ st.markdown(
 <meta name="theme-color" content="#06090f">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-<link rel="apple-touch-icon" href="app/static/icon-192.svg">
+<link rel="apple-touch-icon" href="app/static/icon-192.png">
+<link rel="icon" type="image/png" sizes="192x192" href="app/static/icon-192.png">
 <script>
 if ('serviceWorker' in navigator) {
   navigator.serviceWorker.register('app/static/sw.js').catch(() => {});
