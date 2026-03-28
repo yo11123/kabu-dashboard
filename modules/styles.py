@@ -213,6 +213,10 @@ h1 {
     position: relative;
     padding-bottom: 12px;
 }
+@keyframes lineDrawRight {
+    from { transform: scaleX(0); }
+    to   { transform: scaleX(1); }
+}
 h1::after {
     content: '';
     position: absolute;
@@ -221,7 +225,8 @@ h1::after {
     width: 48px;
     height: 1px;
     background: linear-gradient(90deg, var(--gold), transparent);
-    animation: fadeInUp 0.8s var(--ease) 0.3s both;
+    transform-origin: left;
+    animation: lineDrawRight 0.8s var(--ease) 0.3s both;
 }
 h2 {
     font-family: var(--serif) !important;
