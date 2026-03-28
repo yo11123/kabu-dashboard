@@ -188,8 +188,9 @@ def _adjust_score_fundamental(item: dict, ticker: str) -> dict:
     except Exception:
         fund_yf, fund_kb = {}, {}
 
-    per = fund_kb.get("per") or fund_yf.get("per")
-    pbr = fund_kb.get("pbr") or fund_yf.get("pbr")
+    # PER/PBRは株価連動 → リアルタイム性の高いyfinanceを優先
+    per = fund_yf.get("per") or fund_kb.get("per")
+    pbr = fund_yf.get("pbr") or fund_kb.get("pbr")
     div_kb = fund_kb.get("dividend_yield")
     div_yf = fund_yf.get("dividend_yield")
     div_yield = div_kb if div_kb is not None else ((div_yf * 100) if div_yf else None)
@@ -530,14 +531,27 @@ def _render_card(rank: int, item: dict) -> None:
                     st.markdown(f"- {k}: {v}")
             st.caption(f"ルールスコア: {item['score']:.0f} / 100　RSI: {item.get('rsi') or 'N/A'}")
 
-        # ── チャートボタン ────────────────────────────────────────
-        if st.button(
-            "📈 チャートで詳細確認",
-            key=f"chart_{item['ticker']}_{rank}",
-            type="primary",
-        ):
-            st.session_state["calendar_selected_ticker"] = item["ticker"]
-            st.switch_page("views/dashboard.py")
+        # ── チャート・再分析ボタン ─────────────────────────────────
+        _btn_chart, _btn_reanalyze = st.columns([1, 1])
+        with _btn_chart:
+            if st.button(
+                "📈 チャートで詳細確認",
+                key=f"chart_{item['ticker']}_{rank}",
+                type="primary",
+                use_container_width=True,
+            ):
+                st.session_state["calendar_selected_ticker"] = item["ticker"]
+                st.switch_page("views/dashboard.py")
+        with _btn_reanalyze:
+            if st.button(
+                "🔄 最新データで再分析",
+                key=f"reanalyze_{item['ticker']}_{rank}",
+                use_container_width=True,
+            ):
+                # この銘柄のAI分析キャッシュを全クリアして再実行
+                get_comprehensive_analysis.clear()
+                st.session_state[f"_reanalyze_{item['ticker']}"] = True
+                st.rerun()
 
     st.write("")  # カード間の余白
 
@@ -595,12 +609,19 @@ def _build_market_outlook_prompt(market_text: str, snapshot: dict, derived: dict
     return f"""あなたは日本株市場の上級ストラテジストです。
 以下の市場データと**最新ニュース**を分析し、**今、日本株全体として買い時か・売り時か・現状維持か** を判断してください。
 
-## 主要指数
+## ★★★ 最重要ルール: データの正確性 ★★★
+- 数値を引用する場合は、**必ず下記「主要指数」「マーケット環境」セクションの数値をそのまま使うこと**
+- あなた自身の訓練データや記憶にある数値は一切使用禁止。提供データと異なる数値を書いてはならない
+- ニュース見出しに数値が含まれていても、下記の構造化データの数値を優先すること
+- 提供データに含まれない指標については「データなし」と明記し、推測で数値を補わないこと
+
+## 主要指数（リアルタイム取得データ — この数値が正）
 {indices_text}
 
 {market_text}
 
 ## 最新の市場・地政学ニュース（直近）
+※ニュースは定性的な材料として使うこと。ニュース見出し中の数値よりも上記の構造化データを優先。
 {news_text}
 
 ## 分析の視点
@@ -615,14 +636,14 @@ def _build_market_outlook_prompt(market_text: str, snapshot: dict, derived: dict
 9. **「株は下がった時に買え」の格言を踏まえ、暴落・急落局面こそ仕込み時かどうかを判断**
 10. **投資余力がある人への具体的な資金配分アドバイスを提供**
 
-## 出力形式（このJSONのみ出力）
+## 出力形式（このJSONのみ出力。思考過程やコードブロック外のテキストは不要）
 ```json
 {{
   "market_judgment": "積極買い" | "買い優勢" | "中立・様子見" | "売り優勢" | "リスク回避",
   "score": 0〜100の整数（50=中立、高い=強気、低い=弱気）,
-  "summary": "4〜5文の相場観サマリー。指標の数値とニュースの具体的事実を引用して根拠を示す",
-  "bull_factors": ["強気要因1（数値やニュース根拠付き）", "強気要因2", "強気要因3"],
-  "bear_factors": ["弱気要因1（数値やニュース根拠付き）", "弱気要因2", "弱気要因3"],
+  "summary": "4〜5文の相場観サマリー。上記の提供データから数値を正確に引用して根拠を示す。自分の記憶の数値は使わない",
+  "bull_factors": ["強気要因1（提供データの数値を引用）", "強気要因2", "強気要因3"],
+  "bear_factors": ["弱気要因1（提供データの数値を引用）", "弱気要因2", "弱気要因3"],
   "geopolitical": "地政学リスクの現状分析（2〜3文。戦争・紛争・制裁がエネルギー価格やサプライチェーン、市場心理に与える影響を具体的に）",
   "strategy": "今週〜今月の投資戦略を3〜4文で具体的に提案。セクター配分やリスクヘッジも含む",
   "capital_advice": "投資余力がある人への具体的アドバイス（3〜4文）。例：市場が下落している場合は『余力の30%を使って優良株を分割で仕込む好機』、上昇が続いている場合は『利益確定を優先し余力を温存。次の押し目まで待つ』など。具体的な余力配分の割合（何%を投入すべきか）と、一括 vs 分割投入の判断、狙うべきセクターや銘柄特性（高配当/成長株/ディフェンシブ等）を含む"
@@ -630,7 +651,7 @@ def _build_market_outlook_prompt(market_text: str, snapshot: dict, derived: dict
 ```"""
 
 
-@st.cache_data(ttl=3600 * 4)  # 4時間キャッシュ
+@st.cache_data(ttl=3600)  # 1時間キャッシュ（市場環境は頻繁に変わるため）
 def _get_market_outlook(market_text: str, news_tuple: tuple, provider: str, api_key: str) -> dict:
     """日本株全体の相場観をAIで分析する。"""
     import json
@@ -644,8 +665,8 @@ def _get_market_outlook(market_text: str, news_tuple: tuple, provider: str, api_
         return {"error": "市場データを取得できませんでした（休場日の可能性があります）"}
 
     try:
-        from modules.ai_analysis import call_light_llm
-        text = call_light_llm(prompt)
+        from modules.ai_analysis import _call_claude
+        text = _call_claude(prompt, api_key)
 
         # JSONパース（AIの応答から JSON を確実に抽出）
         if not text or not text.strip():
@@ -793,7 +814,13 @@ def _render_market_outlook(result: dict) -> None:
 # ─── メイン ─────────────────────────────────────────────────────────────
 
 def main() -> None:
-    st.markdown("<h1 style='font-family:Cormorant Garamond,serif; font-weight:300; letter-spacing:0.12em; font-size:1.6rem;'>買い時・仕込み時銘柄スクリーナー</h1>", unsafe_allow_html=True)
+    _title_col, _reload_col = st.columns([8, 2])
+    with _title_col:
+        st.markdown("<h1 style='font-family:Cormorant Garamond,serif; font-weight:300; letter-spacing:0.12em; font-size:1.6rem;'>買い時・仕込み時銘柄スクリーナー</h1>", unsafe_allow_html=True)
+    with _reload_col:
+        _mkt_reload = st.button("🔄 相場観を更新", key="reload_market_outlook",
+                                help="市場データ・ニュースを最新取得してAI相場観を再分析します",
+                                use_container_width=True)
     st.caption(
         "テクニカル（RSI・MACD・BB・トレンド転換・出来高の質）+"
         "ファンダメンタル（PER・PBR・配当・ROE）+"
@@ -803,6 +830,13 @@ def main() -> None:
     _cookies = CookieController()
 
     # ─── 日本株全体の相場観（ページ最上部）──────────────────────
+    if _mkt_reload:
+        fetch_market_context_text.clear()
+        _fetch_market_news.clear()
+        _get_market_outlook.clear()
+        from modules.market_context import fetch_market_snapshot
+        fetch_market_snapshot.clear()
+
     _market_text = fetch_market_context_text()
     if _market_text:
         # APIキー取得（secrets優先）
@@ -813,9 +847,8 @@ def main() -> None:
         _outlook_provider = "claude" if _outlook_key else ""
 
         if _outlook_provider:
-            from modules.ai_analysis import get_light_llm_provider
             _market_news = tuple(_fetch_market_news())
-            with helix_spinner(f"市場ニュース＋指標データから {get_light_llm_provider()} が相場観を分析中..."):
+            with helix_spinner("市場ニュース＋指標データから Claude が相場観を分析中..."):
                 _outlook = _get_market_outlook(_market_text, _market_news, _outlook_provider, _outlook_key)
             _render_market_outlook(_outlook)
             st.divider()
@@ -922,11 +955,34 @@ def main() -> None:
                 st.caption("✅ キー保存済み")
 
         st.divider()
+        force_refresh = st.checkbox(
+            "キャッシュをクリアして最新データで再スキャン",
+            key="force_refresh_scan",
+            help="株価・ファンダメンタル・AI分析のキャッシュを全てクリアし、最新データで再スキャンします",
+        )
         st.caption(market_status_label())
         scan_btn = st.button("🔍 スキャン開始", type="primary", use_container_width=True)
 
     # ─── スキャン実行 ────────────────────────────────────────────
     if scan_btn:
+        # キャッシュクリア（force_refresh チェック時）
+        if force_refresh:
+            from modules.fundamental import fetch_fundamental_yfinance, fetch_fundamental_kabutan
+            from modules.fundamental import fetch_financial_statements_jquants
+            from modules.margin import fetch_margin_data
+            from modules.market_context import fetch_market_snapshot
+            _run_screen.clear()
+            _calc_sector_strength.clear()
+            get_comprehensive_analysis.clear()
+            fetch_market_context_text.clear()
+            fetch_market_snapshot.clear()
+            fetch_fundamental_yfinance.clear()
+            fetch_fundamental_kabutan.clear()
+            fetch_margin_data.clear()
+            _fetch_market_news.clear()
+            _get_market_outlook.clear()
+            st.toast("キャッシュをクリアしました。最新データで再スキャンします。")
+
         ticker_codes   = tuple(t["code"]           for t in scan_items)
         ticker_names   = tuple(t.get("name", "")    for t in scan_items)
         ticker_markets = tuple(t.get("market", "")  for t in scan_items)
@@ -1063,6 +1119,28 @@ def main() -> None:
     if not results:
         st.warning("条件に合致する銘柄が見つかりませんでした。スキャン対象を変更してみてください。")
         return
+
+    # ── 個別銘柄の再分析処理 ──────────────────────────────────────
+    _reanalyzed = False
+    for i, item in enumerate(results):
+        _flag_key = f"_reanalyze_{item['ticker']}"
+        if st.session_state.pop(_flag_key, False):
+            with st.spinner(f"🔄 {item['name']} を最新データで再分析中..."):
+                results[i] = _run_ai_for_candidate(item, ai_provider, ai_api_key)
+                _reanalyzed = True
+    if _reanalyzed:
+        # 再ソートしてセッションに保存
+        results.sort(
+            key=lambda x: (x.get("ai_result") or {}).get("overall_score", 0),
+            reverse=True,
+        )
+        buy_cnt = sum(
+            1 for r in results
+            if (r.get("ai_result") or {}).get("judgment") in ("強気買い", "買い")
+        )
+        st.session_state["buy_scan_results"] = results
+        meta["buy_cnt"] = buy_cnt
+        st.session_state["buy_scan_meta"] = meta
 
     # ── ランキングカード ─────────────────────────────────────────
     for rank, item in enumerate(results, 1):

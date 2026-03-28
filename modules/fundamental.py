@@ -31,10 +31,10 @@ def _parse_market_cap(text: str) -> float | None:
     return val if val > 0 else None
 
 
-@st.cache_data(ttl=3600 * 6)
+@st.cache_data(ttl=3600)
 def fetch_fundamental_kabutan(ticker: str) -> dict:
     """
-    Kabutan の財務ページから指標・財務諸表を取得する（6時間キャッシュ）。
+    Kabutan の財務ページから指標・財務諸表を取得する（1時間キャッシュ）。
     yfinance が取得できない日本株の PER/PBR/配当利回り/時価総額/財務推移を補完する。
     """
     code4 = ticker.replace(".T", "").strip().zfill(4)
@@ -204,17 +204,20 @@ def format_fundamental_text(
     kabutan: dict | None = None,
 ) -> str:
     """ファンダメンタルデータを AI プロンプト用テキストに変換する。
-    kabutan データを優先し、不足分を yfinance で補完する。
+    PER/PBR は株価連動で変動するため yfinance（リアルタイム）を優先し、
+    yfinance が取得できない場合のみ Kabutan で補完する。
+    その他の財務推移データは Kabutan を優先する。
     """
     lines = []
     kb = kabutan or {}
 
-    # ── 株価指標（Kabutan 優先 → yfinance 補完）────────────────────────
-    per = kb.get("per") or fund.get("per")
+    # ── 株価指標（yfinance 優先 → Kabutan 補完）────────────────────────
+    # PER/PBR は株価連動で変動するため、リアルタイム性の高い yfinance を優先
+    per = fund.get("per") or kb.get("per")
     if per is not None:
         lines.append(f"PER: {per:.1f}倍")
 
-    pbr = kb.get("pbr") or fund.get("pbr")
+    pbr = fund.get("pbr") or kb.get("pbr")
     if pbr is not None:
         lines.append(f"PBR: {pbr:.2f}倍")
 
@@ -234,7 +237,7 @@ def format_fundamental_text(
     elif div_yield_yf is not None:
         lines.append(f"配当利回り: {div_yield_yf * 100:.2f}%")
 
-    mktcap = kb.get("market_cap") or fund.get("market_cap")
+    mktcap = fund.get("market_cap") or kb.get("market_cap")
     if mktcap:
         if mktcap >= 1e12:
             lines.append(f"時価総額: ¥{mktcap / 1e12:.2f}兆円")

@@ -242,7 +242,9 @@ def _fetch_kabutan_news_raw(
             if len(parts) == 3 and len(parts[0]) == 2:
                 date_part = f"20{parts[0]}/{parts[1]}/{parts[2]}"
             try:
-                pub_dt = pd.Timestamp(date_part)
+                # JST日付をUTC正規化（Google Newsと統一）
+                pub_dt = pd.Timestamp(date_part, tz="Asia/Tokyo")
+                pub_dt = pub_dt.tz_convert("UTC").tz_localize(None)
             except Exception:
                 continue
 

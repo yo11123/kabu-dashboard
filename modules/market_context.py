@@ -191,7 +191,7 @@ def calc_derived_indicators(snapshot: dict) -> dict[str, dict]:
 
 # ─── AI 分析用テキスト生成 ─────────────────────────────────────────────
 
-@st.cache_data(ttl=3600)  # 1時間キャッシュ（AI分析のキャッシュキーを安定させるため）
+@st.cache_data(ttl=300)  # 5分キャッシュ（fetch_market_snapshot と同期）
 def fetch_market_context_text() -> str:
     """AI分析プロンプトに追加するマーケットコンテキストテキストを生成する。
 
@@ -287,12 +287,23 @@ def fetch_market_context_text() -> str:
     fred_data = fetch_fred_indicators()
     if fred_data:
         lines.append("\n### マクロ経済指標（FRED）")
+        lines.append("※マクロ指標は月次/四半期発表のため、データ日付に注意。古いデータは参考程度に。")
         for name, info in fred_data.items():
             val = info["value"]
             unit = info.get("unit", "")
             desc = info.get("description", "")
             date = info.get("date", "")
-            lines.append(f"- {name}: {val}{unit}（{date}）  ※{desc}")
+            # データの経過日数を計算して鮮度を明示
+            age_note = ""
+            try:
+                days_old = (pd.Timestamp.now() - pd.Timestamp(date)).days
+                if days_old > 90:
+                    age_note = f"（{days_old}日前のデータ、参考程度）"
+                elif days_old > 30:
+                    age_note = f"（{days_old}日前）"
+            except Exception:
+                pass
+            lines.append(f"- {name}: {val}{unit}（{date}{age_note}）  ※{desc}")
 
     # ─── 分析ガイド ──────────────────────────────────────────
     lines.append(
@@ -446,10 +457,19 @@ def fetch_buffett_indicator() -> dict | None:
         gdp = fred.get_series("GDP").dropna()
         gdp_val = float(gdp.iloc[-1])  # 十億ドル単位
 
-        # S&P500をバフェット指標の代替計算
-        # 2024年末基準: S&P500=6000 → 時価総額≈50兆ドル, GDP≈29兆ドル → 比率≈172%
-        # 比例計算で推定
-        estimated_mktcap = sp500_val / 6000 * 50000  # 十億ドル
+        # Wilshire 5000（米国株式市場全体の時価総額）を直接取得
+        try:
+            wilshire = fred.get_series("WILL5000PR").dropna()
+            if wilshire is not None and not wilshire.empty:
+                # Wilshire 5000 index ≈ 米国株式市場時価総額（十億ドル）に近似
+                # 2024年末基準: Wilshire 5000 ≈ 57000 → 時価総額≈57兆ドル
+                wilshire_val = float(wilshire.iloc[-1])
+                estimated_mktcap = wilshire_val  # 十億ドル近似
+            else:
+                # フォールバック: S&P500から推定
+                estimated_mktcap = sp500_val / 6000 * 50000
+        except Exception:
+            estimated_mktcap = sp500_val / 6000 * 50000  # 十億ドル
         ratio = round(estimated_mktcap / gdp_val * 100, 1)
 
         return {

@@ -57,8 +57,11 @@ def _ensure_latest_price(ticker: str, df: pd.DataFrame) -> pd.DataFrame:
                 df.at[df.index[-1], "High"] = latest_price
             if df["Low"].iloc[-1] != df["Low"].iloc[-1]:
                 df.at[df.index[-1], "Low"] = latest_price
-    except Exception:
-        pass
+    except Exception as e:
+        import logging
+        logging.getLogger(__name__).warning(
+            "fast_info price correction failed for %s: %s", ticker, e
+        )
     return df
 
 

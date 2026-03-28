@@ -251,6 +251,12 @@ def _build_prompt(
     return f"""あなたはCFA資格を持つ日本株の上級アナリストです。
 以下のデータをもとに、プロのアナリストとして段階的に深く分析してください。
 
+## ★★★ 最重要ルール: データの正確性 ★★★
+- 分析に使用する数値は、**必ず下記の提供データをそのまま引用すること**
+- あなた自身の訓練データや記憶にある数値（株価・PER・配当等）は一切使用禁止
+- 提供データに含まれない情報については推測で数値を補わず、「データなし」と明記すること
+- ニュース見出しに含まれる数値よりも、構造化データ（テクニカル・ファンダメンタル）の数値を優先すること
+
 ## 銘柄
 {company_name} ({ticker})
 
@@ -310,8 +316,9 @@ def _build_prompt(
 
 ## 出力形式
 上記の思考プロセスを踏まえた上で、最終的に以下のJSON **のみ** を出力してください。
-思考過程は出力せず、結論のみをJSONに凝縮してください。
+思考過程やコードブロック外のテキストは不要です。結論のみをJSONに凝縮してください。
 各detailフィールドには、上記Stepの分析結果を反映した深い洞察を書いてください。
+**detailフィールド内で数値を引用する場合は、必ず上記の提供データの数値をそのまま使ってください。**
 
 ```json
 {{
@@ -320,12 +327,12 @@ def _build_prompt(
   "news_score": 0〜100の整数（50=中立。カタリストの有無と影響度）,
   "overall_score": 0〜100の整数（テク40%+ファンダ35%+ニュース15%+マーケット環境10%で加重）,
   "judgment": "強気買い" | "買い" | "中立" | "売り" | "強気売り",
-  "technical_detail": "テクニカル分析の詳細（5〜6文。指標の一致/乖離、モメンタム、サポレジ、出来高の裏付けを数値付きで解説）",
-  "fundamental_detail": "ファンダメンタル分析の詳細（5〜6文。同業比較を含め、PER/PBR/ROEの水準評価、成長性、配当持続性を解説）",
+  "technical_detail": "テクニカル分析の詳細（5〜6文。提供データの指標値を正確に引用し、一致/乖離、モメンタム、サポレジ、出来高の裏付けを解説）",
+  "fundamental_detail": "ファンダメンタル分析の詳細（5〜6文。提供データのPER/PBR/ROE等を正確に引用し、同業比較、成長性、配当持続性を解説）",
   "news_detail": "ニュース・カタリスト分析（3〜4文。マーケット環境の影響も含む）",
   "overall_detail": "総合判断の根拠（5〜6文。リスク/リワード比、エントリーポイントの妥当性、時間軸を含む）",
-  "opportunities": ["具体的な上昇要因1（数値根拠付き）", "具体的な上昇要因2", "具体的な上昇要因3"],
-  "risks": ["具体的なリスク1（数値根拠付き）", "具体的なリスク2", "具体的なリスク3"]
+  "opportunities": ["具体的な上昇要因1（提供データの数値を引用）", "具体的な上昇要因2", "具体的な上昇要因3"],
+  "risks": ["具体的なリスク1（提供データの数値を引用）", "具体的なリスク2", "具体的なリスク3"]
 }}
 ```"""
 
@@ -370,6 +377,7 @@ def _call_claude(prompt: str, api_key: str, model: str = "claude-haiku-4-5-20251
     response = client.messages.create(
         model=model,
         max_tokens=4096,
+        temperature=0,
         messages=[{"role": "user", "content": prompt}],
     )
     return response.content[0].text
@@ -382,6 +390,7 @@ def _call_openai(prompt: str, api_key: str) -> str:
     response = client.chat.completions.create(
         model="gpt-4o-mini",
         max_tokens=4096,
+        temperature=0,
         messages=[{"role": "user", "content": prompt}],
     )
     return response.choices[0].message.content
@@ -393,7 +402,13 @@ def _call_gemini(prompt: str, api_key: str) -> str:
     import requests as _req
 
     url = "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent"
-    payload = {"contents": [{"role": "user", "parts": [{"text": prompt}]}]}
+    payload = {
+        "contents": [{"role": "user", "parts": [{"text": prompt}]}],
+        "generationConfig": {
+            "temperature": 0,
+            "maxOutputTokens": 4096,
+        },
+    }
     resp = _req.post(
         url,
         params={"key": api_key},
@@ -453,7 +468,7 @@ def _classify_error(err_str: str, provider: str) -> str:
     return f"分析エラー ({provider}): {err_str[:500]}"
 
 
-@st.cache_data(ttl=86400)
+@st.cache_data(ttl=3600 * 4)
 def get_comprehensive_analysis(
     ticker: str,
     company_name: str,
@@ -466,7 +481,7 @@ def get_comprehensive_analysis(
     api_key: str = "",         # ユーザー入力キー（空なら secrets から Claude キーを使用）
 ) -> dict:
     """
-    指定されたプロバイダーの LLM で銘柄の総合AI分析を行う（24時間キャッシュ）。
+    指定されたプロバイダーの LLM で銘柄の総合AI分析を行う（4時間キャッシュ）。
 
     Returns:
         technical_score, fundamental_score, news_score, overall_score (0-100),
@@ -638,6 +653,7 @@ def get_chat_response(
             response = client.messages.create(
                 model="claude-haiku-4-5-20251001",
                 max_tokens=1000,
+                temperature=0,
                 system=system_prompt,
                 messages=messages,
             )
@@ -653,6 +669,7 @@ def get_chat_response(
             response = client.chat.completions.create(
                 model="gpt-4o-mini",
                 max_tokens=1000,
+                temperature=0,
                 messages=openai_messages,
             )
             return response.choices[0].message.content
@@ -671,6 +688,10 @@ def get_chat_response(
             payload = {
                 "system_instruction": {"parts": [{"text": system_prompt}]},
                 "contents": contents,
+                "generationConfig": {
+                    "temperature": 0,
+                    "maxOutputTokens": 1000,
+                },
             }
             resp = _req.post(
                 url,
