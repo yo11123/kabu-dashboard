@@ -76,7 +76,8 @@ def show_earnings_dialog(
     ticker_info: dict,
 ) -> None:
     """決算マーカー（★）クリック時に表示するダイアログ。"""
-    # クリック日に対応するイベントを検索（スナップされた日付に対応できるよう柔軟に）
+    from modules.icons import check_glow, warn_glow, trend_up, trend_down
+
     ev = next((e for e in earnings_events if e["date"] == clicked_date), None)
     if ev is None:
         ev = earnings_events[0] if earnings_events else None
@@ -85,38 +86,71 @@ def show_earnings_dialog(
         return
 
     company_name = ticker_info.get("name", ticker)
-    st.subheader(f"{company_name}　決算期: {ev['period_end']}  |  発表日: {ev['date']}")
 
-    # ── EPS 予想比較バッジ ──
+    # ── ヘッダー ──
     beat = ev.get("beat")
-    if beat is True:
-        st.success("✅ EPS 予想超過")
-    elif beat is False:
-        st.error("❌ EPS 予想未達")
+    eps_act = ev.get("eps_actual")
+    eps_est = ev.get("eps_estimate")
+    rev = ev.get("revenue")
+    op_inc = ev.get("operating_income")
 
-    # ── 財務指標 ──
+    # 総合判定
+    if beat is True:
+        verdict_color = "#3fb950"
+        verdict_icon = trend_up()
+        verdict_text = "好決算 — 株価にポジティブ"
+        verdict_bg = "rgba(63,185,80,0.08)"
+    elif beat is False:
+        verdict_color = "#f47067"
+        verdict_icon = trend_down()
+        verdict_text = "決算未達 — 株価にネガティブ"
+        verdict_bg = "rgba(244,112,103,0.08)"
+    else:
+        verdict_color = "#d4af37"
+        verdict_icon = ""
+        verdict_text = "決算発表"
+        verdict_bg = "rgba(212,175,55,0.05)"
+
+    st.markdown(
+        f"""<div style="background:{verdict_bg};border:1px solid {verdict_color}22;
+            border-left:3px solid {verdict_color};border-radius:4px;padding:16px 20px;margin-bottom:12px;">
+            <div style="font-family:'Cormorant Garamond',serif;font-size:1.2em;color:#f0ece4;letter-spacing:0.05em;">
+                {company_name}
+                <span style="color:#6b7280;font-size:0.7em;margin-left:8px;">
+                    決算期末: {ev['period_end']}　発表日: {ev['date']}
+                </span>
+            </div>
+            <div style="font-size:1.1em;color:{verdict_color};margin-top:8px;font-weight:600;">
+                {verdict_icon} {verdict_text}
+            </div>
+        </div>""",
+        unsafe_allow_html=True,
+    )
+
+    # ── 財務指標カード ──
     col1, col2, col3 = st.columns(3)
 
-    rev = ev.get("revenue")
     if rev is not None:
         rev_disp = f"¥{rev / 1e12:.2f}兆" if rev >= 1e12 else f"¥{rev / 1e9:.0f}億"
     else:
         rev_disp = "N/A"
     col1.metric("売上高", rev_disp)
 
-    op_inc = ev.get("operating_income")
     if op_inc is not None:
         op_disp = f"¥{op_inc / 1e9:.0f}億" if op_inc >= 0 else f"▲¥{abs(op_inc) / 1e9:.0f}億"
+        if rev and rev > 0 and op_inc is not None:
+            margin = op_inc / rev * 100
+            col2.metric("営業利益", op_disp, f"利益率 {margin:.1f}%", delta_color="off")
+        else:
+            col2.metric("営業利益", op_disp)
     else:
-        op_disp = "N/A"
-    col2.metric("営業利益", op_disp)
+        col2.metric("営業利益", "N/A")
 
-    eps_act = ev.get("eps_actual")
-    eps_est = ev.get("eps_estimate")
     eps_disp = f"{eps_act:.1f}円" if eps_act is not None else "N/A"
     eps_delta = None
-    if eps_act is not None and eps_est is not None:
-        eps_delta = f"{eps_act - eps_est:+.1f}円 vs 予想{eps_est:.1f}円"
+    if eps_act is not None and eps_est is not None and eps_est != 0:
+        surprise_pct = (eps_act - eps_est) / abs(eps_est) * 100
+        eps_delta = f"{surprise_pct:+.1f}% vs 予想{eps_est:.1f}円"
     col3.metric(
         "EPS",
         eps_disp,
@@ -124,23 +158,109 @@ def show_earnings_dialog(
         delta_color="normal" if beat is True else ("inverse" if beat is False else "off"),
     )
 
+    # ── 好材料/悪材料の分析 ──
+    factors_good: list[str] = []
+    factors_bad: list[str] = []
+
+    if beat is True and eps_act is not None and eps_est is not None:
+        surprise = (eps_act - eps_est) / abs(eps_est) * 100
+        if surprise > 20:
+            factors_good.append(f"EPSが予想を{surprise:.0f}%大幅超過 — 強い好材料")
+        elif surprise > 5:
+            factors_good.append(f"EPSが予想を{surprise:.0f}%超過 — 好材料")
+        else:
+            factors_good.append(f"EPSが予想を小幅超過（{surprise:.1f}%）— 軽い好材料")
+    elif beat is False and eps_act is not None and eps_est is not None:
+        miss = (eps_est - eps_act) / abs(eps_est) * 100
+        if miss > 20:
+            factors_bad.append(f"EPSが予想を{miss:.0f}%大幅下回り — 強い悪材料")
+        elif miss > 5:
+            factors_bad.append(f"EPSが予想を{miss:.0f}%下回り — 悪材料")
+        else:
+            factors_bad.append(f"EPSが予想を小幅下回り（{miss:.1f}%）— 軽い悪材料")
+
+    if op_inc is not None and rev is not None and rev > 0:
+        margin = op_inc / rev * 100
+        if margin >= 15:
+            factors_good.append(f"営業利益率{margin:.1f}% — 高収益体質")
+        elif margin >= 8:
+            factors_good.append(f"営業利益率{margin:.1f}% — 安定的")
+        elif margin < 3:
+            factors_bad.append(f"営業利益率{margin:.1f}% — 低収益")
+
+    if factors_good or factors_bad:
+        st.divider()
+        gc, bc = st.columns(2)
+        with gc:
+            if factors_good:
+                st.markdown(f"**{trend_up()} 好材料**", unsafe_allow_html=True)
+                for i, f in enumerate(factors_good):
+                    st.markdown(f"{check_glow(i * 0.3)} {f}", unsafe_allow_html=True)
+        with bc:
+            if factors_bad:
+                st.markdown(f"**{trend_down()} 悪材料**", unsafe_allow_html=True)
+                for i, f in enumerate(factors_bad):
+                    st.markdown(f"{warn_glow(i * 0.3)} {f}", unsafe_allow_html=True)
+
+    # ── AI 決算インパクト分析 ──
+    st.divider()
+    _ai_key = f"_earnings_ai_{ticker}_{ev['date']}"
+    if _ai_key not in st.session_state:
+        st.session_state[_ai_key] = None
+
+    if st.session_state[_ai_key]:
+        st.markdown(
+            f"**🤖 AI 決算インパクト分析**\n\n{st.session_state[_ai_key]}",
+        )
+    else:
+        if st.button("🤖 AIで決算インパクトを分析", use_container_width=True):
+            with helix_spinner("決算インパクトを分析中..."):
+                try:
+                    api_key = ""
+                    try:
+                        api_key = st.secrets.get("ANTHROPIC_API_KEY", "")
+                    except Exception:
+                        pass
+                    if api_key:
+                        from modules.ai_analysis import _call_claude
+                        _prompt = f"""以下の決算データを分析し、株価への影響を日本語で簡潔に解説してください。
+
+銘柄: {company_name} ({ticker})
+決算期末: {ev['period_end']} / 発表日: {ev['date']}
+売上高: {rev_disp}
+営業利益: {op_disp if op_inc is not None else 'N/A'}
+{f'営業利益率: {op_inc / rev * 100:.1f}%' if op_inc and rev and rev > 0 else ''}
+EPS実績: {eps_disp}
+{f'EPS予想: {eps_est:.1f}円 / サプライズ: {((eps_act - eps_est) / abs(eps_est) * 100):+.1f}%' if eps_act is not None and eps_est is not None and eps_est != 0 else ''}
+
+以下の3点を各2〜3文で分析してください:
+1. **決算評価**: この決算は好決算か悪決算か、市場予想との乖離度
+2. **株価への影響**: 翌営業日以降の株価にどう影響するか（過去の類似ケースも参考に）
+3. **今後の注目点**: 次の決算に向けて注視すべきポイント
+
+提供データの数値のみを使い、推測で数値を補わないこと。"""
+                        _resp = _call_claude(_prompt, api_key)
+                        st.session_state[_ai_key] = _resp
+                        st.markdown(f"**🤖 AI 決算インパクト分析**\n\n{_resp}")
+                    else:
+                        st.warning("APIキーが未設定のため分析できません")
+                except Exception as e:
+                    st.error(f"分析エラー: {e}")
+
     st.divider()
 
     # ── IR・開示情報リンク ──
-    st.subheader("IR・開示情報")
+    st.caption("IR・開示情報")
     code_4 = ticker.replace(".T", "").strip()
-    # Kabutan: 会社開示情報（TDNET 適時開示をまとめて閲覧できる）
     tdnet_kabutan_url = f"https://kabutan.jp/stock/news?code={code_4}&nmode=3"
-    # Kabutan: IR レポート（アナリストレポート）
     ir_report_url = f"https://kabutan.jp/stock/ir_report?code={code_4}"
-    # Minkabu: 決算・業績情報
     minkabu_url = f"https://minkabu.jp/stock/{code_4}/settlement"
     website = ticker_info.get("website", "")
 
     link_cols = st.columns(4 if website else 3)
-    link_cols[0].link_button("📋 適時開示（Kabutan）", tdnet_kabutan_url, use_container_width=True)
-    link_cols[1].link_button("📊 IR レポート（Kabutan）", ir_report_url, use_container_width=True)
-    link_cols[2].link_button("📈 決算情報（Minkabu）", minkabu_url, use_container_width=True)
+    link_cols[0].link_button("📋 適時開示", tdnet_kabutan_url, use_container_width=True)
+    link_cols[1].link_button("📊 IR レポート", ir_report_url, use_container_width=True)
+    link_cols[2].link_button("📈 決算情報", minkabu_url, use_container_width=True)
     if website:
         link_cols[3].link_button("🌐 IR サイト", website, use_container_width=True)
 
