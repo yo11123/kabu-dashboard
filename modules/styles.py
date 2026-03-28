@@ -203,31 +203,15 @@ header[data-testid="stHeader"] {
 .main .block-container > div > div:nth-child(8)  { animation-delay: 0.35s; }
 .main .block-container > div > div:nth-child(n+9) { animation-delay: 0.4s; }
 
-/* ── ゴールドシマー見出し ── */
-@keyframes shimmerGold {
-    0%   { background-position: -200% center; }
-    100% { background-position: 200% center; }
-}
 h1 {
     font-family: var(--serif) !important;
     font-size: 1.6rem !important;
     font-weight: 300 !important;
     text-transform: none;
     letter-spacing: 0.15em;
+    color: var(--ivory) !important;
     position: relative;
     padding-bottom: 12px;
-    /* シマーテキスト */
-    background: linear-gradient(
-        90deg,
-        var(--ivory) 0%, var(--ivory) 35%,
-        var(--gold-light) 50%,
-        var(--ivory) 65%, var(--ivory) 100%
-    );
-    background-size: 200% auto;
-    -webkit-background-clip: text;
-    -webkit-text-fill-color: transparent;
-    background-clip: text;
-    animation: shimmerGold 6s linear infinite;
 }
 h1::after {
     content: '';
