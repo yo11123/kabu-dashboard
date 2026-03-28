@@ -24,7 +24,13 @@ from modules.styles import BG_BASE, BG_PANEL, GRID_COLOR, TEXT_MUTED, apply_them
 from modules.loading import helix_spinner
 apply_theme()
 
-
+# ─── Plotly 共通設定 ──────────────────────────────────────────────────
+_PLOTLY_CONFIG = {
+    "displayModeBar": False,
+    "scrollZoom": False,
+    "doubleClick": False,
+    "staticPlot": True,
+}
 
 # ─── スパークラインチャート生成 ────────────────────────────────────────
 
@@ -131,6 +137,7 @@ def _render_live_indicator(name: str, data: dict, period: str) -> None:
         if df is not None and not df.empty:
             fig = _make_chart(df, color=color)
             st.plotly_chart(fig, use_container_width=True,
+                           config=_PLOTLY_CONFIG,
                            key=f"ind_{name}_{ticker}_{period}")
         else:
             st.caption("チャートデータを取得できませんでした")
@@ -175,7 +182,7 @@ def main() -> None:
                 if df is not None and not df.empty:
                     color = "#5ca08b" if data["change_pct"] >= 0 else "#c45c5c"
                     fig = _make_sparkline(df, color)
-                    col.plotly_chart(fig, use_container_width=True, key=f"sum_{key}")
+                    col.plotly_chart(fig, use_container_width=True, config=_PLOTLY_CONFIG, key=f"sum_{key}")
 
     st.divider()
 
@@ -274,7 +281,7 @@ def main() -> None:
                 _hy_hist = fetch_fred_series_history("BAMLH0A0HYM2", 252)
                 if _hy_hist is not None:
                     fig = _make_chart(pd.DataFrame({"Close": _hy_hist}), color="#ff9800")
-                    st.plotly_chart(fig, use_container_width=True, key="fred_hy_spread")
+                    st.plotly_chart(fig, use_container_width=True, config=_PLOTLY_CONFIG, key="fred_hy_spread")
 
     # ── 4. マクロ経済 ─────────────────────────────────────────
     with tabs[3]:
@@ -301,7 +308,7 @@ def main() -> None:
                             hist = fetch_fred_series_history(sid, 60)
                             if hist is not None:
                                 fig = _make_chart(pd.DataFrame({"Close": hist}), color="#4caf50")
-                                st.plotly_chart(fig, use_container_width=True, key=f"fred_{sid}")
+                                st.plotly_chart(fig, use_container_width=True, config=_PLOTLY_CONFIG, key=f"fred_{sid}")
         else:
             st.warning(
                 "FRED APIキーが設定されていません。マクロ経済指標を表示するには:\n\n"
@@ -343,7 +350,7 @@ def main() -> None:
                         df_nk = fetch_indicator_history(nk["ticker"], period)
                         if df_nk is not None and not df_nk.empty:
                             fig = _make_chart(df_nk, title="日経平均", color="#d4af37")
-                            st.plotly_chart(fig, use_container_width=True, key="val_nk225")
+                            st.plotly_chart(fig, use_container_width=True, config=_PLOTLY_CONFIG, key="val_nk225")
 
         # イールドスプレッド
         tnx_data = snapshot.get("米10年債利回り", {})
@@ -359,7 +366,7 @@ def main() -> None:
                         df_tnx = fetch_indicator_history(tnx_data["ticker"], period)
                         if df_tnx is not None and not df_tnx.empty:
                             fig = _make_chart(df_tnx, title="米10年債利回り", color="#ff9800")
-                            st.plotly_chart(fig, use_container_width=True, key="val_tnx")
+                            st.plotly_chart(fig, use_container_width=True, config=_PLOTLY_CONFIG, key="val_tnx")
 
         vc3, vc4 = st.columns(2)
 
