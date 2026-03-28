@@ -12,15 +12,12 @@ import streamlit as st
 import yfinance as yf
 from streamlit_cookies_controller import CookieController
 
-import xml.etree.ElementTree as _ET
-
-import requests as _requests
-
 from modules.ai_analysis import get_comprehensive_analysis, prepare_analysis_inputs
 from modules.data_loader import fetch_stock_data_max, load_all_tse_stocks, load_tickers
 from modules.events import fetch_news_events
 from modules.market_context import fetch_market_context_text, fetch_market_snapshot, calc_derived_indicators
 from modules.market_hours import market_status_label
+from modules.market_news import fetch_all_news, fetch_category_news, format_news_for_prompt
 from modules.styles import apply_theme
 
 from modules.loading import helix_spinner
@@ -556,44 +553,12 @@ def _render_card(rank: int, item: dict) -> None:
     st.write("")  # カード間の余白
 
 
-# ─── 市場ニュース取得（Google News RSS）──────────────────────────────
-
-@st.cache_data(ttl=3600)  # 1時間キャッシュ
-def _fetch_market_news() -> list[str]:
-    """Google News RSSから市場・地政学・経済ニュースの見出しを取得する。"""
-    queries = [
-        "株式市場 日経平均",
-        "地政学リスク 株 影響",
-        "米国株 市場 経済",
-        "原油 金利 為替 市場",
-        "戦争 紛争 制裁 経済",
-    ]
-    titles: list[str] = []
-    seen: set[str] = set()
-
-    for q in queries:
-        try:
-            url = f"https://news.google.com/rss/search?q={q}&hl=ja&gl=JP&ceid=JP:ja"
-            r = _requests.get(url, timeout=10, headers={"User-Agent": "Mozilla/5.0"})
-            if r.status_code != 200:
-                continue
-            root = _ET.fromstring(r.content)
-            for item in root.findall(".//item")[:8]:
-                title_el = item.find("title")
-                if title_el is not None and title_el.text:
-                    t = title_el.text.strip()
-                    if t not in seen:
-                        seen.add(t)
-                        titles.append(t)
-        except Exception:
-            continue
-
-    return titles[:30]
+# ─── 市場ニュース取得（共有モジュール経由）──────────────────────────
 
 
 # ─── 日本株全体の相場観 AI 分析 ──────────────────────────────────────
 
-def _build_market_outlook_prompt(market_text: str, snapshot: dict, derived: dict, news: list[str]) -> str:
+def _build_market_outlook_prompt(market_text: str, snapshot: dict, derived: dict, news_text: str) -> str:
     """日本株市場全体の売買判断プロンプトを生成する。"""
     # 主要指数の変動をまとめる
     indices = []
@@ -603,8 +568,8 @@ def _build_market_outlook_prompt(market_text: str, snapshot: dict, derived: dict
             indices.append(f"- {name}: {d['value']:,.0f}（前日比{d['change_pct']:+.1f}%）")
     indices_text = "\n".join(indices) if indices else "データなし"
 
-    # ニュース
-    news_text = "\n".join(f"- {t}" for t in news[:25]) if news else "ニュース取得なし"
+    if not news_text:
+        news_text = "ニュース取得なし"
 
     return f"""あなたは日本株市場の上級ストラテジストです。
 以下の市場データと**最新ニュース**を分析し、**今、日本株全体として買い時か・売り時か・現状維持か** を判断してください。
@@ -620,9 +585,9 @@ def _build_market_outlook_prompt(market_text: str, snapshot: dict, derived: dict
 
 {market_text}
 
-## 最新の市場・地政学ニュース（直近）
-※ニュースは定性的な材料として使うこと。ニュース見出し中の数値よりも上記の構造化データを優先。
 {news_text}
+
+※ニュースは定性的な材料として使うこと。ニュース見出し中の数値よりも上記の構造化データを優先。
 
 ## 分析の視点
 1. VIXとSKEWから市場のリスク選好度を判断
@@ -652,14 +617,14 @@ def _build_market_outlook_prompt(market_text: str, snapshot: dict, derived: dict
 
 
 @st.cache_data(ttl=3600)  # 1時間キャッシュ（市場環境は頻繁に変わるため）
-def _get_market_outlook(market_text: str, news_tuple: tuple, provider: str, api_key: str) -> dict:
+def _get_market_outlook(market_text: str, news_text: str, provider: str, api_key: str) -> dict:
     """日本株全体の相場観をAIで分析する。"""
     import json
     import re
 
     snapshot = fetch_market_snapshot()
     derived = calc_derived_indicators(snapshot)
-    prompt = _build_market_outlook_prompt(market_text, snapshot, derived, list(news_tuple))
+    prompt = _build_market_outlook_prompt(market_text, snapshot, derived, news_text)
 
     if not snapshot:
         return {"error": "市場データを取得できませんでした（休場日の可能性があります）"}
@@ -832,7 +797,8 @@ def main() -> None:
     # ─── 日本株全体の相場観（ページ最上部）──────────────────────
     if _mkt_reload:
         fetch_market_context_text.clear()
-        _fetch_market_news.clear()
+        fetch_all_news.clear()
+        fetch_category_news.clear()
         _get_market_outlook.clear()
         from modules.market_context import fetch_market_snapshot
         fetch_market_snapshot.clear()
@@ -847,9 +813,9 @@ def main() -> None:
         _outlook_provider = "claude" if _outlook_key else ""
 
         if _outlook_provider:
-            _market_news = tuple(_fetch_market_news())
+            _news_text = format_news_for_prompt()
             with helix_spinner("市場ニュース＋指標データから Claude が相場観を分析中..."):
-                _outlook = _get_market_outlook(_market_text, _market_news, _outlook_provider, _outlook_key)
+                _outlook = _get_market_outlook(_market_text, _news_text, _outlook_provider, _outlook_key)
             _render_market_outlook(_outlook)
             st.divider()
 
@@ -979,7 +945,8 @@ def main() -> None:
             fetch_fundamental_yfinance.clear()
             fetch_fundamental_kabutan.clear()
             fetch_margin_data.clear()
-            _fetch_market_news.clear()
+            fetch_all_news.clear()
+            fetch_category_news.clear()
             _get_market_outlook.clear()
             st.toast("キャッシュをクリアしました。最新データで再スキャンします。")
 

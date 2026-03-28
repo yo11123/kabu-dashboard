@@ -164,6 +164,7 @@ def _build_prompt(
     news_titles: tuple[str, ...],
     margin_text: str = "",
     market_text: str = "",
+    market_news_text: str = "",
 ) -> str:
     """分析用プロンプトを生成する。"""
     news_text = (
@@ -282,8 +283,10 @@ def _build_prompt(
 ## ファンダメンタル
 {fund_text}{margin_section}{market_section}
 
-## 最近のニュース（直近30日）
+## この銘柄のニュース（直近30日）
 {news_text}
+
+{market_news_text}
 
 ## 分析手順（この順番で段階的に思考してください）
 
@@ -515,7 +518,14 @@ def get_comprehensive_analysis(
 
     try:
         tech = json.loads(tech_json)
-        prompt = _build_prompt(ticker, company_name, tech, fund_text, news_titles, margin_text, market_text)
+        # 市場全体のニュースを取得してプロンプトに含める
+        try:
+            from modules.market_news import format_news_for_prompt
+            _mkt_news = format_news_for_prompt(max_per_cat=5)
+        except Exception:
+            _mkt_news = ""
+        prompt = _build_prompt(ticker, company_name, tech, fund_text, news_titles,
+                               margin_text, market_text, _mkt_news)
 
         if provider == "claude":
             # Claude は secrets の共用キー or ユーザー入力キーを使用
