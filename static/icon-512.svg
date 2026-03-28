@@ -1,15 +1,102 @@
 <svg xmlns="http://www.w3.org/2000/svg" width="512" height="512" viewBox="0 0 512 512">
-  <rect width="512" height="512" rx="80" fill="#06090f"/>
-  <rect x="20" y="20" width="472" height="472" rx="60" fill="#0a0f1a" stroke="#1a1f2e" stroke-width="2"/>
-  <!-- ローソク足 -->
-  <line x1="160" y1="120" x2="160" y2="400" stroke="#5ca08b" stroke-width="8"/>
-  <rect x="130" y="180" width="60" height="140" rx="4" fill="#5ca08b"/>
-  <line x1="260" y1="100" x2="260" y2="380" stroke="#c45c5c" stroke-width="8"/>
-  <rect x="230" y="140" width="60" height="160" rx="4" fill="#c45c5c"/>
-  <line x1="360" y1="150" x2="360" y2="410" stroke="#5ca08b" stroke-width="8"/>
-  <rect x="330" y="200" width="60" height="130" rx="4" fill="#5ca08b"/>
-  <!-- トレンドライン -->
-  <path d="M100 350 L200 250 L300 300 L420 150" stroke="#d4af37" stroke-width="6" stroke-linecap="round" stroke-linejoin="round" fill="none" opacity="0.8"/>
-  <!-- AI ドット -->
-  <circle cx="420" cy="150" r="12" fill="#d4af37" opacity="0.9"/>
+  <defs>
+    <!-- 背景グラデーション -->
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#0d1520"/>
+      <stop offset="50%" stop-color="#06090f"/>
+      <stop offset="100%" stop-color="#0a1018"/>
+    </linearGradient>
+    <!-- ゴールドグロー -->
+    <radialGradient id="goldGlow" cx="75%" cy="25%" r="50%">
+      <stop offset="0%" stop-color="#d4af37" stop-opacity="0.12"/>
+      <stop offset="100%" stop-color="#d4af37" stop-opacity="0"/>
+    </radialGradient>
+    <!-- 緑グロー -->
+    <filter id="glowGreen">
+      <feGaussianBlur stdDeviation="6" result="blur"/>
+      <feMerge><feMergeNode in="blur"/><feMergeNode in="SourceGraphic"/></feMerge>
+    </filter>
+    <!-- 赤グロー -->
+    <filter id="glowRed">
+      <feGaussianBlur stdDeviation="5" result="blur"/>
+      <feMerge><feMergeNode in="blur"/><feMergeNode in="SourceGraphic"/></feMerge>
+    </filter>
+    <!-- ゴールドラインのグロー -->
+    <filter id="glowGold">
+      <feGaussianBlur stdDeviation="4" result="blur"/>
+      <feMerge><feMergeNode in="blur"/><feMergeNode in="SourceGraphic"/></feMerge>
+    </filter>
+    <!-- AIドットのグロー -->
+    <filter id="glowDot">
+      <feGaussianBlur stdDeviation="8" result="blur"/>
+      <feMerge><feMergeNode in="blur"/><feMergeNode in="SourceGraphic"/></feMerge>
+    </filter>
+  </defs>
+
+  <!-- 背景 -->
+  <rect width="512" height="512" rx="90" fill="url(#bg)"/>
+  <!-- ゴールドの光源 -->
+  <rect width="512" height="512" rx="90" fill="url(#goldGlow)"/>
+  <!-- 枠線 -->
+  <rect x="8" y="8" width="496" height="496" rx="82" fill="none" stroke="#1a1f2e" stroke-width="1.5"/>
+  <!-- 内側の微かな枠 -->
+  <rect x="24" y="24" width="464" height="464" rx="66" fill="none" stroke="#141a28" stroke-width="0.8"/>
+
+  <!-- グリッド線（横） -->
+  <line x1="60" y1="130" x2="452" y2="130" stroke="#141a28" stroke-width="0.8"/>
+  <line x1="60" y1="200" x2="452" y2="200" stroke="#141a28" stroke-width="0.8"/>
+  <line x1="60" y1="270" x2="452" y2="270" stroke="#141a28" stroke-width="0.8"/>
+  <line x1="60" y1="340" x2="452" y2="340" stroke="#141a28" stroke-width="0.8"/>
+  <line x1="60" y1="410" x2="452" y2="410" stroke="#141a28" stroke-width="0.8"/>
+
+  <!-- グリッド線（縦） -->
+  <line x1="120" y1="80" x2="120" y2="440" stroke="#141a28" stroke-width="0.5"/>
+  <line x1="210" y1="80" x2="210" y2="440" stroke="#141a28" stroke-width="0.5"/>
+  <line x1="300" y1="80" x2="300" y2="440" stroke="#141a28" stroke-width="0.5"/>
+  <line x1="390" y1="80" x2="390" y2="440" stroke="#141a28" stroke-width="0.5"/>
+
+  <!-- ローソク足 1（陽線・緑） -->
+  <g filter="url(#glowGreen)" opacity="0.9">
+    <line x1="120" y1="150" x2="120" y2="390" stroke="#5ca08b" stroke-width="5" stroke-linecap="round"/>
+    <rect x="96" y="220" width="48" height="120" rx="4" fill="#5ca08b"/>
+    <rect x="96" y="220" width="48" height="120" rx="4" fill="none" stroke="#7ec8a8" stroke-width="0.8" opacity="0.4"/>
+  </g>
+
+  <!-- ローソク足 2（陰線・赤） -->
+  <g filter="url(#glowRed)" opacity="0.9">
+    <line x1="210" y1="120" x2="210" y2="370" stroke="#c45c5c" stroke-width="5" stroke-linecap="round"/>
+    <rect x="186" y="160" width="48" height="140" rx="4" fill="#c45c5c"/>
+    <rect x="186" y="160" width="48" height="140" rx="4" fill="none" stroke="#e07878" stroke-width="0.8" opacity="0.4"/>
+  </g>
+
+  <!-- ローソク足 3（陽線・緑、大きめ） -->
+  <g filter="url(#glowGreen)" opacity="0.95">
+    <line x1="300" y1="100" x2="300" y2="350" stroke="#5ca08b" stroke-width="5" stroke-linecap="round"/>
+    <rect x="276" y="170" width="48" height="130" rx="4" fill="#5ca08b"/>
+    <rect x="276" y="170" width="48" height="130" rx="4" fill="none" stroke="#7ec8a8" stroke-width="0.8" opacity="0.4"/>
+  </g>
+
+  <!-- ローソク足 4（陽線・緑、上昇） -->
+  <g filter="url(#glowGreen)">
+    <line x1="390" y1="90" x2="390" y2="310" stroke="#5ca08b" stroke-width="5" stroke-linecap="round"/>
+    <rect x="366" y="130" width="48" height="110" rx="4" fill="#5ca08b"/>
+    <rect x="366" y="130" width="48" height="110" rx="4" fill="none" stroke="#7ec8a8" stroke-width="0.8" opacity="0.4"/>
+  </g>
+
+  <!-- トレンドライン（ゴールド）＋グロー -->
+  <path d="M96 340 L186 300 L276 240 L390 155" stroke="#d4af37" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" fill="none" opacity="0.3" filter="url(#glowGold)"/>
+  <path d="M96 340 L186 300 L276 240 L390 155" stroke="#d4af37" stroke-width="4" stroke-linecap="round" stroke-linejoin="round" fill="none" opacity="0.8"/>
+  <!-- トレンドライン下のエリア塗り -->
+  <path d="M96 340 L186 300 L276 240 L390 155 L390 420 L96 420 Z" fill="#d4af37" opacity="0.03"/>
+
+  <!-- AIドット（先端） -->
+  <circle cx="390" cy="155" r="16" fill="#d4af37" opacity="0.15" filter="url(#glowDot)"/>
+  <circle cx="390" cy="155" r="8" fill="#d4af37" opacity="0.9"/>
+  <circle cx="387" cy="152" r="2.5" fill="#fff" opacity="0.5"/>
+
+  <!-- 出来高バー（下部） -->
+  <rect x="102" y="415" width="36" height="25" rx="2" fill="#5ca08b" opacity="0.25"/>
+  <rect x="192" y="405" width="36" height="35" rx="2" fill="#c45c5c" opacity="0.25"/>
+  <rect x="282" y="400" width="36" height="40" rx="2" fill="#5ca08b" opacity="0.3"/>
+  <rect x="372" y="395" width="36" height="45" rx="2" fill="#5ca08b" opacity="0.35"/>
 </svg>
