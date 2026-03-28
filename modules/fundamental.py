@@ -185,14 +185,12 @@ def fetch_financial_statements_jquants(ticker: str) -> list[dict]:
         resp.raise_for_status()
         statements = resp.json().get("statements", [])
 
-        # 年次決算を優先、なければ全件から直近4件
-        annual = [s for s in statements if "Annual" in s.get("TypeOfDocument", "")]
-        source = annual if annual else statements
+        # 年次＋四半期の両方を含めて直近8件（最新の決算状況を把握するため）
         return sorted(
-            source,
+            statements,
             key=lambda x: x.get("CurrentPeriodEndDate", ""),
             reverse=True,
-        )[:4]
+        )[:8]
 
     except Exception:
         return []
@@ -296,20 +294,37 @@ def format_fundamental_text(
             if parts:
                 lines.append(f"  {f['period']}: " + " / ".join(parts))
     elif jquants:
-        lines.append("\n[財務諸表推移（J-Quants）]")
-        for stmt in jquants[:4]:
+        lines.append("\n[財務諸表推移（J-Quants、年次＋四半期）]")
+        for stmt in jquants[:8]:
             period = stmt.get("CurrentPeriodEndDate", "")[:7]
+            doc_type = stmt.get("TypeOfDocument", "")
+            if "Annual" in doc_type:
+                period_label = f"{period}(通期)"
+            elif "Q1" in doc_type or "1Q" in doc_type or "FirstQuarter" in doc_type:
+                period_label = f"{period}(Q1)"
+            elif "Q2" in doc_type or "2Q" in doc_type or "SecondQuarter" in doc_type or "Half" in doc_type:
+                period_label = f"{period}(Q2/中間)"
+            elif "Q3" in doc_type or "3Q" in doc_type or "ThirdQuarter" in doc_type:
+                period_label = f"{period}(Q3)"
+            else:
+                period_label = f"{period}({doc_type[:10]})"
             parts = []
             net_sales = stmt.get("NetSales")
             op_profit = stmt.get("OperatingProfit")
             net_profit = stmt.get("Profit")
+            forecast_sales = stmt.get("ForecastNetSales")
+            forecast_profit = stmt.get("ForecastProfit")
             if net_sales:
                 parts.append(f"売上={float(net_sales) / 1e9:.0f}億")
             if op_profit:
                 parts.append(f"営業益={float(op_profit) / 1e9:.0f}億")
             if net_profit:
                 parts.append(f"純益={float(net_profit) / 1e9:.0f}億")
+            if forecast_sales:
+                parts.append(f"通期売上予想={float(forecast_sales) / 1e9:.0f}億")
+            if forecast_profit:
+                parts.append(f"通期純益予想={float(forecast_profit) / 1e9:.0f}億")
             if parts:
-                lines.append(f"  {period}: " + " / ".join(parts))
+                lines.append(f"  {period_label}: " + " / ".join(parts))
 
     return "\n".join(lines) if lines else "財務データなし"

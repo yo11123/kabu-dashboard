@@ -741,6 +741,62 @@ def get_chat_response(
         return f"❌ {_classify_error(str(e), label)}"
 
 
+def _format_earnings_for_prompt(ticker: str) -> str:
+    """直近の四半期決算イベントをAIプロンプト用テキストに変換する。"""
+    try:
+        import yfinance as yf
+        t = yf.Ticker(ticker)
+        # 決算日一覧
+        dates = t.get_earnings_dates(limit=12)
+        if dates is None or dates.empty:
+            return ""
+
+        lines = ["[直近の決算発表]"]
+        for idx, row in dates.head(6).iterrows():
+            date_str = idx.strftime("%Y-%m-%d") if hasattr(idx, "strftime") else str(idx)[:10]
+            eps_actual = row.get("Reported EPS")
+            eps_est = row.get("EPS Estimate")
+            surprise = row.get("Surprise(%)")
+
+            parts = [date_str]
+            if eps_est is not None and eps_est == eps_est:  # NaN check
+                parts.append(f"EPS予想={eps_est:.2f}")
+            if eps_actual is not None and eps_actual == eps_actual:
+                parts.append(f"EPS実績={eps_actual:.2f}")
+            if surprise is not None and surprise == surprise:
+                beat = "超過" if surprise > 0 else "未達"
+                parts.append(f"サプライズ={surprise:+.1f}%({beat})")
+
+            if len(parts) > 1:  # 日付以外にデータがある場合のみ
+                lines.append(f"  {' / '.join(parts)}")
+
+        # 四半期財務諸表（yfinance）
+        try:
+            q_stmt = t.quarterly_income_stmt
+            if q_stmt is not None and not q_stmt.empty:
+                lines.append("[四半期業績推移]")
+                for col in q_stmt.columns[:4]:  # 直近4四半期
+                    period = col.strftime("%Y-%m") if hasattr(col, "strftime") else str(col)[:7]
+                    parts = []
+                    rev = q_stmt.at["Total Revenue", col] if "Total Revenue" in q_stmt.index else None
+                    op = q_stmt.at["Operating Income", col] if "Operating Income" in q_stmt.index else None
+                    net = q_stmt.at["Net Income", col] if "Net Income" in q_stmt.index else None
+                    if rev is not None and rev == rev:
+                        parts.append(f"売上={float(rev) / 1e9:.0f}億")
+                    if op is not None and op == op:
+                        parts.append(f"営業益={float(op) / 1e9:.0f}億")
+                    if net is not None and net == net:
+                        parts.append(f"純益={float(net) / 1e9:.0f}億")
+                    if parts:
+                        lines.append(f"  {period}: {' / '.join(parts)}")
+        except Exception:
+            pass
+
+        return "\n".join(lines) if len(lines) > 1 else ""
+    except Exception:
+        return ""
+
+
 def prepare_analysis_inputs(
     ticker: str,
     company_name: str,
@@ -758,6 +814,11 @@ def prepare_analysis_inputs(
     jquants_data = fetch_financial_statements_jquants(ticker)
     kabutan_data = fetch_fundamental_kabutan(ticker)
     fund_text = format_fundamental_text(fund_data, jquants_data, kabutan=kabutan_data)
+
+    # 四半期決算データを追加
+    earnings_text = _format_earnings_for_prompt(ticker)
+    if earnings_text:
+        fund_text = fund_text + "\n\n" + earnings_text
 
     news_titles = tuple(
         item["title"]
