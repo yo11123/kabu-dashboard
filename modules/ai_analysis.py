@@ -594,8 +594,12 @@ def build_chat_system_prompt(
     tech_json: str,
     fund_text: str,
     margin_text: str = "",
+    news_titles: tuple[str, ...] = (),
 ) -> str:
-    """チャット用のシステムプロンプトを生成する（銘柄コンテキスト付き）。"""
+    """チャット用のシステムプロンプトを生成する（銘柄コンテキスト付き）。
+
+    毎回最新のマーケット環境・市場ニュースを取得してプロンプトに含める。
+    """
     try:
         tech = json.loads(tech_json) if tech_json else {}
     except Exception:
@@ -605,9 +609,26 @@ def build_chat_system_prompt(
     margin_section = f"\n\n## 信用取引情報\n{margin_text}" if margin_text else ""
     market_section = f"\n\n{market_text}" if market_text else ""
 
+    # 銘柄別ニュース
+    stock_news = ""
+    if news_titles:
+        stock_news = "\n\n## この銘柄の最新ニュース\n" + "\n".join(f"- {t}" for t in news_titles[:15])
+
+    # 市場全体のニュース
+    market_news = ""
+    try:
+        from modules.market_news import format_news_for_prompt
+        market_news = "\n\n" + format_news_for_prompt(max_per_cat=3)
+    except Exception:
+        pass
+
     return f"""あなたは日本株の専門アナリストアシスタントです。
 ユーザーから {company_name}（{ticker}）についての質問を受けています。
 以下のデータを参考に、具体的で分かりやすい日本語で回答してください。
+
+## ★ データの正確性ルール
+- 数値を引用する場合は、下記の提供データの数値をそのまま使うこと
+- あなたの訓練データや記憶にある数値は使用禁止
 
 ## 銘柄情報
 銘柄: {company_name}（{ticker}）
@@ -616,7 +637,7 @@ def build_chat_system_prompt(
 {json.dumps(tech, ensure_ascii=False, indent=2)}
 
 ## ファンダメンタルデータ
-{fund_text}{margin_section}{market_section}
+{fund_text}{margin_section}{market_section}{stock_news}{market_news}
 
 回答は簡潔で具体的にしてください。不明な点は正直に不明と答えてください。"""
 

@@ -897,7 +897,8 @@ def main() -> None:
                 _spinner_placeholder = st.empty()
                 _spinner_placeholder.markdown(_thinking_html, unsafe_allow_html=True)
                 _sys_prompt = build_chat_system_prompt(
-                    ticker, company_name, tech_json, fund_text, _margin_text
+                    ticker, company_name, tech_json, fund_text, _margin_text,
+                    news_titles=news_titles,
                 )
                 _response = get_chat_response(
                     messages=st.session_state[_chat_key],

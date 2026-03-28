@@ -1064,8 +1064,11 @@ def _build_portfolio_chat_context(
     results: dict,
     market_text: str,
 ) -> str:
-    """ポートフォリオチャット用のシステムプロンプトを構築する。"""
-    # 保有銘柄一覧
+    """ポートフォリオチャット用のシステムプロンプトを構築する。
+
+    チャット送信のたびに呼ばれるため、最新の株価を取得し直す。
+    """
+    # 保有銘柄一覧（最新株価を取得）
     pf_lines = []
     total_value = 0
     total_pnl = 0
@@ -1074,9 +1077,14 @@ def _build_portfolio_chat_context(
         name = h["name"] or ticker
         shares = h["shares"]
         avg_cost = h["avg_cost"]
-        analysis = results.get(ticker, {})
-        price_info = analysis.get("price_info", {})
-        current = price_info.get("price", 0)
+        analysis = results.get(ticker, {}) if results else {}
+        # 最新株価を取得（キャッシュされた分析結果の価格ではなく）
+        fresh_price = _fetch_current_price(ticker)
+        current = fresh_price.get("price", 0)
+        if not current:
+            # フォールバック: 分析結果の価格
+            price_info = analysis.get("price_info", {})
+            current = price_info.get("price", 0)
         value = current * shares if current else 0
         pnl = (current - avg_cost) * shares if avg_cost > 0 and current else 0
         pnl_pct = ((current / avg_cost - 1) * 100) if avg_cost > 0 and current else 0
@@ -1125,12 +1133,16 @@ def _build_portfolio_chat_context(
     return f"""あなたはCFA資格を持つ日本株ポートフォリオの上級アドバイザーです。
 ユーザーの保有ポートフォリオについて、具体的で実践的な投資アドバイスを提供してください。
 
+## ★ データの正確性ルール
+- 数値を引用する場合は、下記の提供データの数値をそのまま使うこと
+- あなたの訓練データや記憶にある数値は使用禁止
+
 ## 保有ポートフォリオ
 {pf_summary}
 
 合計評価額: ¥{total_value:,.0f}　合計含み損益: ¥{total_pnl:,.0f}
 {overall_text}
-{f"## マーケット環境{chr(10)}{market_text}" if market_text else ""}
+{f"## マーケット環境{chr(10)}{fetch_market_context_text()}"}
 
 {news_text}
 

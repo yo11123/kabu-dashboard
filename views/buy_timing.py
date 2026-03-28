@@ -392,7 +392,9 @@ def _run_ai_for_candidate(item: dict, provider: str, api_key: str) -> dict:
     ticker = item["ticker"]
     name   = item["name"]
     try:
-        df = fetch_stock_data_max(ticker)
+        from modules.market_hours import is_tse_open
+        from modules.data_loader import fetch_stock_data_max_realtime
+        df = fetch_stock_data_max_realtime(ticker) if is_tse_open() else fetch_stock_data_max(ticker)
         if df is None or df.empty or len(df) < 30:
             item["ai_result"] = None
             return item
