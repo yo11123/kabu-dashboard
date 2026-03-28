@@ -499,8 +499,8 @@ hr {
     transition: transform 0.3s var(--ease);
 }
 .stTabs [data-baseweb="tab"]:hover {
-    color: var(--ivory);
-    background: rgba(212, 175, 55, 0.02);
+    color: var(--gold) !important;
+    background: transparent;
 }
 .stTabs [data-baseweb="tab"]:hover::after {
     transform: scaleX(1);
