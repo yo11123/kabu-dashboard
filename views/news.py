@@ -157,24 +157,102 @@ def _fetch_rss(query: str, max_items: int = 15) -> list[dict]:
         return []
 
 
+def _tokenize(title: str) -> set[str]:
+    """タイトルを簡易トークン化する（助詞・記号を除去し、キーワード集合を返す）。"""
+    import re
+    # 記号・空白で分割し、1文字以下のトークンを除去
+    tokens = re.split(r'[\s,、。・/\-\|「」『』（）()【】\[\]：:]+', title)
+    # 短すぎるトークン（助詞等）を除外
+    stop = {"の", "は", "が", "を", "に", "で", "と", "も", "へ", "や", "か", "な",
+            "だ", "た", "て", "する", "した", "から", "まで", "より", "など",
+            "ら", "れ", "さ", "し", "い", "る", "ない", "ある", "いる",
+            "the", "a", "an", "of", "in", "to", "for", "and", "or", "is", "on"}
+    return {t.lower() for t in tokens if len(t) > 1 and t.lower() not in stop}
+
+
+def _similarity(a: set[str], b: set[str]) -> float:
+    """2つのトークン集合のJaccard類似度を返す。"""
+    if not a or not b:
+        return 0.0
+    return len(a & b) / len(a | b)
+
+
+def _dedup_similar(items: list[dict], threshold: float = 0.45) -> list[dict]:
+    """類似ニュースをグループ化し、各グループから最も詳しい記事のみ残す。
+
+    「詳しい」= タイトルが長い記事を優先（より多くの情報を含む）。
+    同じ長さなら出版社の優先度で判定。
+    """
+    _PUBLISHER_PRIORITY = {
+        "日本経済新聞": 0, "日経": 0, "ロイター": 1, "Reuters": 1,
+        "Bloomberg": 2, "ブルームバーグ": 2, "株探": 3, "東洋経済": 4,
+        "NHK": 2, "朝日新聞": 3, "読売新聞": 3, "毎日新聞": 3,
+    }
+
+    def _priority(item: dict) -> int:
+        pub = item.get("publisher", "")
+        for name, pri in _PUBLISHER_PRIORITY.items():
+            if name in pub:
+                return pri
+        return 9
+
+    if not items:
+        return []
+
+    # トークン化
+    tokenized = [(item, _tokenize(item["title"])) for item in items]
+
+    # グループ化: 各記事を既存グループと比較し、類似ならマージ
+    groups: list[list[int]] = []  # index のリスト
+    assigned: set[int] = set()
+
+    for i, (_, tokens_i) in enumerate(tokenized):
+        if i in assigned:
+            continue
+
+        group = [i]
+        assigned.add(i)
+
+        for j, (_, tokens_j) in enumerate(tokenized):
+            if j in assigned:
+                continue
+            if _similarity(tokens_i, tokens_j) >= threshold:
+                group.append(j)
+                assigned.add(j)
+
+        groups.append(group)
+
+    # 各グループから最も詳しい記事を選択
+    result: list[dict] = []
+    for group in groups:
+        candidates = [items[idx] for idx in group]
+        # タイトル長い順 → 出版社優先度順
+        candidates.sort(key=lambda x: (-len(x["title"]), _priority(x)))
+        result.append(candidates[0])
+
+    return result
+
+
 @st.cache_data(ttl=600, show_spinner=False)
 def _fetch_category_news(queries: tuple[str, ...], max_items: int = 20) -> list[dict]:
-    """カテゴリ内の全クエリからニュースを取得しマージ・重複除去する。"""
+    """カテゴリ内の全クエリからニュースを取得しマージ・類似記事を除去する。"""
     all_items: list[dict] = []
     for q in queries:
         all_items.extend(_fetch_rss(q, max_items=15))
 
-    # 重複除去（タイトル先頭35文字）
+    # 完全重複除去（タイトル先頭35文字）
     seen: set[str] = set()
-    merged: list[dict] = []
+    unique: list[dict] = []
     for item in all_items:
         key = item["title"][:35]
         if key not in seen:
             seen.add(key)
-            merged.append(item)
+            unique.append(item)
 
-    merged.sort(key=lambda x: x["pub_dt"], reverse=True)
-    return merged[:max_items]
+    # 類似記事の除去（最も詳しい記事のみ残す）
+    deduped = _dedup_similar(unique)
+    deduped.sort(key=lambda x: x["pub_dt"], reverse=True)
+    return deduped[:max_items]
 
 
 @st.cache_data(ttl=600, show_spinner=False)
@@ -454,15 +532,8 @@ def main() -> None:
                 item_copy["_icon"] = cat["icon"]
                 merged.append(item_copy)
 
-        # 重複除去
-        seen: set[str] = set()
-        unique: list[dict] = []
-        for it in merged:
-            key = it["title"][:35]
-            if key not in seen:
-                seen.add(key)
-                unique.append(it)
-
+        # 類似記事の除去（最も詳しい記事のみ残す）
+        unique = _dedup_similar(merged)
         unique.sort(key=lambda x: x["pub_dt"], reverse=True)
 
         st.caption(f"{len(unique)} 件のニュース")
