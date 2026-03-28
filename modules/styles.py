@@ -301,10 +301,14 @@ h3 {
 }
 .stButton > button:hover {
     background: var(--gold) !important;
-    color: var(--bg-base) !important;
+    color: #06090f !important;
     border-color: var(--gold) !important;
     box-shadow: 0 4px 20px rgba(212, 175, 55, 0.15);
     letter-spacing: 0.2em;
+}
+.stButton > button:hover p,
+.stButton > button:hover span {
+    color: #06090f !important;
 }
 .stButton > button[kind="primary"] {
     background: rgba(212, 175, 55, 0.12) !important;
@@ -313,10 +317,14 @@ h3 {
     border: 1px solid rgba(212, 175, 55, 0.3) !important;
 }
 .stButton > button[kind="primary"]:hover {
-    background: rgba(212, 175, 55, 0.22) !important;
-    color: var(--gold-light) !important;
-    box-shadow: 0 4px 24px rgba(212, 175, 55, 0.1);
+    background: var(--gold) !important;
+    color: #06090f !important;
+    box-shadow: 0 4px 24px rgba(212, 175, 55, 0.15);
     letter-spacing: 0.2em;
+}
+.stButton > button[kind="primary"]:hover p,
+.stButton > button[kind="primary"]:hover span {
+    color: #06090f !important;
 }
 
 /* リンクボタン */
