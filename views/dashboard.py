@@ -843,6 +843,8 @@ def main() -> None:
     # TAB 3: AI チャット
     # ════════════════════════════════════════════════════════════════
     with tab_chat:
+        from modules.icons import robot_avatar
+
         _chat_key = f"chat_{ticker}_{ai_provider}"
         if _chat_key not in st.session_state:
             st.session_state[_chat_key] = []
@@ -852,20 +854,24 @@ def main() -> None:
             f"**{company_name}** について {_provider_label} に自由に質問できます。"
             "テクニカル・ファンダメンタル・信用残・マーケット環境データを渡しています。"
         )
-        if _chat_clr.button("🗑️ 履歴", key="chat_clear_btn", use_container_width=True):
+        if _chat_clr.button("🗑️ 履歴クリア", key="chat_clear_btn", use_container_width=True):
             st.session_state[_chat_key] = []
             st.rerun()
 
-        _chat_window = st.container(height=450, border=True)
+        _chat_window = st.container(height=500, border=True)
         with _chat_window:
             if not st.session_state[_chat_key]:
                 st.markdown(
-                    "<div style='text-align:center;color:#6b7280;padding:3em 1em;"
-                    "font-family:Inter,Noto Sans JP,sans-serif;font-size:0.82em;letter-spacing:0.04em;'>"
-                    "まだ会話がありません<br><br>"
-                    "<span style='font-size:0.9em;color:#505868;font-style:italic;'>"
-                    "例:「今買い時ですか？」「RSIの数値をどう見ますか？」「決算はいつ？」"
-                    "</span></div>",
+                    f"""<div style='text-align:center;color:#6b7280;padding:2em 1em;
+                        font-family:Inter,Noto Sans JP,sans-serif;font-size:0.82em;letter-spacing:0.04em;'>
+                        {robot_avatar("lg")}
+                        <br><br>
+                        <b style="color:#b8b0a2;">{company_name} AIアナリスト</b><br><br>
+                        テクニカル・ファンダメンタル・ニュース・マーケット環境を踏まえて回答します。<br>
+                        <span style='font-size:0.9em;color:#505868;font-style:italic;'>
+                        例:「今買い時ですか？」「RSIの数値をどう見ますか？」<br>
+                        「決算はいつ？」「配当利回りは？」「リスクは？」
+                        </span></div>""",
                     unsafe_allow_html=True,
                 )
             for _msg in st.session_state[_chat_key]:
@@ -880,7 +886,7 @@ def main() -> None:
                 with st.chat_message("user"):
                     st.markdown(_user_input)
                 with st.chat_message("assistant"):
-                    with helix_spinner("回答を生成中..."):
+                    with helix_spinner("アナリストが回答を生成中..."):
                         _sys_prompt = build_chat_system_prompt(
                             ticker, company_name, tech_json, fund_text, _margin_text
                         )
