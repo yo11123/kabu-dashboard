@@ -11,7 +11,7 @@ _ICON_PATH = os.path.join(os.path.dirname(__file__), "static", "icon-192.png")
 _APP_ICON = Image.open(_ICON_PATH) if os.path.exists(_ICON_PATH) else ":material/candlestick_chart:"
 
 pages = [
-    st.Page("views/dashboard.py", title="ダッシュボード", icon=":material/candlestick_chart:", default=True),
+    st.Page("views/dashboard.py", title="チャート", icon=":material/candlestick_chart:", default=True),
     st.Page("views/bb_scanner.py", title="BBスキャナー", icon=":material/radar:"),
     st.Page("views/buy_timing.py", title="買い時銘柄", icon=":material/target:"),
     st.Page("views/news.py", title="市場ニュース", icon=":material/newspaper:"),
