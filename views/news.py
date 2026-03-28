@@ -501,20 +501,12 @@ def main() -> None:
 
     st.divider()
 
-    # ─── サイドバー: フィルター ────────────────────────────────
-    with st.sidebar:
-        st.header("表示設定")
-        st.caption("カテゴリフィルター")
-        selected_cats: list[str] = []
-        for cat in NEWS_CATEGORIES:
-            if st.checkbox(f"{cat['icon']} {cat['name']}", value=True, key=f"news_cat_{cat['name']}"):
-                selected_cats.append(cat["name"])
-        max_per_cat = st.slider("カテゴリあたりの表示件数", 5, 20, 10, key="news_max_items")
-
     # ─── カテゴリ別タブ表示 ────────────────────────────────────
-    # 全件まとめて表示 + カテゴリ別タブ
+    selected_cats = [c["name"] for c in NEWS_CATEGORIES]
+    max_per_cat = 10
+
     tab_names = ["📋 全て"] + [
-        f"{c['icon']} {c['name']}" for c in NEWS_CATEGORIES if c["name"] in selected_cats
+        f"{c['icon']} {c['name']}" for c in NEWS_CATEGORIES
     ]
     tabs = st.tabs(tab_names)
 
