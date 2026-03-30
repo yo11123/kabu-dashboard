@@ -17,10 +17,18 @@ _KEY = "author_note"
 def main() -> None:
     st.markdown(
         "<h1 style='font-family:Cormorant Garamond,serif; font-weight:300;"
-        " letter-spacing:0.12em; font-size:1.6rem;'>作者の相場観</h1>",
+        " letter-spacing:0.12em; font-size:1.6rem;'>制作者相場観</h1>",
         unsafe_allow_html=True,
     )
-    st.caption("ここに書いた内容が買い時銘柄ページの上部に自動表示されます。")
+    st.markdown(
+        "<div style='font-family:Inter,Noto Sans JP,sans-serif;font-size:0.85em;"
+        "color:#6b7280;line-height:1.8;margin-bottom:16px;'>"
+        "このページはアプリ制作者が、AI分析とは別に個人的に感じている日本株市場の相場観を"
+        "書き留めるスペースです。やる気があれば随時更新していきます。"
+        "<br>あくまで個人の見解であり、投資助言ではありません。"
+        "</div>",
+        unsafe_allow_html=True,
+    )
 
     # 保存済みの内容を読み込み
     saved = _file_load(_KEY, "")
