@@ -206,16 +206,32 @@ def main() -> None:
 
     st.divider()
 
-    # ─── チャート期間選択 ────────────────────────────────────
+    # ─── チャート期間選択（ボタン行）────────────────────────────
+    _period_options = {
+        "1mo": "1ヶ月",
+        "3mo": "3ヶ月",
+        "6mo": "6ヶ月",
+        "1y": "1年",
+        "2y": "2年",
+        "5y": "5年",
+    }
+    if "mi_period" not in st.session_state:
+        st.session_state.mi_period = "6mo"
+
+    _pcols = st.columns(len(_period_options))
+    for _pi, (_pkey, _plabel) in enumerate(zip(_period_options.keys(), _period_options.values())):
+        _is_active = st.session_state.mi_period == _pkey
+        if _pcols[_pi].button(
+            _plabel,
+            key=f"mi_period_{_pkey}",
+            use_container_width=True,
+            type="primary" if _is_active else "secondary",
+        ):
+            st.session_state.mi_period = _pkey
+
+    period = st.session_state.mi_period
+
     with st.sidebar:
-        st.header("表示設定")
-        period = st.select_slider(
-            "チャート期間",
-            options=["1mo", "3mo", "6mo", "1y", "2y"],
-            value="6mo",
-            format_func=lambda x: {"1mo": "1ヶ月", "3mo": "3ヶ月", "6mo": "6ヶ月", "1y": "1年", "2y": "2年"}[x],
-        )
-        st.divider()
         st.markdown(market_status_label(), unsafe_allow_html=True)
 
     # ─── カテゴリタブ ────────────────────────────────────────
