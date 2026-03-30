@@ -74,14 +74,14 @@ def _build_key_events() -> list[dict]:
             "icon": "🇯🇵",
         })
 
-    # 定期イベント（毎月）- 2026年の主要経済指標
+    # 定期イベント（毎月）- 日本株に影響する主要経済指標
     monthly_events = [
         (3, "米雇用統計（NFP）", "雇用", "米国", "high", "🇺🇸"),
         (10, "米CPI（消費者物価指数）", "CPI", "米国", "high", "🇺🇸"),
-        (15, "米小売売上高", "小売", "米国", "medium", "🇺🇸"),
         (25, "米PCEデフレーター", "PCE", "米国", "high", "🇺🇸"),
+        (20, "日本CPI", "CPI", "日本", "high", "🇯🇵"),
         (1, "米ISM製造業景気指数", "ISM", "米国", "medium", "🇺🇸"),
-        (20, "日本CPI", "CPI", "日本", "medium", "🇯🇵"),
+        (15, "米小売売上高", "小売", "米国", "low", "🇺🇸"),
     ]
 
     for month in range(1, 13):
@@ -163,12 +163,15 @@ def _fetch_investing_calendar() -> list[dict]:
             }
             country_ja, icon = country_map.get(country, (country, "🌐"))
 
+            # 日本株への影響度で重要度を再評価
+            jp_impact = _assess_japan_impact(title, country, impact)
+
             events.append({
                 "date": event_date,
                 "name": title,
                 "country": country_ja,
                 "icon": icon,
-                "impact": "high" if impact == "high" else ("medium" if impact == "medium" else "low"),
+                "impact": jp_impact,
                 "forecast": str(forecast) if forecast else "",
                 "previous": str(previous) if previous else "",
                 "actual": str(actual) if actual else "",
@@ -178,6 +181,56 @@ def _fetch_investing_calendar() -> list[dict]:
         return events
     except Exception:
         return []
+
+
+def _assess_japan_impact(title: str, country: str, original_impact: str) -> str:
+    """日本株への影響度を再評価する。
+
+    海外指標でも日本株に大きく影響するものは「重要」、
+    影響が限定的なものは「中」「低」に格下げする。
+    """
+    t = title.lower()
+
+    # ── 日本株に高インパクト ──────────────────────────────────
+    # 日本の指標は全て重要
+    if country == "JPY":
+        if any(kw in t for kw in ["boj", "金利", "cpi", "gdp", "tankan"]):
+            return "high"
+        return "medium"
+
+    # 米国: 日本株に直接影響する指標のみ「重要」
+    if country == "USD":
+        high_keywords = [
+            "fomc", "fed", "powell",                  # FRB関連
+            "non-farm", "nonfarm", "employment change",  # 雇用統計(NFP)
+            "cpi", "consumer price",                  # CPI
+            "pce",                                    # PCEデフレーター
+            "gdp",                                    # GDP
+            "unemployment rate",                      # 失業率
+        ]
+        if any(kw in t for kw in high_keywords):
+            return "high"
+
+        medium_keywords = [
+            "ism", "pmi",                             # 景況感
+            "retail sales",                           # 小売売上高
+            "jolts",                                  # 求人件数
+            "treasury", "bond",                       # 国債
+        ]
+        if any(kw in t for kw in medium_keywords):
+            return "medium"
+
+        # その他の米指標は低インパクト
+        return "low"
+
+    # 欧州・中国: 日本株への影響は限定的
+    if country in ("EUR", "CNY"):
+        if any(kw in t for kw in ["ecb", "pboc", "gdp", "cpi"]):
+            return "medium"
+        return "low"
+
+    # その他の国
+    return "low"
 
 
 # ─── AI 今週の注目イベント解説 ───────────────────────────────────────────
@@ -282,7 +335,7 @@ def main() -> None:
     this_week_ext = [
         e for e in external_events
         if week_start.isoformat() <= e["date"] <= week_end.isoformat()
-        and e.get("impact") == "high"
+        and e.get("impact") in ("high", "medium")
     ]
 
     # 重複除去してマージ
