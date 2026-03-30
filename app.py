@@ -10,21 +10,31 @@ from modules.persistence import init_persistence
 _ICON_PATH = os.path.join(os.path.dirname(__file__), "static", "icon-192.png")
 _APP_ICON = Image.open(_ICON_PATH) if os.path.exists(_ICON_PATH) else ":material/candlestick_chart:"
 
-pages = [
-    st.Page("views/dashboard.py", title="チャート", icon=":material/candlestick_chart:", default=True),
-    st.Page("views/bb_scanner.py", title="BBスキャナー", icon=":material/radar:"),
-    st.Page("views/buy_timing.py", title="買い時銘柄", icon=":material/target:"),
-    st.Page("views/news.py", title="市場ニュース", icon=":material/newspaper:"),
-    st.Page("views/earnings_calendar.py", title="決算カレンダー", icon=":material/event_note:"),
-    st.Page("views/economic_calendar.py", title="経済カレンダー", icon=":material/today:"),
-    st.Page("views/market_indicators.py", title="市場指標", icon=":material/public:"),
-    st.Page("views/market_overview.py", title="マーケット概況", icon=":material/trending_up:"),
-    st.Page("views/portfolio.py", title="ポートフォリオ", icon=":material/account_balance_wallet:"),
-    st.Page("views/watchlist.py", title="ウォッチリスト", icon=":material/visibility:"),
-    st.Page("views/sector_analysis.py", title="セクター分析", icon=":material/donut_small:"),
-    st.Page("views/custom_screener.py", title="カスタムスクリーナー", icon=":material/filter_alt:"),
-    st.Page("views/backtest.py", title="バックテスト", icon=":material/query_stats:"),
-]
+pages = {
+    "分析": [
+        st.Page("views/dashboard.py", title="チャート", icon=":material/candlestick_chart:", default=True),
+        st.Page("views/buy_timing.py", title="買い時銘柄", icon=":material/target:"),
+        st.Page("views/bb_scanner.py", title="BBスキャナー", icon=":material/radar:"),
+    ],
+    "マーケット": [
+        st.Page("views/news.py", title="市場ニュース", icon=":material/newspaper:"),
+        st.Page("views/market_indicators.py", title="市場指標", icon=":material/public:"),
+        st.Page("views/market_overview.py", title="マーケット概況", icon=":material/trending_up:"),
+        st.Page("views/sector_analysis.py", title="セクター分析", icon=":material/donut_small:"),
+    ],
+    "カレンダー": [
+        st.Page("views/earnings_calendar.py", title="決算", icon=":material/event_note:"),
+        st.Page("views/economic_calendar.py", title="経済指標", icon=":material/today:"),
+    ],
+    "運用": [
+        st.Page("views/portfolio.py", title="ポートフォリオ", icon=":material/account_balance_wallet:"),
+        st.Page("views/watchlist.py", title="ウォッチリスト", icon=":material/visibility:"),
+    ],
+    "ツール": [
+        st.Page("views/custom_screener.py", title="スクリーナー", icon=":material/filter_alt:"),
+        st.Page("views/backtest.py", title="バックテスト", icon=":material/query_stats:"),
+    ],
+}
 
 pg = st.navigation(pages)
 st.set_page_config(page_title="日本株アプリ v1.1", page_icon=_APP_ICON, layout="wide")
