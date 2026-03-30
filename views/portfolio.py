@@ -140,7 +140,7 @@ def _parse_portfolio_image(image_bytes: bytes, api_key: str) -> list[dict] | Non
             import anthropic as _anthropic
             client = _anthropic.Anthropic(api_key=api_key)
             _resp = client.messages.create(
-                model="claude-haiku-4-5-20251001",
+                model="claude-sonnet-4-5-20250514",
                 max_tokens=2000,
                 messages=[{
                     "role": "user",
@@ -333,7 +333,7 @@ def _portfolio_ai_analysis(
         elif provider == "gemini":
             text = _call_gemini(prompt, api_key)
         else:
-            text = _call_claude(prompt, api_key, model="claude-haiku-4-5-20251001")
+            text = _call_claude(prompt, api_key, model="claude-sonnet-4-5-20250514")
         return {**_parse_json(text), "error": False}
     except Exception as e:
         return {
@@ -397,7 +397,7 @@ def _portfolio_overall_analysis(
         elif provider == "gemini":
             text = _call_gemini(prompt, api_key)
         else:
-            text = _call_claude(prompt, api_key, model="claude-haiku-4-5-20251001")
+            text = _call_claude(prompt, api_key, model="claude-sonnet-4-5-20250514")
         return {**_parse_json(text), "error": False}
     except Exception as e:
         return {

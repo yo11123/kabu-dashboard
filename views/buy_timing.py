@@ -634,7 +634,7 @@ def _get_market_outlook(market_text: str, news_text: str, provider: str, api_key
 
     try:
         from modules.ai_analysis import _call_claude
-        text = _call_claude(prompt, api_key)
+        text = _call_claude(prompt, api_key, model="claude-sonnet-4-5-20250514")
 
         # JSONパース（AIの応答から JSON を確実に抽出）
         if not text or not text.strip():

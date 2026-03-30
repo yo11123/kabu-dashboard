@@ -1,8 +1,11 @@
 import json
+import logging
 
 import anthropic
 import pandas as pd
 import streamlit as st
+
+logger = logging.getLogger(__name__)
 
 from modules.fundamental import (
     fetch_financial_statements_jquants,
@@ -136,6 +139,35 @@ def calc_technical_summary(df: pd.DataFrame) -> dict:
         # 直近20日の安値（短期サポート）
         support_resistance["support_20d"] = round(float(close.tail(20).min()), 1)
 
+    # ── P2的追加指標: シグナル品質・モメンタム一貫性 ──────────────
+    # 日次リターンの自己相関（モメンタム持続性）
+    momentum_consistency = None
+    if len(close) >= 30:
+        daily_ret = close.pct_change().dropna()
+        if len(daily_ret) >= 20:
+            autocorr = float(daily_ret.tail(60).autocorr(lag=1))
+            if autocorr == autocorr:  # NaN check
+                momentum_consistency = round(autocorr, 3)
+
+    # リターンの安定性（シャープレシオ的指標、20日）
+    rolling_sharpe = None
+    if len(close) >= 25:
+        ret20 = close.pct_change().tail(20)
+        mean_r = float(ret20.mean())
+        std_r = float(ret20.std())
+        if std_r > 0:
+            rolling_sharpe = round(mean_r / std_r * (252 ** 0.5), 2)
+
+    # 上昇日比率（20日）
+    up_day_ratio = None
+    if len(close) >= 21:
+        changes = close.diff().tail(20)
+        up_days = int((changes > 0).sum())
+        up_day_ratio = round(up_days / 20, 2)
+
+    # ── P3的チャートパターン記述 ──────────────────────────────────
+    chart_pattern = _detect_chart_pattern(df)
+
     return {
         "current_price": round(last, 1),
         "rsi": rsi,
@@ -150,10 +182,142 @@ def calc_technical_summary(df: pd.DataFrame) -> dict:
         "bb_sigma": bb_sigma,
         "returns": returns,
         "support_resistance": support_resistance,
+        # P2的追加指標
+        "momentum_consistency": momentum_consistency,
+        "rolling_sharpe_20d": rolling_sharpe,
+        "up_day_ratio_20d": up_day_ratio,
+        # P3的チャートパターン
+        "chart_pattern": chart_pattern,
     }
 
 
+def _detect_chart_pattern(df: pd.DataFrame) -> dict:
+    """P3的アプローチ: チャートの視覚的パターンをテキストで記述する。
+
+    論文のP3（テキスト+プロット）条件を模倣し、
+    画像を送れない代わりにチャートの動的特性をテキストで伝達する。
+    """
+    result: dict = {}
+    close = df["Close"]
+    if len(close) < 30:
+        return result
+
+    # ── トレンド方向と強度 ─────────────────────────────────────
+    sma5 = close.rolling(5).mean()
+    sma25 = close.rolling(25).mean()
+    sma75 = close.rolling(75).mean() if len(close) >= 75 else None
+
+    last = float(close.iloc[-1])
+    sma5_now = float(sma5.iloc[-1]) if not pd.isna(sma5.iloc[-1]) else None
+    sma25_now = float(sma25.iloc[-1]) if not pd.isna(sma25.iloc[-1]) else None
+    sma75_now = float(sma75.iloc[-1]) if sma75 is not None and not pd.isna(sma75.iloc[-1]) else None
+
+    # SMA の並び順でトレンド判定
+    if sma5_now and sma25_now and sma75_now:
+        if sma5_now > sma25_now > sma75_now:
+            result["trend"] = "強い上昇トレンド（SMA5>SMA25>SMA75のパーフェクトオーダー）"
+        elif sma5_now < sma25_now < sma75_now:
+            result["trend"] = "強い下降トレンド（SMA5<SMA25<SMA75の逆パーフェクトオーダー）"
+        elif sma5_now > sma25_now:
+            result["trend"] = "短期上昇・中長期はもみ合い"
+        elif sma5_now < sma25_now:
+            result["trend"] = "短期下落・中長期はもみ合い"
+        else:
+            result["trend"] = "方向感なし・レンジ相場"
+    elif sma5_now and sma25_now:
+        if sma5_now > sma25_now:
+            result["trend"] = "短期上昇トレンド"
+        else:
+            result["trend"] = "短期下降トレンド"
+
+    # ── SMA25の傾き（トレンドの加速/減速）──────────────────────
+    if len(sma25) >= 10:
+        slope_5d = float(sma25.iloc[-1]) - float(sma25.iloc[-6])
+        slope_10d = float(sma25.iloc[-1]) - float(sma25.iloc[-11])
+        if sma25_now and sma25_now > 0:
+            slope_pct = slope_5d / sma25_now * 100
+            if slope_pct > 0.5:
+                result["trend_acceleration"] = f"トレンド加速中（SMA25が5日で{slope_pct:+.2f}%上昇）"
+            elif slope_pct < -0.5:
+                result["trend_acceleration"] = f"トレンド減速/反転中（SMA25が5日で{slope_pct:+.2f}%下落）"
+            else:
+                result["trend_acceleration"] = "トレンド横ばい"
+
+    # ── ドローダウン状況 ───────────────────────────────────────
+    cummax = close.cummax()
+    drawdown = (close - cummax) / cummax * 100
+    current_dd = float(drawdown.iloc[-1])
+    max_dd = float(drawdown.min())
+    result["current_drawdown"] = f"{current_dd:.1f}%"
+    result["max_drawdown"] = f"{max_dd:.1f}%"
+    if current_dd < -20:
+        result["drawdown_status"] = "深刻なドローダウン中（-20%超）"
+    elif current_dd < -10:
+        result["drawdown_status"] = "調整局面（-10%〜-20%）"
+    elif current_dd < -5:
+        result["drawdown_status"] = "軽い調整（-5%〜-10%）"
+    else:
+        result["drawdown_status"] = "高値圏で推移"
+
+    # ── 出来高パターン ────────────────────────────────────────
+    if "Volume" in df.columns and len(df) >= 20:
+        vol = df["Volume"]
+        vol_20 = float(vol.tail(20).mean())
+        vol_5 = float(vol.tail(5).mean())
+        vol_1 = float(vol.iloc[-1])
+        if vol_20 > 0:
+            if vol_1 > vol_20 * 2:
+                result["volume_pattern"] = f"直近で出来高急増（20日平均の{vol_1/vol_20:.1f}倍）— 大きな材料あり"
+            elif vol_5 > vol_20 * 1.5:
+                result["volume_pattern"] = "5日間で出来高増加傾向 — 注目度上昇"
+            elif vol_5 < vol_20 * 0.5:
+                result["volume_pattern"] = "出来高低迷 — 市場の関心低下"
+            else:
+                result["volume_pattern"] = "出来高は通常水準"
+
+    # ── 直近の値動きパターン ──────────────────────────────────
+    if len(close) >= 10:
+        last_5 = close.tail(5)
+        last_10 = close.tail(10)
+        # 直近5日の高値・安値レンジ
+        range_5d = (float(last_5.max()) - float(last_5.min())) / last * 100
+        range_10d = (float(last_10.max()) - float(last_10.min())) / last * 100
+        if range_5d < 2:
+            result["recent_action"] = f"直近5日はレンジ{range_5d:.1f}%の膠着状態 — ブレイクアウト待ち"
+        elif range_5d > 8:
+            result["recent_action"] = f"直近5日でレンジ{range_5d:.1f}%の激しい値動き"
+        else:
+            chg_5d = (float(close.iloc[-1]) - float(close.iloc[-6])) / float(close.iloc[-6]) * 100
+            direction = "上昇" if chg_5d > 0 else "下落"
+            result["recent_action"] = f"直近5日で{chg_5d:+.1f}%{direction}"
+
+    # ── ゴールデンクロス/デッドクロスの接近度 ──────────────────
+    if sma25_now and sma75_now:
+        cross_gap = (sma25_now - sma75_now) / sma75_now * 100
+        if abs(cross_gap) < 1:
+            if cross_gap > 0:
+                result["cross_signal"] = f"SMA25とSMA75が接近中（乖離{cross_gap:+.2f}%）— デッドクロスに注意"
+            else:
+                result["cross_signal"] = f"SMA25とSMA75が接近中（乖離{cross_gap:+.2f}%）— ゴールデンクロスの兆候"
+        elif cross_gap > 5:
+            result["cross_signal"] = f"SMA25がSMA75を大きく上回る（+{cross_gap:.1f}%）— 上昇基調が持続"
+        elif cross_gap < -5:
+            result["cross_signal"] = f"SMA25がSMA75を大きく下回る（{cross_gap:.1f}%）— 下落基調が持続"
+
+    return result
+
+
 # ─── AI 総合分析 ──────────────────────────────────────────────────────────
+
+
+def _format_chart_pattern(pattern: dict) -> str:
+    """チャートパターン辞書をプロンプト用テキストに変換する。"""
+    if not pattern:
+        return "チャートパターンデータなし"
+    lines = []
+    for key, val in pattern.items():
+        lines.append(f"- {key}: {val}")
+    return "\n".join(lines)
 
 
 def _build_prompt(
@@ -280,6 +444,14 @@ def _build_prompt(
 ## サポート・レジスタンスライン
 {sr_text}
 
+## シグナル品質・モメンタム分析（P2的追加指標）
+- モメンタム持続性（日次リターン自己相関）: {tech.get('momentum_consistency', 'N/A')}  ※正値=トレンド継続傾向、負値=反転傾向
+- 20日ローリングシャープレシオ: {tech.get('rolling_sharpe_20d', 'N/A')}  ※リスク調整後のリターン効率
+- 20日上昇日比率: {tech.get('up_day_ratio_20d', 'N/A')}  ※0.6超で強気、0.4未満で弱気
+
+## チャートパターン分析（視覚的特徴のテキスト記述）
+{_format_chart_pattern(tech.get('chart_pattern', {{}}))}
+
 ## ファンダメンタル
 {fund_text}{margin_section}{market_section}
 
@@ -295,6 +467,7 @@ def _build_prompt(
 - 過去リターンからモメンタム（上昇/下降トレンド）の強さを判断
 - サポート/レジスタンスラインとの距離感は？ブレイクアウトの可能性は？
 - 出来高は価格変動を裏付けているか？
+- **チャートパターンとモメンタム持続性から、現在のトレンドの信頼度を評価**
 - 複数の指標が矛盾する場合、どの指標を重視すべきか理由とともに判断
 
 ### Step 2: ファンダメンタル分析
@@ -541,7 +714,8 @@ def get_comprehensive_analysis(
                     "overall_detail": "Anthropic API キーが設定されていません。サイドバーにキーを入力するか、secrets.toml を確認してください。",
                     "error": True,
                 }
-            text = _call_claude(prompt, key, model="claude-haiku-4-5-20251001")
+            # 論文知見: Claude Sonnetが戦略改善で最高成績(年率+14.12%)
+            text = _call_claude(prompt, key, model="claude-sonnet-4-5-20250514")
 
         elif provider == "openai":
             key = api_key.strip()
@@ -802,10 +976,16 @@ def prepare_analysis_inputs(
     company_name: str,
     df: pd.DataFrame,
     news_events: list[dict],
+    include_backtest: bool = False,
 ) -> tuple[str, str, tuple[str, ...], str, str]:
     """
     分析に必要な入力データをまとめて準備する。
     Returns: (tech_json, fund_text, news_titles, margin_text, market_text)
+
+    Parameters
+    ----------
+    include_backtest : bool
+        True の場合、プリセット戦略のバックテスト結果サマリーを fund_text に追加する。
     """
     tech_summary = calc_technical_summary(df)
     tech_json = json.dumps(tech_summary, ensure_ascii=False)
@@ -831,5 +1011,22 @@ def prepare_analysis_inputs(
     margin_text = format_margin_text(margin_data)
 
     market_text = fetch_market_context_text()
+
+    # バックテスト結果の統合（オプション）
+    if include_backtest:
+        try:
+            from modules.strategy_generator import run_preset_backtest_summary
+            preset_results = run_preset_backtest_summary(df)
+            bt_lines = ["\n\n## 過去の戦略パフォーマンス（バックテスト結果）"]
+            for name, res in preset_results.items():
+                bt_lines.append(
+                    f"- {name}: リターン{res['total_return']:+.1f}%, "
+                    f"勝率{res['win_rate']:.0f}%, "
+                    f"シャープ{res['sharpe_ratio']:.2f}, "
+                    f"最大DD{res['max_drawdown']:.1f}%"
+                )
+            fund_text += "\n".join(bt_lines)
+        except Exception as e:
+            logger.warning("バックテスト結果の統合に失敗: %s", e)
 
     return tech_json, fund_text, news_titles, margin_text, market_text
