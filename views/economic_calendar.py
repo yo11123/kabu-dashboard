@@ -222,7 +222,7 @@ _IMPACT_STYLE = {
 }
 
 
-def _render_event_card(event: dict, show_detail: bool = False) -> None:
+def _render_event_card(event: dict, show_detail: bool = False, highlight: bool = False) -> None:
     """イベント1件をカードとして描画する。"""
     impact_icon, impact_color, impact_label = _IMPACT_STYLE.get(
         event.get("impact", "low"), ("⚪", "#6b7280", "低")
@@ -241,11 +241,13 @@ def _render_event_card(event: dict, show_detail: bool = False) -> None:
             parts.append(f"予想: {forecast}")
         if previous:
             parts.append(f"前回: {previous}")
-        detail_html = f"<span style='font-size:0.8em;color:#6b7280;margin-left:12px;'>{'　'.join(parts)}</span>"
+        detail_html = f"<br><span style='font-size:0.8em;color:#6b7280;margin-left:112px;'>{'　'.join(parts)}</span>"
+
+    bg = "background:rgba(212,175,55,0.05);border-left:2px solid #d4af37;" if highlight else ""
 
     st.markdown(
         f"""<div style="display:flex;align-items:center;gap:10px;padding:10px 14px;
-            border-bottom:1px solid rgba(26,31,46,0.5);">
+            border-bottom:1px solid rgba(26,31,46,0.5);flex-wrap:wrap;{bg}">
             <span style="font-size:0.8em;font-family:'IBM Plex Mono',monospace;
                    color:#6b7280;min-width:80px;">{event['date']}</span>
             <span style="min-width:22px;">{impact_icon}</span>
@@ -343,14 +345,7 @@ def main() -> None:
             st.caption(f"今週のイベント（{week_start.strftime('%m/%d')}〜{week_end.strftime('%m/%d')}）")
             for e in all_week:
                 is_today = e["date"] == today.isoformat()
-                if is_today:
-                    st.markdown(
-                        "<div style='background:rgba(212,175,55,0.05);border-radius:4px;padding:2px 0;'>",
-                        unsafe_allow_html=True,
-                    )
-                _render_event_card(e, show_detail=True)
-                if is_today:
-                    st.markdown("</div>", unsafe_allow_html=True)
+                _render_event_card(e, show_detail=True, highlight=is_today)
 
     with tab_upcoming:
         upcoming_end = today + timedelta(days=14)
