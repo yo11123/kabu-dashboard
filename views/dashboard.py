@@ -812,9 +812,10 @@ def main() -> None:
     }.get(ai_provider, ai_provider)
 
     # ─── タブレイアウト ───────────────────────────────────────────
-    tab_fund, tab_ai, tab_chat = st.tabs([
+    tab_fund, tab_ai, tab_history, tab_chat = st.tabs([
         "📊 ファンダメンタルズ",
         f"🤖 AI分析（{_provider_label}）",
+        "📈 分析履歴",
         "💬 AIチャット",
     ])
 
@@ -952,6 +953,10 @@ def main() -> None:
             )
             st.session_state[_cache_key][_analyzed_key] = _ai_result
             save_daily(_cache_key, st.session_state[_cache_key])
+            # AI分析履歴に保存
+            if not _ai_result.get("error"):
+                from modules.persistence import save_ai_history
+                save_ai_history(ticker, _ai_result)
             st.rerun()
         else:
             st.caption(
@@ -960,7 +965,116 @@ def main() -> None:
             )
 
     # ════════════════════════════════════════════════════════════════
-    # TAB 3: AI チャット
+    # TAB 3: 分析履歴
+    # ════════════════════════════════════════════════════════════════
+    with tab_history:
+        from modules.persistence import load_ai_history
+        _history = load_ai_history(ticker)
+
+        if not _history:
+            st.info(
+                "AI分析の履歴がまだありません。\n\n"
+                "「AI分析」タブで分析を実行すると、結果が自動的に保存され、\n"
+                "日々の判断の変化を追跡できるようになります。"
+            )
+        else:
+            st.caption(f"{company_name} のAI分析履歴（最大30日分）")
+
+            # ── スコア推移チャート ────────────────────────────────
+            import plotly.graph_objects as _go
+            _dates = [e["date"] for e in reversed(_history)]
+            _overall = [e["overall_score"] for e in reversed(_history)]
+            _tech = [e["technical_score"] for e in reversed(_history)]
+            _fund = [e["fundamental_score"] for e in reversed(_history)]
+            _news = [e["news_score"] for e in reversed(_history)]
+
+            _fig = _go.Figure()
+            _fig.add_trace(_go.Scatter(x=_dates, y=_overall, name="総合",
+                                       line=dict(color="#d4af37", width=2.5), mode="lines+markers"))
+            _fig.add_trace(_go.Scatter(x=_dates, y=_tech, name="テクニカル",
+                                       line=dict(color="#5ca08b", width=1.5), mode="lines"))
+            _fig.add_trace(_go.Scatter(x=_dates, y=_fund, name="ファンダ",
+                                       line=dict(color="#58a6ff", width=1.5), mode="lines"))
+            _fig.add_trace(_go.Scatter(x=_dates, y=_news, name="ニュース",
+                                       line=dict(color="#d2a8ff", width=1.5), mode="lines"))
+            # 50ライン（中立）
+            _fig.add_hline(y=50, line_dash="dot", line_color="#6b7280", opacity=0.5,
+                           annotation_text="中立(50)", annotation_position="right")
+            _fig.update_layout(
+                title=dict(text="スコア推移", font=dict(size=12, color="#6b7280")),
+                height=280,
+                margin=dict(l=40, r=10, t=40, b=20),
+                plot_bgcolor="#06090f",
+                paper_bgcolor="#0a0f1a",
+                font=dict(family="'IBM Plex Mono','Inter',monospace", color="#6b7280", size=10),
+                xaxis=dict(showgrid=False, tickfont=dict(size=9)),
+                yaxis=dict(showgrid=True, gridcolor="#111620", range=[0, 100], tickfont=dict(size=9)),
+                legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="left", x=0,
+                            font=dict(size=10)),
+            )
+            st.plotly_chart(_fig, use_container_width=True,
+                            config={"displayModeBar": False, "staticPlot": True},
+                            key="ai_history_chart")
+
+            # ── 判断の変化タイムライン ────────────────────────────
+            _JUDGMENT_COLOR = {
+                "強気買い": "#00c853", "買い": "#4caf50", "中立": "#9e9e9e",
+                "売り": "#ff9800", "強気売り": "#f44336",
+            }
+
+            st.markdown("**判断の推移**")
+            for i, entry in enumerate(_history):
+                _jcolor = _JUDGMENT_COLOR.get(entry["judgment"], "#9e9e9e")
+                _score = entry["overall_score"]
+                _prev_judgment = _history[i + 1]["judgment"] if i + 1 < len(_history) else None
+                _changed = _prev_judgment and _prev_judgment != entry["judgment"]
+                _change_badge = ""
+                if _changed:
+                    _change_badge = (
+                        f'<span style="background:rgba(212,175,55,0.15);color:#d4af37;'
+                        f'padding:2px 8px;border-radius:2px;font-size:0.7em;margin-left:8px;">'
+                        f'{_prev_judgment} → {entry["judgment"]}</span>'
+                    )
+
+                st.markdown(
+                    f"""<div style="display:flex;align-items:center;gap:12px;padding:8px 0;
+                        border-bottom:1px solid rgba(26,31,46,0.5);">
+                        <span style="font-family:'IBM Plex Mono',monospace;font-size:0.8em;
+                               color:#6b7280;min-width:80px;">{entry['date']}</span>
+                        <span style="color:{_jcolor};font-weight:600;min-width:70px;">{entry['judgment']}</span>
+                        <span style="font-family:'IBM Plex Mono',monospace;font-size:0.85em;
+                               color:#b8b0a2;">Score: {_score}/100</span>
+                        {_change_badge}
+                    </div>""",
+                    unsafe_allow_html=True,
+                )
+
+            # ── 最新 vs 最古の比較 ─────────────────────────────
+            if len(_history) >= 2:
+                st.divider()
+                st.markdown("**最新 vs 過去の比較**")
+                _latest = _history[0]
+                _oldest = _history[-1]
+                _comp_c1, _comp_c2 = st.columns(2)
+                with _comp_c1:
+                    st.markdown(f"**{_latest['date']}（最新）**")
+                    st.metric("総合スコア", f"{_latest['overall_score']}/100")
+                    st.markdown(f"**判断:** {_latest['judgment']}")
+                    if _latest.get("overall_detail"):
+                        with st.expander("詳細"):
+                            st.markdown(_latest["overall_detail"])
+                with _comp_c2:
+                    st.markdown(f"**{_oldest['date']}（{len(_history) - 1}日前）**")
+                    _diff = _latest["overall_score"] - _oldest["overall_score"]
+                    st.metric("総合スコア", f"{_oldest['overall_score']}/100",
+                              f"{_diff:+d}pt変化", delta_color="normal")
+                    st.markdown(f"**判断:** {_oldest['judgment']}")
+                    if _oldest.get("overall_detail"):
+                        with st.expander("詳細"):
+                            st.markdown(_oldest["overall_detail"])
+
+    # ════════════════════════════════════════════════════════════════
+    # TAB 4: AI チャット
     # ════════════════════════════════════════════════════════════════
     with tab_chat:
         import markdown as _md

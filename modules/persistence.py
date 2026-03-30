@@ -312,3 +312,57 @@ def load_daily(key: str, default=None):
 def try_restore_from_cookies() -> None:
     """後方互換用。Gist方式では不要だが呼び出し元を壊さないために残す。"""
     pass
+
+
+# ─── AI分析履歴 ─────────────────────────────────────────────────────────
+
+_AI_HISTORY_KEY = "ai_analysis_history"
+_MAX_HISTORY_DAYS = 30  # 最大30日分保持
+
+
+def save_ai_history(ticker: str, result: dict) -> None:
+    """AI分析結果を日付付きで履歴に追記する。"""
+    today = date.today().isoformat()
+    history = _file_load(_AI_HISTORY_KEY, {})
+    if not isinstance(history, dict):
+        history = {}
+
+    if ticker not in history:
+        history[ticker] = []
+
+    # 同日の結果があれば上書き
+    entries = [e for e in history[ticker] if e.get("date") != today]
+    entries.append({
+        "date": today,
+        "overall_score": result.get("overall_score", 50),
+        "technical_score": result.get("technical_score", 50),
+        "fundamental_score": result.get("fundamental_score", 50),
+        "news_score": result.get("news_score", 50),
+        "judgment": result.get("judgment", "中立"),
+        "overall_detail": result.get("overall_detail", ""),
+        "opportunities": result.get("opportunities", []),
+        "risks": result.get("risks", []),
+        "provider": result.get("provider", ""),
+    })
+
+    # 日付降順ソートして最大30日分
+    entries.sort(key=lambda x: x["date"], reverse=True)
+    history[ticker] = entries[:_MAX_HISTORY_DAYS]
+
+    _file_save(_AI_HISTORY_KEY, history)
+
+
+def load_ai_history(ticker: str) -> list[dict]:
+    """指定銘柄のAI分析履歴を返す（日付降順）。"""
+    history = _file_load(_AI_HISTORY_KEY, {})
+    if not isinstance(history, dict):
+        return []
+    entries = history.get(ticker, [])
+    entries.sort(key=lambda x: x["date"], reverse=True)
+    return entries
+
+
+def load_all_ai_history() -> dict[str, list[dict]]:
+    """全銘柄のAI分析履歴を返す。"""
+    history = _file_load(_AI_HISTORY_KEY, {})
+    return history if isinstance(history, dict) else {}
