@@ -798,12 +798,10 @@ def main() -> None:
 
     _cookies = CookieController()
 
-    # ─── 作者の相場観（secrets.toml の AUTHOR_NOTE から読み込み）──
-    try:
-        _author_note = st.secrets.get("AUTHOR_NOTE", "").strip()
-    except Exception:
-        _author_note = ""
-    if _author_note:
+    # ─── 作者の相場観（相場観メモページから読み込み）──────────────
+    from modules.persistence import _file_load as _pf_load
+    _author_note = _pf_load("author_note", "")
+    if isinstance(_author_note, str) and _author_note.strip():
         st.markdown(
             f"""<div style="
                 background: rgba(10,15,26,0.5);
@@ -815,8 +813,8 @@ def main() -> None:
                     Author's Market View
                 </div>
                 <div style="font-family:'Inter','Noto Sans JP',sans-serif; font-size:0.88em;
-                     color:#b8b0a2; line-height:1.8;">
-                    {_author_note}
+                     color:#b8b0a2; line-height:1.8; white-space:pre-wrap;">
+                    {_author_note.strip()}
                 </div>
             </div>""",
             unsafe_allow_html=True,
