@@ -821,6 +821,71 @@ def main() -> None:
         save_from_session("portfolio_holdings", "portfolio_holdings")
         st.rerun()
 
+    # ─── ポートフォリオ合計サマリー ──────────────────────────────
+    if holdings:
+        _total_value = 0
+        _total_cost = 0
+        _total_pnl = 0
+        for h in holdings:
+            _p = _fetch_current_price(h["code"])
+            _price = _p.get("price", 0)
+            if _price > 0:
+                _val = _price * h["shares"]
+                _total_value += _val
+                if h["avg_cost"] > 0:
+                    _total_cost += h["avg_cost"] * h["shares"]
+                    _total_pnl += (_price - h["avg_cost"]) * h["shares"]
+
+        _pnl_pct = (_total_pnl / _total_cost * 100) if _total_cost > 0 else 0
+        _pnl_color = "#5ca08b" if _total_pnl >= 0 else "#c45c5c"
+        _pnl_label = "含み益" if _total_pnl >= 0 else "含み損"
+
+        st.markdown(
+            f"""<div style="
+                background: rgba(10,15,26,0.5);
+                border: 1px solid rgba(212,175,55,0.06); border-left: 2px solid {_pnl_color};
+                border-radius: 2px; padding: 16px 24px; margin: 12px 0;
+                display: flex; align-items: center; gap: 32px; flex-wrap: wrap;
+            ">
+                <div>
+                    <span style="font-size:0.6em;color:#6b7280;text-transform:uppercase;letter-spacing:0.15em;">
+                        評価額合計
+                    </span><br>
+                    <span style="font-family:'IBM Plex Mono',monospace;font-size:1.3em;color:#f0ece4;">
+                        ¥{_total_value:,.0f}
+                    </span>
+                </div>
+                <div>
+                    <span style="font-size:0.6em;color:#6b7280;text-transform:uppercase;letter-spacing:0.15em;">
+                        {_pnl_label}合計
+                    </span><br>
+                    <span style="font-family:'IBM Plex Mono',monospace;font-size:1.3em;color:{_pnl_color};">
+                        ¥{_total_pnl:,.0f}
+                    </span>
+                    <span style="font-family:'IBM Plex Mono',monospace;font-size:0.85em;color:{_pnl_color};margin-left:8px;">
+                        ({_pnl_pct:+.1f}%)
+                    </span>
+                </div>
+                <div>
+                    <span style="font-size:0.6em;color:#6b7280;text-transform:uppercase;letter-spacing:0.15em;">
+                        取得額合計
+                    </span><br>
+                    <span style="font-family:'IBM Plex Mono',monospace;font-size:1em;color:#6b7280;">
+                        ¥{_total_cost:,.0f}
+                    </span>
+                </div>
+                <div>
+                    <span style="font-size:0.6em;color:#6b7280;text-transform:uppercase;letter-spacing:0.15em;">
+                        銘柄数
+                    </span><br>
+                    <span style="font-family:'IBM Plex Mono',monospace;font-size:1em;color:#b8b0a2;">
+                        {len(holdings)}
+                    </span>
+                </div>
+            </div>""",
+            unsafe_allow_html=True,
+        )
+
     st.divider()
 
     # ─── 分析実行 ─────────────────────────────────────────────────
