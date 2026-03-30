@@ -140,6 +140,35 @@ def fetch_market_snapshot() -> dict[str, dict]:
         except Exception:
             continue
 
+    # ── 仮想通貨は個別取得（バッチDLでキーが壊れることがある）──
+    _crypto_indicators = [ind for ind in INDICATORS if ind[2] == "crypto"]
+    for name, ticker, category, unit, desc in _crypto_indicators:
+        if name in result:
+            continue  # バッチで取得できていれば不要
+        try:
+            _cdf = yf.download(ticker, period="5d", interval="1d",
+                               progress=False, auto_adjust=True)
+            if _cdf is None or _cdf.empty:
+                continue
+            if isinstance(_cdf.columns, pd.MultiIndex):
+                _cdf.columns = [str(c[0]).capitalize() for c in _cdf.columns]
+            else:
+                _cdf.columns = [str(c).capitalize() for c in _cdf.columns]
+            _cdf.dropna(subset=["Close"], inplace=True)
+            if len(_cdf) < 2:
+                continue
+            _last = float(_cdf["Close"].iloc[-1])
+            _prev = float(_cdf["Close"].iloc[-2])
+            _chg = _last - _prev
+            _chg_pct = _chg / _prev * 100 if _prev != 0 else 0.0
+            result[name] = {
+                "value": _last, "change": round(_chg, 4),
+                "change_pct": round(_chg_pct, 2), "ticker": ticker,
+                "category": category, "unit": unit, "description": desc,
+            }
+        except Exception:
+            continue
+
     return result
 
 
