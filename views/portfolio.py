@@ -1163,6 +1163,33 @@ def _build_portfolio_chat_context(
         elif current:
             line += f" 現在¥{current:,.0f} 評価額¥{value:,.0f}"
 
+        # ファンダメンタルデータを取得して追加
+        try:
+            fund_yf = fetch_fundamental_yfinance(ticker)
+            fund_kb = fetch_fundamental_kabutan(ticker)
+            _per = fund_yf.get("per") or fund_kb.get("per")
+            _pbr = fund_yf.get("pbr") or fund_kb.get("pbr")
+            _roe = fund_yf.get("roe")
+            _div_kb = fund_kb.get("dividend_yield")
+            _div_yf = fund_yf.get("dividend_yield")
+            _div = _div_kb if _div_kb is not None else ((_div_yf * 100) if _div_yf else None)
+            _op_margin = fund_yf.get("operating_margins")
+            fund_parts = []
+            if _per is not None:
+                fund_parts.append(f"PER={_per:.1f}")
+            if _pbr is not None:
+                fund_parts.append(f"PBR={_pbr:.2f}")
+            if _roe is not None:
+                fund_parts.append(f"ROE={_roe*100:.1f}%")
+            if _div is not None:
+                fund_parts.append(f"配当={_div:.1f}%")
+            if _op_margin is not None:
+                fund_parts.append(f"営業利益率={_op_margin*100:.1f}%")
+            if fund_parts:
+                line += f" [{'/'.join(fund_parts)}]"
+        except Exception:
+            pass
+
         # AI分析結果があれば追加
         ai = analysis.get("ai_result") or analysis
         action = ai.get("action", "")
