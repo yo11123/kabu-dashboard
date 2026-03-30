@@ -232,32 +232,23 @@ def _render_event_card(event: dict, show_detail: bool = False, highlight: bool =
     previous = event.get("previous", "")
     actual = event.get("actual", "")
 
-    detail_html = ""
-    if show_detail and (forecast or previous or actual):
-        parts = []
+    detail_parts = []
+    if show_detail:
         if actual:
-            parts.append(f"<b style='color:#f0ece4'>結果: {actual}</b>")
+            detail_parts.append(f"結果: {actual}")
         if forecast:
-            parts.append(f"予想: {forecast}")
+            detail_parts.append(f"予想: {forecast}")
         if previous:
-            parts.append(f"前回: {previous}")
-        detail_html = f"<br><span style='font-size:0.8em;color:#6b7280;margin-left:112px;'>{'　'.join(parts)}</span>"
+            detail_parts.append(f"前回: {previous}")
+    detail_text = f"　　{'　'.join(detail_parts)}" if detail_parts else ""
 
     bg = "background:rgba(212,175,55,0.05);border-left:2px solid #d4af37;" if highlight else ""
 
     st.markdown(
-        f"""<div style="display:flex;align-items:center;gap:10px;padding:10px 14px;
-            border-bottom:1px solid rgba(26,31,46,0.5);flex-wrap:wrap;{bg}">
-            <span style="font-size:0.8em;font-family:'IBM Plex Mono',monospace;
-                   color:#6b7280;min-width:80px;">{event['date']}</span>
-            <span style="min-width:22px;">{impact_icon}</span>
-            <span style="min-width:28px;font-size:1.1em;">{icon}</span>
-            <span style="font-family:'Inter','Noto Sans JP',sans-serif;font-size:0.88em;
-                   color:#f0ece4;flex:1;">{event['name']}</span>
-            <span style="font-size:0.7em;color:{impact_color};border:1px solid {impact_color}33;
-                   padding:2px 8px;border-radius:2px;">{impact_label}</span>
-            {detail_html}
-        </div>""",
+        f"`{event['date']}`　{impact_icon}　{icon}　**{event['name']}**　"
+        f"<span style='font-size:0.7em;color:{impact_color};border:1px solid {impact_color}33;"
+        f"padding:2px 8px;border-radius:2px;'>{impact_label}</span>"
+        f"<span style='font-size:0.8em;color:#6b7280;'>{detail_text}</span>",
         unsafe_allow_html=True,
     )
 
@@ -407,11 +398,7 @@ def main() -> None:
                 for e in events_in_month:
                     _past = e["date"] < today.isoformat()
                     if _past:
-                        st.markdown(
-                            f"<span style='color:#6b7280;font-size:0.85em;'>"
-                            f"~~{e['date']}　{e['icon']} {e['name']}~~</span>",
-                            unsafe_allow_html=True,
-                        )
+                        st.caption(f"~~{e['date']}　{e['icon']} {e['name']}~~")
                     else:
                         _render_event_card(e)
 
