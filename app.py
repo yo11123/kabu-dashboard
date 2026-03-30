@@ -16,6 +16,7 @@ pages = [
     st.Page("views/buy_timing.py", title="買い時銘柄", icon=":material/target:"),
     st.Page("views/news.py", title="市場ニュース", icon=":material/newspaper:"),
     st.Page("views/earnings_calendar.py", title="決算カレンダー", icon=":material/event_note:"),
+    st.Page("views/economic_calendar.py", title="経済カレンダー", icon=":material/today:"),
     st.Page("views/market_indicators.py", title="市場指標", icon=":material/public:"),
     st.Page("views/market_overview.py", title="マーケット概況", icon=":material/trending_up:"),
     st.Page("views/portfolio.py", title="ポートフォリオ", icon=":material/account_balance_wallet:"),
