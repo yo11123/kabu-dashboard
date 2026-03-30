@@ -604,6 +604,38 @@ def _get_gemini_key() -> str:
         return ""
 
 
+def _call_claude_with_fallback(prompt: str, api_key: str, model: str = "claude-haiku-4-5-20251001") -> str:
+    """Claude を呼び出し、失敗時は Gemini にフォールバックする。
+
+    クレジット不足・レート制限・認証エラー等でClaude APIが使えない場合、
+    自動的にGemini 2.5 Flashで代替する。
+    """
+    # まず Claude を試す
+    if api_key and len(api_key) >= 20:
+        try:
+            return _call_claude(prompt, api_key, model=model)
+        except Exception as e:
+            err = str(e).lower()
+            # 一時的でないエラー（プロンプト不正等）はそのまま raise
+            if "prompt" in err and "too long" in err:
+                raise
+            # それ以外（クレジット不足、レート制限、認証エラー等）→ Gemini フォールバック
+            import logging
+            logging.getLogger(__name__).warning(
+                "Claude API failed (%s), falling back to Gemini: %s", model, str(e)[:200]
+            )
+
+    # Gemini フォールバック
+    gemini_key = _get_gemini_key()
+    if gemini_key:
+        return _call_gemini(prompt, gemini_key)
+
+    # 両方ダメなら元のエラーを投げる
+    if api_key and len(api_key) >= 20:
+        return _call_claude(prompt, api_key, model=model)
+    raise ValueError("ANTHROPIC_API_KEY も GEMINI_API_KEY も利用できません")
+
+
 def get_light_llm_provider() -> str:
     """現在の軽量LLMプロバイダー名を返す。"""
     return "Gemini" if _get_gemini_key() else "Claude"
@@ -715,7 +747,8 @@ def get_comprehensive_analysis(
                     "error": True,
                 }
             # 論文知見: Claude Sonnetが戦略改善で最高成績(年率+14.12%)
-            text = _call_claude(prompt, key, model="claude-sonnet-4-6")
+            # API切れ時はGeminiに自動フォールバック
+            text = _call_claude_with_fallback(prompt, key, model="claude-sonnet-4-6")
 
         elif provider == "openai":
             key = api_key.strip()
@@ -853,16 +886,51 @@ def get_chat_response(
                 except Exception:
                     key = ""
             if not key or len(key) < 20:
+                # Claude キーがなくても Gemini で代替を試みる
+                gemini_key = _get_gemini_key()
+                if gemini_key:
+                    # 会話履歴をGemini形式で送信
+                    import json as _json
+                    import requests as _req
+                    url = "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent"
+                    contents = []
+                    for msg in messages:
+                        role = "user" if msg["role"] == "user" else "model"
+                        contents.append({"role": role, "parts": [{"text": msg["content"]}]})
+                    payload = {
+                        "system_instruction": {"parts": [{"text": system_prompt}]},
+                        "contents": contents,
+                        "generationConfig": {"temperature": 0, "maxOutputTokens": 1000},
+                    }
+                    resp = _req.post(url, params={"key": gemini_key},
+                                     headers={"Content-Type": "application/json; charset=utf-8"},
+                                     data=_json.dumps(payload, ensure_ascii=False).encode("utf-8"), timeout=60)
+                    resp.raise_for_status()
+                    return resp.json()["candidates"][0]["content"]["parts"][0]["text"]
                 return "❌ Anthropic API キーが設定されていません。サイドバーで API キーを入力してください。"
-            client = anthropic.Anthropic(api_key=key)
-            response = client.messages.create(
-                model="claude-haiku-4-5-20251001",
-                max_tokens=1000,
-                temperature=0,
-                system=system_prompt,
-                messages=messages,
-            )
-            return response.content[0].text
+            try:
+                client = anthropic.Anthropic(api_key=key)
+                response = client.messages.create(
+                    model="claude-haiku-4-5-20251001",
+                    max_tokens=1000,
+                    temperature=0,
+                    system=system_prompt,
+                    messages=messages,
+                )
+                return response.content[0].text
+            except Exception as e:
+                # Claude 失敗 → Gemini フォールバック
+                gemini_key = _get_gemini_key()
+                if gemini_key:
+                    import logging
+                    logging.getLogger(__name__).warning("Claude chat failed, falling back to Gemini: %s", str(e)[:200])
+                    # system_prompt + messages を1つのプロンプトに結合
+                    combined = system_prompt + "\n\n"
+                    for msg in messages:
+                        role = "ユーザー" if msg["role"] == "user" else "アシスタント"
+                        combined += f"{role}: {msg['content']}\n\n"
+                    return _call_gemini(combined, gemini_key)
+                raise
 
         elif provider == "openai":
             from openai import OpenAI

@@ -24,6 +24,7 @@ from modules.ai_analysis import (
     calc_technical_summary,
     prepare_analysis_inputs,
     _call_claude,
+    _call_claude_with_fallback,
     _call_openai,
     _call_gemini,
     _parse_json,
@@ -333,7 +334,7 @@ def _portfolio_ai_analysis(
         elif provider == "gemini":
             text = _call_gemini(prompt, api_key)
         else:
-            text = _call_claude(prompt, api_key, model="claude-sonnet-4-6")
+            text = _call_claude_with_fallback(prompt, api_key, model="claude-sonnet-4-6")
         return {**_parse_json(text), "error": False}
     except Exception as e:
         return {
@@ -397,7 +398,7 @@ def _portfolio_overall_analysis(
         elif provider == "gemini":
             text = _call_gemini(prompt, api_key)
         else:
-            text = _call_claude(prompt, api_key, model="claude-sonnet-4-6")
+            text = _call_claude_with_fallback(prompt, api_key, model="claude-sonnet-4-6")
         return {**_parse_json(text), "error": False}
     except Exception as e:
         return {
