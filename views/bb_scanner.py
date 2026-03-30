@@ -40,6 +40,86 @@ def _count_walk_days(close: pd.Series, upper: pd.Series, threshold: float) -> in
     return count
 
 
+def _calc_reliability_score(
+    vol_ratio: float | None,
+    bb_slope_pct: float,
+    walk_days: int,
+    rsi: float | None,
+    from_upper: float,
+    df: pd.DataFrame,
+) -> int:
+    """ブレイクの信頼度スコア（0〜100）を計算する。
+
+    高いほど「本物のブレイク」である可能性が高い。
+    - 出来高の質（最大30pt）: 平均の1.5倍以上で満点
+    - BBの勢い（最大25pt）: 上昇率が高いほど高得点
+    - RSIの余裕（最大20pt）: 70未満で満点、80超で0
+    - バンドウォーク初期（最大15pt）: 1〜3日が最高、長すぎると減点
+    - 陽線率（最大10pt）: 直近5日の陽線率が高いほど高得点
+    """
+    score = 0
+
+    # ── 出来高の質（最大30pt）──────────────────────────────────
+    if vol_ratio is not None:
+        if vol_ratio >= 2.0:
+            score += 30  # 平均の2倍以上 → 本物のブレイク
+        elif vol_ratio >= 1.5:
+            score += 25
+        elif vol_ratio >= 1.2:
+            score += 18
+        elif vol_ratio >= 1.0:
+            score += 12
+        elif vol_ratio >= 0.8:
+            score += 5
+    else:
+        score += 5  # データなし
+
+    # ── BBの勢い（最大25pt）──────────────────────────────────
+    if bb_slope_pct >= 3.0:
+        score += 25
+    elif bb_slope_pct >= 2.0:
+        score += 20
+    elif bb_slope_pct >= 1.0:
+        score += 14
+    elif bb_slope_pct >= 0.5:
+        score += 8
+    else:
+        score += 3
+
+    # ── RSIの余裕（最大20pt）──────────────────────────────────
+    if rsi is not None:
+        if rsi < 60:
+            score += 20  # まだ余裕あり
+        elif rsi < 70:
+            score += 15
+        elif rsi < 75:
+            score += 8
+        elif rsi < 80:
+            score += 3
+        # 80以上は0pt（過熱リスク）
+    else:
+        score += 10
+
+    # ── バンドウォーク初期（最大15pt）─────────────────────────
+    if walk_days <= 1:
+        score += 15  # 今日ブレイク → 最もフレッシュ
+    elif walk_days <= 3:
+        score += 12
+    elif walk_days <= 5:
+        score += 8
+    elif walk_days <= 7:
+        score += 4
+    # 8日以上は0pt（そろそろ終了リスク）
+
+    # ── 直近5日の陽線率（最大10pt）────────────────────────────
+    if len(df) >= 6:
+        recent = df.tail(5)
+        up_days = int((recent["Close"] >= recent["Open"]).sum())
+        score += min(up_days * 2, 10)
+
+    return min(score, 100)
+
+
 # ─── スキャン本体（1時間キャッシュ）────────────────────────────────
 
 @st.cache_data(ttl=3600, show_spinner=False)
@@ -166,6 +246,35 @@ def _run_scan(
                 df["Close"].iloc[-20:], df["BB_upper"].iloc[-20:], threshold
             )
 
+            # ── RSI(14) 計算 ─────────────────────────────────────────
+            rsi_val = None
+            close_s = df["Close"]
+            if len(close_s) >= 15:
+                delta = close_s.diff()
+                gain = delta.clip(lower=0).rolling(14).mean()
+                loss = (-delta.clip(upper=0)).rolling(14).mean().replace(0, float("nan"))
+                rsi_s = 100 - 100 / (1 + gain / loss)
+                _rv = rsi_s.iloc[-1]
+                if _rv == _rv:  # NaN check
+                    rsi_val = round(float(_rv), 1)
+
+            # ── RSI過熱判定（警告用、除外はしない）────────────────────
+            rsi_warning = ""
+            if rsi_val is not None and rsi_val >= 80:
+                rsi_warning = "過熱"
+            elif rsi_val is not None and rsi_val >= 70:
+                rsi_warning = "注意"
+
+            # ── ブレイク信頼度スコア（0〜100）────────────────────────
+            reliability = _calc_reliability_score(
+                vol_ratio=vol_ratio,
+                bb_slope_pct=bb_slope_pct,
+                walk_days=walk_days,
+                rsi=rsi_val,
+                from_upper=from_upper,
+                df=df,
+            )
+
             # ── AI 成功確率（モデルが存在する場合のみ）────────────────────
             ai_prob = _lstm_predict(df) if is_model_available() else None
 
@@ -181,6 +290,9 @@ def _run_scan(
                 "継続日数":    walk_days,
                 "BBポジション": round(bb_pos * 100, 1),
                 "出来高比":    round(vol_ratio, 2) if vol_ratio is not None else None,
+                "RSI":         rsi_val,
+                "RSI警告":     rsi_warning,
+                "信頼度":      reliability,
                 "AI確率%":     ai_prob,
             })
 
@@ -191,10 +303,10 @@ def _run_scan(
         return pd.DataFrame()
 
     df_result = pd.DataFrame(results)
-    # BB 上昇率が高く、かつ継続日数が少ない（新しいブレイク）順
+    # 信頼度スコア（高）→ 継続日数（少）→ BB上昇率（高）順
     df_result = df_result.sort_values(
-        ["継続日数", "BB上昇率%"],
-        ascending=[True, False],
+        ["信頼度", "継続日数", "BB上昇率%"],
+        ascending=[False, True, False],
     ).reset_index(drop=True)
     return df_result
 
@@ -293,6 +405,8 @@ def main() -> None:
         st.info("サイドバーの **「スキャン開始」** を押してください。")
         with st.expander("スクリーニング条件の説明", expanded=True):
             st.markdown("""
+## スクリーニング条件（全て AND）
+
 | 条件 | 内容 |
 |------|------|
 | **① 現在値が上限付近** | 終値 ≥ BB 上限（2σ）× 判定 % |
@@ -302,8 +416,17 @@ def main() -> None:
 | **⑤ 新規ブレイク** | N 日前は BB 上限に未達（ずっと居座っている銘柄を除外）|
 | **⑥ 出来高裏付け** | 直近出来高 ≥ 25日平均の 80%（空振りブレイクを除外）|
 
-**BB 上昇率%**（高い）→ **継続日数**（少ない）順でソートし、
-勢いが強く、かつ最もフレッシュなブレイクアウト銘柄が上に来ます。
+## ブレイク信頼度スコア（0〜100）
+
+| 項目 | 配点 | 最高得点の条件 |
+|------|------|-------------|
+| **出来高の質** | 最大30pt | 出来高が平均の2倍以上（本物のブレイク）|
+| **BBの勢い** | 最大25pt | BB上昇率3%以上（強いモメンタム）|
+| **RSIの余裕** | 最大20pt | RSI60未満（まだ上昇余地あり）|
+| **初期度** | 最大15pt | 継続1日（今日ブレイクしたばかり）|
+| **陽線率** | 最大10pt | 直近5日全て陽線 |
+
+⚠️ **RSI警告**: RSI70超で「注意」、80超で「過熱」を表示。過熱銘柄は天井掴みリスクが高い。
             """)
         return
 
@@ -323,7 +446,7 @@ def main() -> None:
     st.caption(
         f"**{meta.get('universe', '')}** のうち「上昇中 BB +2σ に沿って"
         f"直近 {meta.get('lookback', 5)} 日以内にブレイクした」銘柄 — "
-        "継続日数（少）→ BB上昇率（高）順"
+        "**信頼度（高）** → 継続日数（少）→ BB上昇率（高）順"
     )
 
     st.divider()
@@ -341,6 +464,16 @@ def main() -> None:
         "市場":       st.column_config.TextColumn("市場",       width="small"),
         "現在値":     st.column_config.NumberColumn("現在値",    format="¥%d"),
         "前日比%":    st.column_config.NumberColumn("前日比%",   format="%.2f%%"),
+        "信頼度":     st.column_config.ProgressColumn(
+                          "信頼度",
+                          format="%d",
+                          min_value=0,
+                          max_value=100,
+                          help="ブレイクの信頼度スコア（出来高の質30pt + BBの勢い25pt + RSI余裕20pt + 初期度15pt + 陽線率10pt）",
+                      ),
+        "RSI":        st.column_config.NumberColumn("RSI",       format="%.1f",
+                      help="RSI(14)。70超で買われ過ぎ注意、80超で過熱リスク"),
+        "RSI警告":    st.column_config.TextColumn("⚠️",         width="small"),
         "BB上限":     st.column_config.NumberColumn("BB 上限",   format="¥%d"),
         "BB乖離%":    st.column_config.NumberColumn("BB 乖離%",  format="%.2f%%",
                       help="現在値が BB 上限を何 % 上回っているか（+ は上方突破）"),
@@ -349,7 +482,7 @@ def main() -> None:
         "継続日数":   st.column_config.NumberColumn("継続日数",  format="%d 日",
                       help="BB 上限付近に連続して滞在している日数（1 日 = 今日ブレイク）"),
         "出来高比":   st.column_config.NumberColumn("出来高比",  format="%.2f ×",
-                      help="直近出来高 / 25 日平均出来高"),
+                      help="直近出来高 / 25 日平均出来高。1.5倍以上で本物のブレイク"),
         "AI確率%":    st.column_config.ProgressColumn(
                           "AI確率%",
                           format="%.1f%%",
