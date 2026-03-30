@@ -715,7 +715,7 @@ def get_comprehensive_analysis(
                     "error": True,
                 }
             # 論文知見: Claude Sonnetが戦略改善で最高成績(年率+14.12%)
-            text = _call_claude(prompt, key, model="claude-sonnet-4-5-20250514")
+            text = _call_claude(prompt, key, model="claude-sonnet-4-5-20241022")
 
         elif provider == "openai":
             key = api_key.strip()
