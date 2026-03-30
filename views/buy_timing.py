@@ -798,38 +798,30 @@ def main() -> None:
 
     _cookies = CookieController()
 
-    # ─── 作者の相場観（data/author_note.md から読み込み）─────────
-    _note_path = os.path.join(os.path.dirname(__file__), "..", "data", "author_note.md")
+    # ─── 作者の相場観（secrets.toml の AUTHOR_NOTE から読み込み）──
     try:
-        with open(_note_path, "r", encoding="utf-8") as _f:
-            _note_content = _f.read().strip()
-        # コメント行とテンプレ行を除外して実質的な内容があるか判定
-        _note_lines = [
-            l for l in _note_content.split("\n")
-            if l.strip() and not l.strip().startswith("<!--") and not l.strip().startswith("# 作者の相場観")
-        ]
-        _has_note = any(
-            not l.strip().startswith("例:") and not l.strip().startswith("ここに")
-            for l in _note_lines
-        )
-        if _has_note:
-            st.markdown(
-                f"""<div style="
-                    background: rgba(10,15,26,0.5);
-                    border: 1px solid rgba(143,184,160,0.1); border-left: 2px solid #8fb8a0;
-                    border-radius: 2px; padding: 16px 24px; margin-bottom: 16px;
-                ">
-                    <div style="font-family:'Inter',sans-serif; font-size:0.6em; color:#8fb8a0;
-                         text-transform:uppercase; letter-spacing:0.18em; margin-bottom:8px;">
-                        Author's Market View
-                    </div>
-                </div>""",
-                unsafe_allow_html=True,
-            )
-            st.markdown(_note_content)
-            st.divider()
+        _author_note = st.secrets.get("AUTHOR_NOTE", "").strip()
     except Exception:
-        pass
+        _author_note = ""
+    if _author_note:
+        st.markdown(
+            f"""<div style="
+                background: rgba(10,15,26,0.5);
+                border: 1px solid rgba(143,184,160,0.1); border-left: 2px solid #8fb8a0;
+                border-radius: 2px; padding: 16px 24px; margin-bottom: 16px;
+            ">
+                <div style="font-family:'Inter',sans-serif; font-size:0.6em; color:#8fb8a0;
+                     text-transform:uppercase; letter-spacing:0.18em; margin-bottom:8px;">
+                    Author's Market View
+                </div>
+                <div style="font-family:'Inter','Noto Sans JP',sans-serif; font-size:0.88em;
+                     color:#b8b0a2; line-height:1.8;">
+                    {_author_note}
+                </div>
+            </div>""",
+            unsafe_allow_html=True,
+        )
+        st.divider()
 
     # ─── 日本株全体の相場観（ページ最上部）──────────────────────
     if _mkt_reload:
