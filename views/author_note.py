@@ -35,26 +35,62 @@ def main() -> None:
     if not isinstance(saved, str):
         saved = ""
 
-    # テキストエリア
-    note = st.text_area(
-        "相場観を入力",
-        value=saved,
-        height=300,
-        placeholder="例: 中東情勢の緊迫化で原油が急騰。ただし円安で輸出企業には追い風。VIX30超だが優良株の押し目買いチャンス。",
-        key="author_note_input",
-    )
+    # ── 閲覧（誰でも見れる）──────────────────────────────────
+    if saved.strip():
+        st.markdown(
+            f"""<div style="
+                background: rgba(10,15,26,0.5);
+                border: 1px solid rgba(143,184,160,0.1); border-left: 2px solid #8fb8a0;
+                border-radius: 2px; padding: 16px 24px; margin-bottom: 16px;
+            ">
+                <div style="font-family:'Inter','Noto Sans JP',sans-serif; font-size:0.88em;
+                     color:#b8b0a2; line-height:1.8; white-space:pre-wrap;">
+                    {saved.strip()}
+                </div>
+            </div>""",
+            unsafe_allow_html=True,
+        )
+    else:
+        st.info("まだ相場観が投稿されていません。")
 
-    col1, col2 = st.columns([1, 4])
-    with col1:
-        if st.button("💾 保存", type="primary", use_container_width=True):
-            _file_save(_KEY, note)
-            _sync_to_gist()
-            st.success("保存しました")
-    with col2:
-        if st.button("🗑️ クリア", use_container_width=True):
-            _file_save(_KEY, "")
-            _sync_to_gist()
-            st.rerun()
+    st.divider()
+
+    # ── 編集（パスワード保護）─────────────────────────────────
+    try:
+        _correct_pw = st.secrets.get("AUTHOR_PASSWORD", "")
+    except Exception:
+        _correct_pw = ""
+
+    if not _correct_pw:
+        st.caption("編集機能を使うには Streamlit Cloud の Secrets に `AUTHOR_PASSWORD` を設定してください。")
+        return
+
+    with st.expander("✏️ 編集（制作者のみ）"):
+        pw = st.text_input("パスワード", type="password", key="author_pw")
+        if pw and pw == _correct_pw:
+            note = st.text_area(
+                "相場観を入力",
+                value=saved,
+                height=300,
+                placeholder="例: 中東情勢の緊迫化で原油が急騰。ただし円安で輸出企業には追い風。",
+                key="author_note_input",
+            )
+            col1, col2 = st.columns([1, 4])
+            with col1:
+                if st.button("💾 保存", type="primary", use_container_width=True):
+                    _file_save(_KEY, note)
+                    _sync_to_gist()
+                    st.success("保存しました")
+                    st.rerun()
+            with col2:
+                if st.button("🗑️ クリア", use_container_width=True):
+                    _file_save(_KEY, "")
+                    _sync_to_gist()
+                    st.rerun()
+        elif pw:
+            st.error("パスワードが違います")
+
+    note = saved  # プレビュー用
 
     # プレビュー
     if note.strip():
