@@ -46,6 +46,12 @@ INDICATORS: list[tuple[str, str, str, str, str]] = [
     ("WTI原油",             "CL=F",      "commodity",  "USD", "エネルギー・インフレ指標"),
     ("銅（Copper）",        "HG=F",      "commodity",  "USD", "ドクター・カッパー。景気の体温計"),
 
+    # ── 仮想通貨 ──
+    ("ビットコイン（BTC）",  "BTC-USD",   "crypto",    "USD", "暗号資産の基軸。リスクオン資産、機関投資家の参入で株式市場との相関が上昇"),
+    ("イーサリアム（ETH）",  "ETH-USD",   "crypto",    "USD", "スマートコントラクト基盤。DeFi・NFTの基盤通貨"),
+    ("リップル（XRP）",      "XRP-USD",   "crypto",    "USD", "国際送金向け。日本での人気が高い"),
+    ("ソラナ（SOL）",        "SOL-USD",   "crypto",    "USD", "高速ブロックチェーン。DeFi・NFT関連"),
+
     # ── 為替 ──
     ("ドルインデックス",    "DX-Y.NYB",  "fx",        "",    "主要6通貨に対するドルの強さ"),
     ("ドル円（USD/JPY）",   "JPY=X",     "fx",        "円",  "日本株と高相関。円安で輸出企業に追い風"),
@@ -394,6 +400,15 @@ def fetch_market_context_text() -> str:
     if copper:
         lines.append(f"- 銅（ドクター・カッパー）: ${copper['value']:.2f}（前日比{copper['change_pct']:+.1f}%）"
                      f"  ※景気の体温計、上昇は需要拡大を示唆")
+
+    # ─── 仮想通貨 ─────────────────────────────────────────────
+    _crypto_names = ["ビットコイン（BTC）", "イーサリアム（ETH）", "リップル（XRP）", "ソラナ（SOL）"]
+    _crypto_items = [(n, snapshot.get(n)) for n in _crypto_names if snapshot.get(n)]
+    if _crypto_items:
+        lines.append("\n### 仮想通貨")
+        for cname, cd in _crypto_items:
+            lines.append(f"- {cname}: ${cd['value']:,.1f}（前日比{cd['change_pct']:+.1f}%）"
+                         f"  ※{cd['description']}")
 
     # ─── 為替 ─────────────────────────────────────────────────
     lines.append("\n### 為替")

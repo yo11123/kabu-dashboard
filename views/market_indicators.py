@@ -225,6 +225,7 @@ def main() -> None:
         "💰 債券・金利",
         "🏛️ マクロ経済",
         "🛢️ コモディティ・為替",
+        "₿ 仮想通貨",
         "📐 バリュエーション",
     ]
     tabs = st.tabs(tab_names)
@@ -351,8 +352,32 @@ def main() -> None:
                         _render_live_indicator(name, data, period)
                 col_idx += 1
 
-    # ── 6. バリュエーション ──────────────────────────────────
+    # ── 6. 仮想通貨 ─────────────────────────────────────────
     with tabs[5]:
+        st.subheader("仮想通貨")
+        _crypto_list = ["ビットコイン（BTC）", "イーサリアム（ETH）", "リップル（XRP）", "ソラナ（SOL）"]
+        _crypto_cols = st.columns(2)
+        for _ci, _cname in enumerate(_crypto_list):
+            _cd = snapshot.get(_cname)
+            if _cd:
+                with _crypto_cols[_ci % 2]:
+                    with st.container(border=True):
+                        _chg_color = "normal" if _cd["change_pct"] >= 0 else "inverse"
+                        st.metric(_cname, f"${_cd['value']:,.1f}", f"{_cd['change_pct']:+.1f}%",
+                                  delta_color=_chg_color)
+                        st.caption(_cd.get("description", ""))
+                        _cticker = _cd.get("ticker", "")
+                        if _cticker:
+                            _cdf = fetch_indicator_history(_cticker, period)
+                            if _cdf is not None and not _cdf.empty:
+                                _ccolor = "#5ca08b" if _cd["change_pct"] >= 0 else "#c45c5c"
+                                _cfig = _make_chart(_cdf, color=_ccolor)
+                                st.plotly_chart(_cfig, use_container_width=True,
+                                               config=_PLOTLY_CONFIG,
+                                               key=f"crypto_{_cname}")
+
+    # ── 7. バリュエーション ──────────────────────────────────
+    with tabs[6]:
         st.subheader("バリュエーション・市場全体指標")
 
         vc1, vc2 = st.columns(2)
