@@ -22,6 +22,8 @@ PERSISTENT_KEYS = {
     "portfolio_holdings": [],
     "watchlist_data": [],
     "screener_conditions": [],
+    "author_note": "",
+    "author_note_history": [],
 }
 
 DAILY_KEYS = {
