@@ -18,6 +18,11 @@ import warnings
 import pickle
 from pathlib import Path
 
+# Windows cp932 エンコードエラー回避
+if sys.stdout.encoding != "utf-8":
+    sys.stdout.reconfigure(encoding="utf-8")
+    sys.stderr.reconfigure(encoding="utf-8")
+
 import numpy as np
 import pandas as pd
 import yfinance as yf
@@ -642,7 +647,7 @@ def train_optimal_timing():
 
 
 if __name__ == "__main__":
-    print("🚀 全MLモデル学習開始")
+    print("[START] 全MLモデル学習開始")
     print(f"モデル保存先: {MODELS_DIR}")
 
     # GPU確認
@@ -650,11 +655,11 @@ if __name__ == "__main__":
         import torch
         if torch.cuda.is_available():
             print(f"GPU: {torch.cuda.get_device_name(0)}")
-            print(f"VRAM: {torch.cuda.get_device_properties(0).total_mem / 1e9:.1f} GB")
+            print(f"VRAM: {torch.cuda.get_device_properties(0).total_memory / 1e9:.1f} GB")
         else:
-            print("⚠️ GPU未検出。CPUで学習します。")
+            print("[WARN] GPU未検出。CPUで学習します。")
     except ImportError:
-        print("⚠️ PyTorch未インストール。LSTMモデルはスキップされます。")
+        print("[WARN] PyTorch未インストール。LSTMモデルはスキップされます。")
 
     # 1. XGBoost方向予測
     train_xgboost_direction()
@@ -664,7 +669,7 @@ if __name__ == "__main__":
         import torch
         train_lstm_direction()
     except ImportError:
-        print("\n⚠️ PyTorchが未インストールのためLSTMモデルをスキップ")
+        print("\n[WARN] PyTorchが未インストールのためLSTMモデルをスキップ")
         print("  pip install torch でインストールしてください")
 
     # 3. 決算サプライズ予測
@@ -674,7 +679,7 @@ if __name__ == "__main__":
     train_optimal_timing()
 
     print("\n" + "=" * 60)
-    print("✅ 全モデル学習完了！")
+    print("[DONE] 全モデル学習完了!")
     print(f"保存先: {MODELS_DIR}")
     print("\nモデルファイル:")
     for f in MODELS_DIR.glob("*"):
