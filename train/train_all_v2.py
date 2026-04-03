@@ -21,6 +21,7 @@ from pathlib import Path
 
 import numpy as np
 import pandas as pd
+import requests
 import yfinance as yf
 from tqdm import tqdm
 
@@ -42,20 +43,62 @@ MODELS_DIR.mkdir(exist_ok=True)
 
 
 def load_all_tse_tickers() -> list[str]:
-    """東証全銘柄のティッカーコードを取得する。"""
-    # JPX上場銘柄一覧から取得を試行
-    try:
-        url = "https://www.jpx.co.jp/markets/statistics-equities/misc/tvdivq0000001vg2-att/data_j.xls"
-        df = pd.read_excel(url, dtype=str)
-        codes = df.iloc[:, 0].dropna().tolist()
-        tickers = [f"{c.strip()}.T" for c in codes if c.strip().isdigit() and len(c.strip()) == 4]
-        if len(tickers) > 100:
-            print(f"JPXから {len(tickers)} 銘柄を取得")
-            return tickers
-    except Exception as e:
-        print(f"JPXリスト取得失敗: {e}")
+    """東証全銘柄のティッカーコードを取得する（アプリと同じJPXソース）。"""
+    import io
 
-    # フォールバック: ローカルファイル
+    # JPX公式の上場銘柄一覧Excel
+    urls = [
+        "https://www.jpx.co.jp/markets/statistics-equities/misc/tvdivq0000001vg2-att/data_j.xls",
+        "https://www.jpx.co.jp/markets/statistics-equities/misc/01.html",
+    ]
+
+    for url in urls:
+        try:
+            headers = {
+                "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
+                "Accept": "application/vnd.ms-excel, */*",
+            }
+            resp = requests.get(url, headers=headers, timeout=30)
+            resp.raise_for_status()
+
+            # xls/xlsx を読む
+            try:
+                df = pd.read_excel(io.BytesIO(resp.content), dtype=str)
+            except Exception:
+                df = pd.read_excel(io.BytesIO(resp.content), dtype=str, engine="xlrd")
+
+            # コード列を探す
+            code_col = None
+            for col in df.columns:
+                col_str = str(col).strip()
+                if "コード" in col_str or "code" in col_str.lower():
+                    code_col = col
+                    break
+            if code_col is None:
+                code_col = df.columns[0]
+
+            codes = df[code_col].dropna().astype(str).str.strip().str.replace(".0", "", regex=False)
+            tickers = [f"{c}.T" for c in codes if c.isdigit() and len(c) == 4]
+
+            if len(tickers) > 500:
+                print(f"JPXから {len(tickers)} 銘柄を取得")
+                return tickers
+        except Exception as e:
+            print(f"JPXリスト取得試行失敗 ({url[:50]}...): {e}")
+            continue
+
+    # フォールバック: ローカルのdata_loaderを使う
+    try:
+        sys.path.insert(0, str(ROOT))
+        from modules.data_loader import _fetch_tse_raw
+        stocks = _fetch_tse_raw()
+        tickers = [s["code"] for s in stocks]
+        print(f"data_loaderから {len(tickers)} 銘柄を取得")
+        return tickers
+    except Exception as e:
+        print(f"data_loader フォールバック失敗: {e}")
+
+    # 最終フォールバック: 日経225
     tickers_path = DATA_DIR / "nikkei225_tickers.txt"
     codes = []
     with open(tickers_path, "r", encoding="utf-8") as f:
@@ -63,7 +106,7 @@ def load_all_tse_tickers() -> list[str]:
             parts = line.strip().split(",")
             if parts:
                 codes.append(parts[0].strip())
-    print(f"フォールバック: 日経225 ({len(codes)} 銘柄)")
+    print(f"最終フォールバック: 日経225 ({len(codes)} 銘柄)")
     return [c for c in codes if c.endswith(".T")]
 
 
@@ -358,9 +401,9 @@ def train_ensemble_direction(tickers: list[str], market: pd.DataFrame):
 
 
 def train_lstm_direction_v2(tickers: list[str], market: pd.DataFrame):
-    """改善版LSTM: Bidirectional + Attention。"""
+    """改善版LSTM: Bidirectional + Attention。メモリ効率改善版。"""
     print("\n" + "=" * 60)
-    print("モデル2: LSTM 方向予測（改善版）")
+    print("モデル2: LSTM 方向予測（改善版・分割処理）")
     print("=" * 60)
 
     import torch
@@ -368,14 +411,65 @@ def train_lstm_direction_v2(tickers: list[str], market: pd.DataFrame):
     from torch.utils.data import DataLoader, TensorDataset
     from sklearn.preprocessing import RobustScaler
     from sklearn.metrics import roc_auc_score
+    import tempfile, gc
 
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     print(f"デバイス: {device}")
 
     SEQ_LEN = 30
-    all_sequences, all_labels = [], []
 
-    for ticker in tqdm(tickers[:500], desc="シーケンス構築"):  # 上位500銘柄
+    # ── Pass 1: スケーラーを学習（サンプリングで軽量化）─────────
+    print("Pass 1: スケーラー学習（サンプリング）...")
+    sample_rows = []
+    sample_tickers = tickers[::10]  # 10銘柄に1つでスケーラーを学習
+    for ticker in tqdm(sample_tickers, desc="スケーラー学習"):
+        try:
+            df = yf.download(ticker, period="5y", interval="1d", progress=False, auto_adjust=True)
+            if df is None or df.empty or len(df) < 300:
+                continue
+            if isinstance(df.columns, pd.MultiIndex):
+                df.columns = [str(c[0]).capitalize() for c in df.columns]
+            else:
+                df.columns = [str(c).capitalize() for c in df.columns]
+            if df.index.tz is not None:
+                df.index = df.index.tz_localize(None)
+            feat = calc_features_v2(df, market).dropna()
+            if len(feat) > 50:
+                sample_rows.append(feat.iloc[::5].values)  # 5行に1つサンプリング
+        except Exception:
+            continue
+
+    scaler = RobustScaler()
+    sample_data = np.vstack(sample_rows)
+    n_features = sample_data.shape[1]
+    scaler.fit(np.nan_to_num(sample_data, nan=0, posinf=0, neginf=0))
+    del sample_rows, sample_data
+    gc.collect()
+    print(f"  特徴量数: {n_features}")
+
+    # ── Pass 2: 銘柄ごとにスケーリング+シーケンス化→ディスク保存 ──
+    print("Pass 2: シーケンス構築（銘柄単位で直接保存）...")
+    tmp_dir = Path(tempfile.mkdtemp())
+    total_seqs = 0
+    chunk_id = 0
+    CHUNK_SIZE = 50_000  # 5万シーケンスごとに保存（メモリ節約）
+
+    # 事前確保した固定サイズバッファ
+    buf_X = np.zeros((CHUNK_SIZE, SEQ_LEN, n_features), dtype=np.float32)
+    buf_y = np.zeros(CHUNK_SIZE, dtype=np.float32)
+    buf_idx = 0
+
+    def _flush_buffer():
+        nonlocal buf_idx, chunk_id, total_seqs
+        if buf_idx == 0:
+            return
+        np.save(tmp_dir / f"X_{chunk_id}.npy", buf_X[:buf_idx])
+        np.save(tmp_dir / f"y_{chunk_id}.npy", buf_y[:buf_idx])
+        total_seqs += buf_idx
+        chunk_id += 1
+        buf_idx = 0
+
+    for ticker in tqdm(tickers, desc="シーケンス構築"):
         try:
             df = yf.download(ticker, period="5y", interval="1d", progress=False, auto_adjust=True)
             if df is None or df.empty or len(df) < 300:
@@ -395,33 +489,42 @@ def train_lstm_direction_v2(tickers: list[str], market: pd.DataFrame):
                 continue
 
             values = feat.drop(columns=["target"]).values
+            values = np.nan_to_num(scaler.transform(np.nan_to_num(values, nan=0, posinf=0, neginf=0)),
+                                   nan=0, posinf=0, neginf=0).astype(np.float32)
             labels = feat["target"].values
 
             for i in range(SEQ_LEN, len(values) - 5):
-                seq = values[i - SEQ_LEN:i]
-                if not np.any(np.isnan(seq)) and not np.any(np.isinf(seq)):
-                    all_sequences.append(seq)
-                    all_labels.append(labels[i])
+                buf_X[buf_idx] = values[i - SEQ_LEN:i]
+                buf_y[buf_idx] = labels[i]
+                buf_idx += 1
+                if buf_idx >= CHUNK_SIZE:
+                    _flush_buffer()
         except Exception:
             continue
 
-    X = np.array(all_sequences, dtype=np.float32)
-    y = np.array(all_labels, dtype=np.float32)
-    print(f"データ: {X.shape[0]:,} シーケンス, 特徴量: {X.shape[2]}, 系列長: {SEQ_LEN}")
+    _flush_buffer()
+    del buf_X, buf_y
+    gc.collect()
 
-    n_samples, seq_len, n_features = X.shape
-    scaler = RobustScaler()
-    X_flat = scaler.fit_transform(X.reshape(-1, n_features))
-    X = np.nan_to_num(X_flat.reshape(n_samples, seq_len, n_features), nan=0, posinf=0, neginf=0).astype(np.float32)
+    print(f"データ: {total_seqs:,} シーケンス, {chunk_id} チャンク")
 
-    split = int(len(X) * 0.8)
-    X_train, X_test = X[:split], X[split:]
-    y_train, y_test = y[:split], y[split:]
+    # ── Pass 3: チャンクごとに学習（メモリに全データを載せない）──
+    split_chunk = max(int(chunk_id * 0.8), 1)
 
-    train_ds = TensorDataset(torch.tensor(X_train), torch.tensor(y_train))
-    test_ds = TensorDataset(torch.tensor(X_test), torch.tensor(y_test))
-    train_dl = DataLoader(train_ds, batch_size=512, shuffle=True, num_workers=0)
+    # テストデータだけ読み込む（最後のチャンクのみ、小さい）
+    test_Xs, test_ys = [], []
+    for i in range(split_chunk, chunk_id):
+        test_Xs.append(np.load(tmp_dir / f"X_{i}.npy"))
+        test_ys.append(np.load(tmp_dir / f"y_{i}.npy"))
+    X_test_np = np.concatenate(test_Xs); del test_Xs
+    y_test_np = np.concatenate(test_ys); del test_ys; gc.collect()
+    test_ds = TensorDataset(torch.tensor(X_test_np), torch.tensor(y_test_np))
     test_dl = DataLoader(test_ds, batch_size=1024)
+    print(f"テスト: {len(X_test_np):,}")
+    del X_test_np; gc.collect()
+
+    # 訓練はチャンクごとにDataLoaderを作り直す（エポックごとにチャンクを順に読む）
+    train_chunk_ids = list(range(split_chunk))
 
     class BiLSTMAttention(nn.Module):
         def __init__(self, input_dim, hidden_dim=192, num_layers=2, dropout=0.3):
@@ -446,23 +549,33 @@ def train_lstm_direction_v2(tickers: list[str], market: pd.DataFrame):
     model = BiLSTMAttention(n_features).to(device)
     optimizer = torch.optim.AdamW(model.parameters(), lr=5e-4, weight_decay=1e-4)
     scheduler = torch.optim.lr_scheduler.CosineAnnealingWarmRestarts(optimizer, T_0=10, T_mult=2)
-    criterion = nn.BCEWithLogitsLoss(
-        pos_weight=torch.tensor([(y_train == 0).sum() / max((y_train == 1).sum(), 1)]).to(device)
-    )
+    # pos_weight はテストデータから推定
+    _test_y_np = np.concatenate([np.load(tmp_dir / f"y_{i}.npy") for i in range(split_chunk, chunk_id)])
+    _pw = (_test_y_np == 0).sum() / max((_test_y_np == 1).sum(), 1)
+    del _test_y_np
+    criterion = nn.BCEWithLogitsLoss(pos_weight=torch.tensor([_pw]).to(device))
 
     best_auc = 0
     for epoch in range(40):
         model.train()
         losses = []
-        for xb, yb in train_dl:
-            xb, yb = xb.to(device), yb.to(device)
-            pred = model(xb)
-            loss = criterion(pred, yb)
-            optimizer.zero_grad()
-            loss.backward()
-            torch.nn.utils.clip_grad_norm_(model.parameters(), 1.0)
-            optimizer.step()
-            losses.append(loss.item())
+        # チャンクごとに読み込んで学習（メモリに全データを載せない）
+        import random
+        random.shuffle(train_chunk_ids)
+        for cid in train_chunk_ids:
+            _cx = torch.tensor(np.load(tmp_dir / f"X_{cid}.npy"))
+            _cy = torch.tensor(np.load(tmp_dir / f"y_{cid}.npy"))
+            _cdl = DataLoader(TensorDataset(_cx, _cy), batch_size=512, shuffle=True)
+            for xb, yb in _cdl:
+                xb, yb = xb.to(device), yb.to(device)
+                pred = model(xb)
+                loss = criterion(pred, yb)
+                optimizer.zero_grad()
+                loss.backward()
+                torch.nn.utils.clip_grad_norm_(model.parameters(), 1.0)
+                optimizer.step()
+                losses.append(loss.item())
+            del _cx, _cy, _cdl
         scheduler.step()
 
         model.eval()
@@ -614,9 +727,16 @@ def train_optimal_timing_v2(tickers: list[str], market: pd.DataFrame):
                              ("roe", "returnOnEquity"), ("div_yield", "dividendYield"),
                              ("rev_growth", "revenueGrowth"), ("op_margin", "operatingMargins"),
                              ("beta", "beta")]:
-                    feat[f"fund_{k}"] = info.get(v) if info.get(v) is not None else np.nan
+                    raw = info.get(v)
+                    try:
+                        feat[f"fund_{k}"] = float(raw) if raw is not None else np.nan
+                    except (TypeError, ValueError):
+                        feat[f"fund_{k}"] = np.nan
                 mc = info.get("marketCap")
-                feat["fund_mktcap_log"] = np.log10(mc) if mc else np.nan
+                try:
+                    feat["fund_mktcap_log"] = np.log10(float(mc)) if mc else np.nan
+                except (TypeError, ValueError):
+                    feat["fund_mktcap_log"] = np.nan
             except Exception:
                 pass
 
@@ -642,6 +762,10 @@ def train_optimal_timing_v2(tickers: list[str], market: pd.DataFrame):
             continue
 
     X = pd.concat(all_X, ignore_index=True).fillna(0).replace([np.inf, -np.inf], 0)
+    # 全カラムをfloat型に強制変換（object型混入を防ぐ）
+    for col in X.columns:
+        X[col] = pd.to_numeric(X[col], errors="coerce")
+    X = X.fillna(0)
     y = pd.concat(all_y, ignore_index=True)
     features = list(X.columns)
     print(f"データ: {len(X):,} サンプル, {X.shape[1]} 特徴量, {processed} 銘柄")
@@ -694,18 +818,27 @@ if __name__ == "__main__":
     # マーケット全体指標
     market = fetch_market_data("5y")
 
-    # 1. アンサンブル方向予測
-    train_ensemble_direction(tickers, market)
+    # 1. アンサンブル方向予測（既に完了済み→スキップ）
+    if not (MODELS_DIR / "xgboost_direction.pkl").exists():
+        train_ensemble_direction(tickers, market)
+    else:
+        print("\n[SKIP] モデル1: 既に学習済み (xgboost_direction.pkl)")
 
     # 2. LSTM方向予測
-    try:
-        import torch
-        train_lstm_direction_v2(tickers, market)
-    except ImportError:
-        print("[WARN] PyTorch未インストール。LSTMスキップ。")
+    if not (MODELS_DIR / "lstm_direction.pt").exists():
+        try:
+            import torch
+            train_lstm_direction_v2(tickers, market)
+        except ImportError:
+            print("[WARN] PyTorch未インストール。LSTMスキップ。")
+    else:
+        print("\n[SKIP] モデル2: 既に学習済み (lstm_direction.pt)")
 
     # 3. 決算サプライズ
-    train_earnings_surprise_v2(tickers, market)
+    if not (MODELS_DIR / "xgboost_earnings.pkl").exists():
+        train_earnings_surprise_v2(tickers, market)
+    else:
+        print("\n[SKIP] モデル3: 既に学習済み (xgboost_earnings.pkl)")
 
     # 4. 最適タイミング
     train_optimal_timing_v2(tickers, market)
