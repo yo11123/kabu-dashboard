@@ -1055,24 +1055,11 @@ def main() -> None:
                 _score = entry["overall_score"]
                 _prev_judgment = _history[i + 1]["judgment"] if i + 1 < len(_history) else None
                 _changed = _prev_judgment and _prev_judgment != entry["judgment"]
-                _change_badge = ""
-                if _changed:
-                    _change_badge = (
-                        f'<span style="background:rgba(212,175,55,0.15);color:#d4af37;'
-                        f'padding:2px 8px;border-radius:2px;font-size:0.7em;margin-left:8px;">'
-                        f'{_prev_judgment} → {entry["judgment"]}</span>'
-                    )
+                _change_text = f"　`{_prev_judgment} → {entry['judgment']}`" if _changed else ""
 
                 st.markdown(
-                    f"""<div style="display:flex;align-items:center;gap:12px;padding:8px 0;
-                        border-bottom:1px solid rgba(26,31,46,0.5);">
-                        <span style="font-family:'IBM Plex Mono',monospace;font-size:0.8em;
-                               color:#6b7280;min-width:80px;">{entry['date']}</span>
-                        <span style="color:{_jcolor};font-weight:600;min-width:70px;">{entry['judgment']}</span>
-                        <span style="font-family:'IBM Plex Mono',monospace;font-size:0.85em;
-                               color:#b8b0a2;">Score: {_score}/100</span>
-                        {_change_badge}
-                    </div>""",
+                    f"`{entry['date']}`　<span style='color:{_jcolor};font-weight:600'>{entry['judgment']}</span>"
+                    f"　Score: {_score}/100{_change_text}",
                     unsafe_allow_html=True,
                 )
 
