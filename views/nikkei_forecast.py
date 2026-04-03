@@ -19,16 +19,30 @@ def main() -> None:
     )
     st.caption("機械学習モデル（XGBoost + LightGBM スタッキング + Meta-Labeling）による翌営業日の方向・変動幅予測")
 
-    from modules.ml_predictor import get_available_models
+    import os
+    from pathlib import Path
+    _models_dir = Path(os.path.dirname(os.path.dirname(__file__))) / "models"
+    _model_file = _models_dir / "nikkei_forecast.pkl"
+    st.caption(f"モデルパス: {_model_file} / 存在: {_model_file.exists()}")
 
-    if not get_available_models().get("日経平均翌日予測"):
-        st.error("日経平均翌日予測モデルが見つかりません。`python train/train_nikkei_v2.py` で学習してください。")
+    if not _model_file.exists():
+        st.error("日経平均翌日予測モデルが見つかりません。")
+        # ディレクトリ内のファイルを表示
+        if _models_dir.exists():
+            st.caption(f"modelsディレクトリ内: {[f.name for f in _models_dir.iterdir()]}")
         return
 
     # 予測実行
-    with helix_spinner("日経平均の翌日予測を計算中..."):
-        from modules.ml_predictor import predict_nikkei_tomorrow
-        forecast = predict_nikkei_tomorrow()
+    forecast = None
+    try:
+        with helix_spinner("日経平均の翌日予測を計算中..."):
+            from modules.ml_predictor import predict_nikkei_tomorrow
+            forecast = predict_nikkei_tomorrow()
+    except Exception as e:
+        import traceback
+        st.error(f"予測実行エラー: {e}")
+        st.code(traceback.format_exc()[-500:])
+        return
 
     if not forecast:
         # 詳細エラーを表示
