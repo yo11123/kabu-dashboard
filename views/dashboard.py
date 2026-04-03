@@ -940,30 +940,36 @@ def main() -> None:
         # エラー結果はキャッシュとして扱わない
         if _cached_result and isinstance(_cached_result, dict) and _cached_result.get("error"):
             _cached_result = None
+            if _analyzed_key in st.session_state[_cache_key]:
+                del st.session_state[_cache_key][_analyzed_key]
+
+        # 実行フラグ
+        _run_flag_key = f"_run_ai_{ticker}"
+        _should_run = st.session_state.get(_run_flag_key, False)
 
         if _cached_result:
             st.caption("✅ 本日の分析結果を表示中（キャッシュ済み・API消費なし）")
             if btn_col.button("再分析を実行（API消費あり）", key="main_ai_btn", use_container_width=True):
-                _cached_result = "__run__"
                 if _analyzed_key in st.session_state[_cache_key]:
                     del st.session_state[_cache_key][_analyzed_key]
                     save_daily(_cache_key, st.session_state[_cache_key])
+                st.session_state[_run_flag_key] = True
+                st.rerun()
         else:
             if btn_col.button("AI総合分析を実行", type="primary", key="main_ai_btn", use_container_width=True):
-                _cached_result = "__run__"
+                st.session_state[_run_flag_key] = True
+                st.rerun()
 
         if clear_col.button("🗑️ キャッシュクリア", key="main_ai_clear_btn", use_container_width=True,
                             help="前回の分析結果を削除して再実行します"):
-            if _analyzed_key in st.session_state[_cache_key]:
-                del st.session_state[_cache_key][_analyzed_key]
-            # 全キャッシュもクリア
             st.session_state[_cache_key] = {}
             save_daily(_cache_key, {})
+            st.session_state[_run_flag_key] = False
             st.rerun()
 
-        if _cached_result and _cached_result != "__run__":
+        if _cached_result and not _should_run:
             _render_ai_results(_cached_result)
-        elif _cached_result == "__run__":
+        elif _should_run:
             _ai_placeholder = st.empty()
             from modules.loading import show_loading
             _ai_placeholder.markdown("")
@@ -979,12 +985,16 @@ def main() -> None:
                 provider=ai_provider,
                 api_key=ai_api_key,
             )
+            # 実行フラグをリセット
+            st.session_state[_run_flag_key] = False
             # エラー結果はキャッシュに保存しない
             if not _ai_result.get("error"):
                 st.session_state[_cache_key][_analyzed_key] = _ai_result
                 save_daily(_cache_key, st.session_state[_cache_key])
                 from modules.persistence import save_ai_history
                 save_ai_history(ticker, _ai_result)
+            else:
+                st.error(f"分析エラー: {_ai_result.get('overall_detail', '不明なエラー')}")
             st.rerun()
         else:
             st.caption(
