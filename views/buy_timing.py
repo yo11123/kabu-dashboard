@@ -934,8 +934,8 @@ def main() -> None:
                     "※あくまで統計的予測であり、投資助言ではありません。"
                 )
             st.divider()
-    except Exception:
-        pass
+    except Exception as _nk_err:
+        st.caption(f"ML予測: {_nk_err}")
 
     # ─── 日本株全体の相場観（ページ最上部）──────────────────────
     if _mkt_reload:
