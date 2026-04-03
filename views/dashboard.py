@@ -937,23 +937,28 @@ def main() -> None:
 
         btn_col, clear_col = st.columns([3, 1])
 
+        # エラー結果はキャッシュとして扱わない
+        if _cached_result and isinstance(_cached_result, dict) and _cached_result.get("error"):
+            _cached_result = None
+
         if _cached_result:
             st.caption("✅ 本日の分析結果を表示中（キャッシュ済み・API消費なし）")
             if btn_col.button("再分析を実行（API消費あり）", key="main_ai_btn", use_container_width=True):
-                _cached_result = None
+                _cached_result = "__run__"
                 if _analyzed_key in st.session_state[_cache_key]:
                     del st.session_state[_cache_key][_analyzed_key]
-                #  cache removed
+                    save_daily(_cache_key, st.session_state[_cache_key])
         else:
             if btn_col.button("AI総合分析を実行", type="primary", key="main_ai_btn", use_container_width=True):
                 _cached_result = "__run__"
 
         if clear_col.button("🗑️ キャッシュクリア", key="main_ai_clear_btn", use_container_width=True,
                             help="前回の分析結果を削除して再実行します"):
-            #  cache removed
             if _analyzed_key in st.session_state[_cache_key]:
                 del st.session_state[_cache_key][_analyzed_key]
-                save_daily(_cache_key, st.session_state[_cache_key])
+            # 全キャッシュもクリア
+            st.session_state[_cache_key] = {}
+            save_daily(_cache_key, {})
             st.rerun()
 
         if _cached_result and _cached_result != "__run__":
@@ -974,10 +979,10 @@ def main() -> None:
                 provider=ai_provider,
                 api_key=ai_api_key,
             )
-            st.session_state[_cache_key][_analyzed_key] = _ai_result
-            save_daily(_cache_key, st.session_state[_cache_key])
-            # AI分析履歴に保存
+            # エラー結果はキャッシュに保存しない
             if not _ai_result.get("error"):
+                st.session_state[_cache_key][_analyzed_key] = _ai_result
+                save_daily(_cache_key, st.session_state[_cache_key])
                 from modules.persistence import save_ai_history
                 save_ai_history(ticker, _ai_result)
             st.rerun()
