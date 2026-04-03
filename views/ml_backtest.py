@@ -471,6 +471,15 @@ def main() -> None:
     with st.expander(f"取引履歴（{len(result['trades'])}件）"):
         if result["trades"]:
             trades_df = pd.DataFrame(result["trades"])
+            trades_df = trades_df.rename(columns={
+                "date": "日付",
+                "type": "売買",
+                "price": "価格",
+                "shares": "株数",
+                "prob": "ML確率%",
+                "pnl": "損益(円)",
+                "pnl_pct": "損益%",
+            })
             st.dataframe(trades_df, use_container_width=True, hide_index=True)
         else:
             st.info("取引が発生しませんでした。閾値を調整してみてください。")
