@@ -850,23 +850,36 @@ def main() -> None:
 
     _cookies = CookieController()
 
-    # ─── 作者の相場観（相場観メモページから読み込み）──────────────
+    # ─── 掲示板の最新投稿を表示 ──────────────────────────────
     from modules.persistence import _file_load as _pf_load
-    _author_note = _pf_load("author_note", "")
-    if isinstance(_author_note, str) and _author_note.strip():
+    import html as _html_mod
+    _board_posts = _pf_load("market_board", [])
+    if isinstance(_board_posts, list) and _board_posts:
+        _latest = _board_posts[0]
+        _name = _html_mod.escape(_latest.get("name", "匿名"))
+        _content = _html_mod.escape(_latest.get("content", "")).replace("\n", "<br>")
+        _time = _latest.get("timestamp", "")
+        _colors = ["#8fb8a0", "#d4af37", "#58a6ff", "#d2a8ff", "#5ca08b"]
+        _nc = _colors[hash(_name) % len(_colors)]
         st.markdown(
             f"""<div style="
                 background: rgba(10,15,26,0.5);
                 border: 1px solid rgba(143,184,160,0.1); border-left: 2px solid #8fb8a0;
                 border-radius: 2px; padding: 16px 24px; margin-bottom: 16px;
             ">
-                <div style="font-family:'Inter',sans-serif; font-size:0.6em; color:#8fb8a0;
-                     text-transform:uppercase; letter-spacing:0.18em; margin-bottom:8px;">
-                    Author's Market View
+                <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;">
+                    <span style="font-family:'Inter',sans-serif; font-size:0.6em; color:#8fb8a0;
+                         text-transform:uppercase; letter-spacing:0.18em;">
+                        Latest Post — Market Board
+                    </span>
+                    <span style="font-family:'IBM Plex Mono',monospace;font-size:0.7em;color:#505868;">{_time}</span>
+                </div>
+                <div style="margin-bottom:6px;">
+                    <span style="font-weight:600;color:{_nc};font-size:0.85em;">{_name}</span>
                 </div>
                 <div style="font-family:'Inter','Noto Sans JP',sans-serif; font-size:0.88em;
-                     color:#b8b0a2; line-height:1.8; white-space:pre-wrap;">
-                    {_author_note.strip()}
+                     color:#b8b0a2; line-height:1.8;">
+                    {_content}
                 </div>
             </div>""",
             unsafe_allow_html=True,

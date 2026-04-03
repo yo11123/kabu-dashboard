@@ -24,6 +24,7 @@ PERSISTENT_KEYS = {
     "screener_conditions": [],
     "author_note": "",
     "author_note_history": [],
+    "market_board": [],
 }
 
 DAILY_KEYS = {
