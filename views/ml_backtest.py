@@ -553,5 +553,91 @@ def main() -> None:
         else:
             st.info("取引が発生しませんでした。閾値を調整してみてください。")
 
+    # ── トレードガイド ────────────────────────────────────────
+    st.divider()
+    _render_trading_guide(_style_lbl or "スイングトレード")
+
+
+def _render_trading_guide(style: str) -> None:
+    """選択したスタイルのトレード知識を表示する。"""
+    from modules.trading_knowledge import KNOWLEDGE
+
+    # スタイル名をキーにマッピング
+    if "デイ" in style:
+        key = "デイトレード"
+    elif "短期" in style:
+        key = "短期トレード"
+    else:
+        key = "スイングトレード"
+
+    data = KNOWLEDGE.get(key, {})
+    common = KNOWLEDGE.get("共通", {})
+
+    st.markdown(f"### {key}ガイド")
+    st.caption(data.get("overview", ""))
+
+    # タブで整理
+    tabs = st.tabs(["エントリー/エグジット", "テクニカル指標", "リスク管理", "銘柄選定", "よくある失敗", "共通原則"])
+
+    with tabs[0]:
+        if data.get("entry_rules"):
+            st.markdown("**エントリールール**")
+            for r in data["entry_rules"]:
+                st.markdown(f"- {r}")
+        if data.get("exit_rules"):
+            st.markdown("**エグジットルール**")
+            for r in data["exit_rules"]:
+                st.markdown(f"- {r}")
+        if key == "デイトレード" and data.get("key_times"):
+            st.markdown("**時間帯別の特徴**")
+            for time, name, desc in data["key_times"]:
+                st.markdown(f"- `{time}` **{name}** — {desc}")
+        if key == "短期トレード":
+            gap = data.get("gap_trading", {})
+            if gap:
+                st.markdown("**ギャップ（窓開け）トレード**")
+                st.caption(gap.get("description", ""))
+                for s in gap.get("stats", []):
+                    st.markdown(f"- {s}")
+            if data.get("bnf_method"):
+                st.markdown("**BNF手法（参考）**")
+                st.caption(data["bnf_method"])
+        if key == "スイングトレード" and data.get("granville_rules"):
+            st.markdown("**グランビルの法則**")
+            for r in data["granville_rules"]:
+                st.markdown(f"- {r}")
+
+    with tabs[1]:
+        indicators = data.get("indicators", {})
+        for name, desc in indicators.items():
+            st.markdown(f"**{name}**")
+            st.caption(desc)
+
+    with tabs[2]:
+        rules = data.get("risk_management") or data.get("position_sizing", [])
+        for r in rules:
+            st.markdown(f"- {r}")
+        if data.get("position_sizing") and data.get("risk_management"):
+            st.markdown("**ポジションサイジング**")
+            for r in data["position_sizing"]:
+                st.markdown(f"- {r}")
+
+    with tabs[3]:
+        for s in data.get("stock_selection", []):
+            st.markdown(f"- {s}")
+
+    with tabs[4]:
+        mistakes = data.get("common_mistakes", [])
+        if mistakes:
+            for mistake, solution in mistakes:
+                st.markdown(f"- **{mistake}** → {solution}")
+
+    with tabs[5]:
+        for section, items in common.items():
+            labels = {"money_management": "資金管理の鉄則", "mental": "メンタル管理", "multi_timeframe": "マルチタイムフレーム分析"}
+            st.markdown(f"**{labels.get(section, section)}**")
+            for item in items:
+                st.markdown(f"- {item}")
+
 
 main()
