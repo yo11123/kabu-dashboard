@@ -259,25 +259,34 @@ def predict_nikkei_tomorrow(df: pd.DataFrame | None = None) -> dict | None:
         reg = data["regressor"]
         features = data["features"]
 
-        # データ取得（引数がなければ自動取得）
+        # データ取得（一括ダウンロードで高速化）
         import yfinance as yf
         tickers_map = {
             "nikkei": "^N225", "sp500": "^GSPC", "nasdaq": "^IXIC", "dow": "^DJI",
             "vix": "^VIX", "usdjpy": "JPY=X", "us10y": "^TNX",
             "gold": "GC=F", "oil": "CL=F", "sox": "^SOX",
         }
+        ticker_list = list(tickers_map.values())
+        name_list = list(tickers_map.keys())
+
+        batch = yf.download(ticker_list, period="1y", interval="1d",
+                            group_by="ticker", auto_adjust=True, progress=False, threads=True)
 
         raw = pd.DataFrame()
-        for name, ticker in tickers_map.items():
+        for name, ticker in zip(name_list, ticker_list):
             try:
-                _df = yf.download(ticker, period="1y", interval="1d", progress=False, auto_adjust=True)
-                if _df is not None and not _df.empty:
-                    if isinstance(_df.columns, pd.MultiIndex):
-                        _df.columns = [str(c[0]).capitalize() for c in _df.columns]
-                    else:
-                        _df.columns = [str(c).capitalize() for c in _df.columns]
-                    if _df.index.tz is not None:
-                        _df.index = _df.index.tz_localize(None)
+                if len(ticker_list) == 1:
+                    _df = batch.copy()
+                else:
+                    _df = batch[ticker].copy()
+                if isinstance(_df.columns, pd.MultiIndex):
+                    _df.columns = [str(c[0]).capitalize() for c in _df.columns]
+                else:
+                    _df.columns = [str(c).capitalize() for c in _df.columns]
+                if _df.index.tz is not None:
+                    _df.index = _df.index.tz_localize(None)
+                _df.dropna(subset=["Close"], inplace=True)
+                if not _df.empty:
                     raw[f"{name}_close"] = _df["Close"]
                     raw[f"{name}_volume"] = _df.get("Volume", 0)
             except Exception:
