@@ -851,9 +851,12 @@ def main() -> None:
     _cookies = CookieController()
 
     # ─── 掲示板の最新投稿を表示 ──────────────────────────────
-    from modules.persistence import _file_load as _pf_load
-    import html as _html_mod
-    _board_posts = _pf_load("market_board", [])
+    try:
+        from modules.persistence import _file_load as _pf_load
+        import html as _html_mod
+        _board_posts = _pf_load("market_board", [])
+    except Exception:
+        _board_posts = []
     if isinstance(_board_posts, list) and _board_posts:
         _latest = _board_posts[0]
         _name = _html_mod.escape(_latest.get("name", "匿名"))
@@ -889,11 +892,16 @@ def main() -> None:
     # ─── 日経平均 翌日予測（ML）─────────────────────────────────
     _nk_forecast = None
     try:
-        from modules.ml_predictor import predict_nikkei_tomorrow, get_available_models
-        if get_available_models().get("日経平均翌日予測"):
-            _nk_forecast = predict_nikkei_tomorrow()
-        else:
-            st.caption("ML予測: モデル未学習")
+        from modules.ml_predictor import get_available_models
+        _ml_avail = get_available_models().get("日経平均翌日予測", False)
+        if _ml_avail:
+            # キャッシュキーで重複実行を防止
+            _nk_cache_key = "_nk_forecast_cache"
+            if _nk_cache_key not in st.session_state:
+                with helix_spinner("ML予測を計算中..."):
+                    from modules.ml_predictor import predict_nikkei_tomorrow
+                    st.session_state[_nk_cache_key] = predict_nikkei_tomorrow()
+            _nk_forecast = st.session_state.get(_nk_cache_key)
         if _nk_forecast:
             _dir = _nk_forecast["direction"]
             _prob = _nk_forecast["probability"]
