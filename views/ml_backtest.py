@@ -364,14 +364,27 @@ def main() -> None:
         )
 
         st.subheader("期間")
-        period_options = {
-            "1年": ("1y", "1d"),
-            "2年": ("2y", "1d"),
-            "3年": ("3y", "1d"),
-            "5年": ("5y", "1d"),
-            "1ヶ月（分足）": ("1mo", "15m"),
-            "3ヶ月（時間足）": ("3mo", "1h"),
-        }
+        if "デイトレード" in trade_style:
+            period_options = {
+                "5日（3分足）": ("5d", "3m"),      # 最新5日間のみ（3m未対応の場合あり）
+                "5日（5分足）": ("5d", "5m"),
+                "1ヶ月（15分足）": ("1mo", "15m"),
+                "3ヶ月（1時間足）": ("3mo", "1h"),
+            }
+        elif "短期" in trade_style:
+            period_options = {
+                "1ヶ月（15分足）": ("1mo", "15m"),
+                "3ヶ月（1時間足）": ("3mo", "1h"),
+                "1年": ("1y", "1d"),
+                "2年": ("2y", "1d"),
+            }
+        else:
+            period_options = {
+                "1年": ("1y", "1d"),
+                "2年": ("2y", "1d"),
+                "3年": ("3y", "1d"),
+                "5年": ("5y", "1d"),
+            }
         period_label = st.selectbox("バックテスト期間", list(period_options.keys()), index=3, key="ml_bt_period")
         yf_period, yf_interval = period_options[period_label]
 
