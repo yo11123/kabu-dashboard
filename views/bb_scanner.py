@@ -265,23 +265,39 @@ def _run_scan(
             elif rsi_val is not None and rsi_val >= 70:
                 rsi_warning = "注意"
 
-            # ── ブレイク信頼度スコア（0〜100）────────────────────────
-            reliability = _calc_reliability_score(
-                vol_ratio=vol_ratio,
-                bb_slope_pct=bb_slope_pct,
-                walk_days=walk_days,
-                rsi=rsi_val,
-                from_upper=from_upper,
-                df=df,
-            )
-
-            # ── AI 成功確率（モデルが存在する場合のみ）────────────────────
-            # ML予測（新モデル優先、旧モデルフォールバック）
+            # ── ブレイク信頼度スコア（ML優先、ルールベースフォールバック）──
+            ml_reliability = None
             try:
-                from modules.ml_predictor import predict_direction_xgb
-                ai_prob = predict_direction_xgb(df)
+                from modules.ml_predictor import predict_direction_xgb, predict_buy_timing
+                ml_dir = predict_direction_xgb(df)
+                ml_timing = predict_buy_timing(df)
+                if ml_dir is not None and ml_timing is not None:
+                    ml_reliability = round((ml_dir + ml_timing) / 2)
+                elif ml_dir is not None:
+                    ml_reliability = round(ml_dir)
+                elif ml_timing is not None:
+                    ml_reliability = round(ml_timing)
             except Exception:
-                ai_prob = _lstm_predict(df) if is_model_available() else None
+                pass
+
+            if ml_reliability is not None:
+                reliability = ml_reliability
+                reliability_source = "ML"
+            else:
+                reliability = _calc_reliability_score(
+                    vol_ratio=vol_ratio,
+                    bb_slope_pct=bb_slope_pct,
+                    walk_days=walk_days,
+                    rsi=rsi_val,
+                    from_upper=from_upper,
+                    df=df,
+                )
+                reliability_source = "ルール"
+
+            # AI確率（MLモデル）
+            ai_prob = ml_dir if ml_reliability is not None else (
+                _lstm_predict(df) if is_model_available() else None
+            )
 
             results.append({
                 "コード":      code,
@@ -298,6 +314,7 @@ def _run_scan(
                 "RSI":         rsi_val,
                 "RSI警告":     rsi_warning,
                 "信頼度":      reliability,
+                "信頼度ソース": reliability_source,
                 "AI確率%":     ai_prob,
             })
 
@@ -423,6 +440,11 @@ def main() -> None:
 
 ## ブレイク信頼度スコア（0〜100）
 
+**MLモデルが利用可能な場合**: 東証4,091銘柄×5年分のデータで学習した機械学習モデルが、
+方向予測（5日後+2%上昇確率）と最適タイミングスコアを統合して信頼度を算出します。
+
+**MLモデルが利用できない場合**: ルールベースのフォールバック:
+
 | 項目 | 配点 | 最高得点の条件 |
 |------|------|-------------|
 | **出来高の質** | 最大30pt | 出来高が平均の2倍以上（本物のブレイク）|
@@ -474,8 +496,10 @@ def main() -> None:
                           format="%d",
                           min_value=0,
                           max_value=100,
-                          help="ブレイクの信頼度スコア（出来高の質30pt + BBの勢い25pt + RSI余裕20pt + 初期度15pt + 陽線率10pt）",
+                          help="MLモデル利用時: 方向予測+タイミングスコアの統合値。ルールベース時: 出来高/BB勢い/RSI/初期度/陽線率の加重合計",
                       ),
+        "信頼度ソース": st.column_config.TextColumn("判定", width="small",
+                          help="ML=機械学習モデル、ルール=ルールベース"),
         "RSI":        st.column_config.NumberColumn("RSI",       format="%.1f",
                       help="RSI(14)。70超で買われ過ぎ注意、80超で過熱リスク"),
         "RSI警告":    st.column_config.TextColumn("⚠️",         width="small"),
