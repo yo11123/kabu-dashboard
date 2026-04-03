@@ -574,19 +574,61 @@ def _build_market_outlook_prompt(market_text: str, snapshot: dict, derived: dict
     if not news_text:
         news_text = "ニュース取得なし"
 
-    return f"""あなたは日本株市場の上級ストラテジストです。
-以下の市場データと**最新ニュース**を分析し、**今、日本株全体として買い時か・売り時か・現状維持か** を判断してください。
+    # ── ML予測データを取得 ──────────────────────────────────
+    ml_section = ""
+    try:
+        from modules.ml_predictor import get_available_models, predict_direction_xgb, predict_buy_timing
+        from modules.data_loader import fetch_stock_data_max
+        avail = get_available_models()
+
+        # 日経225 ETF (1321.T) でマーケット全体の方向予測
+        if avail.get("XGBoost方向予測") or avail.get("最適売買タイミング"):
+            nk_df = fetch_stock_data_max("1321.T")
+            if nk_df is not None and not nk_df.empty:
+                ml_lines = ["## 機械学習モデルの予測"]
+                if avail.get("XGBoost方向予測"):
+                    dir_prob = predict_direction_xgb(nk_df)
+                    if dir_prob is not None:
+                        ml_lines.append(f"- 日経225 ETF 5日後上昇確率（ML）: {dir_prob:.0f}%")
+                if avail.get("最適売買タイミング"):
+                    timing_prob = predict_buy_timing(nk_df)
+                    if timing_prob is not None:
+                        ml_lines.append(f"- 日経225 ETF 買いタイミングスコア（ML）: {timing_prob:.0f}%")
+                ml_lines.append("※MLモデルは東証4,091銘柄×5年のデータで学習。統計的予測であり確実性は保証しない")
+                ml_section = "\n".join(ml_lines)
+    except Exception:
+        pass
+
+    # ── 市場心理の判断基準 ──────────────────────────────────
+    vix_data = snapshot.get("VIX（恐怖指数）", {})
+    vix_val = vix_data.get("value", 0) if vix_data else 0
+    psych_lines = []
+    if vix_val:
+        if vix_val >= 40:
+            psych_lines.append(f"- VIX{vix_val:.0f}: 極度のパニック水準。歴史的に買い場になることが多い（逆張り好機）")
+        elif vix_val >= 30:
+            psych_lines.append(f"- VIX{vix_val:.0f}: 強い恐怖水準。「恐怖で買い、貪欲で売れ」の格言に基づけば買い検討")
+        elif vix_val <= 15:
+            psych_lines.append(f"- VIX{vix_val:.0f}: 極端な安心感。逆に調整リスクに警戒すべき")
+    psych_section = ""
+    if psych_lines:
+        psych_section = "\n## 市場心理分析\n" + "\n".join(psych_lines)
+
+    return f"""あなたは日本株市場の上級ストラテジストであり、行動ファイナンスの専門家でもあります。
+以下の市場データ・最新ニュース・機械学習予測を総合的に分析し、**今、日本株全体として買い時か・売り時か・現状維持か** を判断してください。
 
 ## ★★★ 最重要ルール: データの正確性 ★★★
-- 数値を引用する場合は、**必ず下記「主要指数」「マーケット環境」セクションの数値をそのまま使うこと**
-- あなた自身の訓練データや記憶にある数値は一切使用禁止。提供データと異なる数値を書いてはならない
-- ニュース見出しに数値が含まれていても、下記の構造化データの数値を優先すること
-- 提供データに含まれない指標については「データなし」と明記し、推測で数値を補わないこと
+- 数値を引用する場合は、**必ず下記の提供データの数値をそのまま使うこと**
+- あなた自身の訓練データや記憶にある数値は一切使用禁止
+- 提供データに含まれない指標については推測で数値を補わないこと
 
 ## 主要指数（リアルタイム取得データ — この数値が正）
 {indices_text}
 
 {market_text}
+
+{ml_section}
+{psych_section}
 
 {news_text}
 
@@ -601,8 +643,11 @@ def _build_market_outlook_prompt(market_text: str, snapshot: dict, derived: dict
 6. マクロ経済指標（CPI・雇用・GDP等）があればそれも考慮
 7. **地政学リスク（戦争・紛争・制裁）が原油・サプライチェーン・市場心理に与える影響を重視**
 8. **ニュースから読み取れるカタリスト（政策変更・貿易摩擦・軍事行動等）を具体的に分析**
-9. **「株は下がった時に買え」の格言を踏まえ、暴落・急落局面こそ仕込み時かどうかを判断**
-10. **投資余力がある人への具体的な資金配分アドバイスを提供**
+9. **MLモデルの予測を参考にしつつ、AI独自の定性分析と統合して判断**
+10. **市場心理サイクル（陶酔→不安→恐怖→降伏→希望）の現在位置を推定**
+11. **騰落レシオ的な過熱/売られすぎの判断（VIX水準から推測）**
+12. **「株は下がった時に買え」の格言を踏まえ、暴落・急落局面こそ仕込み時かどうかを判断**
+13. **投資余力がある人への具体的な資金配分アドバイスを提供**
 
 ## 出力形式（このJSONのみ出力。思考過程やコードブロック外のテキストは不要）
 ```json
@@ -613,8 +658,9 @@ def _build_market_outlook_prompt(market_text: str, snapshot: dict, derived: dict
   "bull_factors": ["強気要因1（提供データの数値を引用）", "強気要因2", "強気要因3"],
   "bear_factors": ["弱気要因1（提供データの数値を引用）", "弱気要因2", "弱気要因3"],
   "geopolitical": "地政学リスクの現状分析（2〜3文。戦争・紛争・制裁がエネルギー価格やサプライチェーン、市場心理に与える影響を具体的に）",
-  "strategy": "今週〜今月の投資戦略を3〜4文で具体的に提案。セクター配分やリスクヘッジも含む",
-  "capital_advice": "投資余力がある人への具体的アドバイス（3〜4文）。例：市場が下落している場合は『余力の30%を使って優良株を分割で仕込む好機』、上昇が続いている場合は『利益確定を優先し余力を温存。次の押し目まで待つ』など。具体的な余力配分の割合（何%を投入すべきか）と、一括 vs 分割投入の判断、狙うべきセクターや銘柄特性（高配当/成長株/ディフェンシブ等）を含む"
+  "market_psychology": "市場心理サイクルの現在位置と群衆心理の分析（2〜3文）。例: 「現在はVIX30超で恐怖フェーズにあり、個人投資家の投げ売りが進行中。歴史的にはこの水準からの反発確率が高く、逆張り投資家にとっては好機」。MLの予測確率も参照して判断。投資家心理のバイアス（損失回避による売り遅れ等）にも言及",
+  "strategy": "今週〜今月の投資戦略を3〜4文で具体的に提案。セクター配分やリスクヘッジも含む。市場心理サイクルとMLの予測を踏まえた戦略",
+  "capital_advice": "投資余力がある人への具体的アドバイス（3〜4文）。市場心理の現在位置を踏まえ、恐怖局面なら分割買い、陶酔局面なら利確を具体的に提案。余力配分の割合（何%を投入すべきか）、一括 vs 分割投入の判断、狙うべきセクターや銘柄特性を含む"
 }}
 ```"""
 
@@ -749,15 +795,21 @@ def _render_market_outlook(result: dict) -> None:
         for i, b in enumerate(bears):
             st.markdown(f"{warn_glow(i * 0.3)} {b}", unsafe_allow_html=True)
 
-    # 地政学リスク + 投資戦略
+    # 地政学リスク + 市場心理
     c3, c4 = st.columns(2)
     with c3:
         if geopolitical:
             st.markdown("**🌍 地政学リスク分析**")
             st.markdown(f"<div style='font-size:0.88em;line-height:1.6;'>{geopolitical}</div>", unsafe_allow_html=True)
     with c4:
-        st.markdown(f"**{target_hit()} 投資戦略**", unsafe_allow_html=True)
-        st.markdown(f"<div style='font-size:0.88em;line-height:1.6;'>{strategy}</div>", unsafe_allow_html=True)
+        market_psych = result.get("market_psychology", "")
+        if market_psych:
+            st.markdown("**🧠 市場心理分析**")
+            st.markdown(f"<div style='font-size:0.88em;line-height:1.6;'>{market_psych}</div>", unsafe_allow_html=True)
+
+    # 投資戦略
+    st.markdown(f"**{target_hit()} 投資戦略**", unsafe_allow_html=True)
+    st.markdown(f"<div style='font-size:0.88em;line-height:1.6;'>{strategy}</div>", unsafe_allow_html=True)
 
     # 資金配分アドバイス
     if capital_advice:
