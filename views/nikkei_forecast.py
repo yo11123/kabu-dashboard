@@ -31,7 +31,14 @@ def main() -> None:
         forecast = predict_nikkei_tomorrow()
 
     if not forecast:
-        st.error("予測の計算に失敗しました。データ取得に問題がある可能性があります。")
+        # 詳細エラーを表示
+        try:
+            from modules.ml_predictor import predict_nikkei_tomorrow as _retry
+            _retry()
+        except Exception as _e:
+            import traceback
+            st.error(f"予測エラー: {_e}")
+            st.code(traceback.format_exc()[-500:])
         return
 
     # ── 結果表示 ──────────────────────────────────────────────
