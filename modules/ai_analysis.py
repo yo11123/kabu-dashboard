@@ -676,20 +676,19 @@ def _classify_error(err_str: str, provider: str) -> str:
     return f"分析エラー ({provider}): {err_str[:500]}"
 
 
-@st.cache_data(ttl=3600 * 4)
 def get_comprehensive_analysis(
     ticker: str,
     company_name: str,
     tech_json: str,            # calc_technical_summary の結果を JSON 化したもの
     fund_text: str,            # format_fundamental_text の結果
-    news_titles: tuple[str, ...],
+    news_titles: tuple[str, ...] | list[str] = (),
     margin_text: str = "",     # format_margin_text の結果（信用残・貸借倍率）
     market_text: str = "",     # fetch_market_context_text の結果（マーケット環境）
     provider: str = "claude",  # "claude" | "openai" | "gemini"
     api_key: str = "",         # ユーザー入力キー（空なら secrets から Claude キーを使用）
 ) -> dict:
     """
-    指定されたプロバイダーの LLM で銘柄の総合AI分析を行う（4時間キャッシュ）。
+    指定されたプロバイダーの LLM で銘柄の総合AI分析を行う。
 
     Returns:
         technical_score, fundamental_score, news_score, overall_score (0-100),
@@ -721,6 +720,11 @@ def get_comprehensive_analysis(
     def _is_valid_key(k: str, prefix: str) -> bool:
         return bool(k) and k.isascii() and k.startswith(prefix)
 
+    # news_titles を安全に文字列のタプルに変換
+    safe_titles = tuple(
+        str(t) for t in news_titles if t
+    ) if news_titles else ()
+
     try:
         tech = json.loads(tech_json)
         # 市場全体のニュースを取得してプロンプトに含める
@@ -729,7 +733,7 @@ def get_comprehensive_analysis(
             _mkt_news = format_news_for_prompt(max_per_cat=5)
         except Exception:
             _mkt_news = ""
-        prompt = _build_prompt(ticker, company_name, tech, fund_text, news_titles,
+        prompt = _build_prompt(ticker, company_name, tech, fund_text, safe_titles,
                                margin_text, market_text, _mkt_news)
 
         if provider == "claude":
