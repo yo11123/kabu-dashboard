@@ -1,5 +1,5 @@
 """
-日本株アプリ v1.1 — エントリーポイント
+日本株アプリ v1.2 — エントリーポイント
 """
 import os
 from PIL import Image
@@ -39,7 +39,7 @@ pages = {
 }
 
 pg = st.navigation(pages)
-st.set_page_config(page_title="日本株アプリ v1.1", page_icon=_APP_ICON, layout="wide")
+st.set_page_config(page_title="日本株アプリ v1.2", page_icon=_APP_ICON, layout="wide")
 
 # ── PWA: manifest + Service Worker 登録 ──
 st.markdown(

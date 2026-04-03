@@ -1,5 +1,5 @@
 """
-日本株アプリ v1.1 インストーラー
+日本株アプリ v1.2 インストーラー
 デスクトップにショートカットを作成し、アプリを開く。
 """
 import os
@@ -8,7 +8,7 @@ import shutil
 import subprocess
 import ctypes
 
-APP_NAME = "日本株アプリ v1.1"
+APP_NAME = "日本株アプリ v1.2"
 APP_URL = "https://kabu-dashboard-dmmtcx6xgmbuaryhbqjwf8.streamlit.app"
 
 
