@@ -13,6 +13,7 @@ _APP_ICON = Image.open(_ICON_PATH) if os.path.exists(_ICON_PATH) else ":material
 pages = {
     "分析": [
         st.Page("views/dashboard.py", title="チャート", icon=":material/candlestick_chart:", default=True),
+        st.Page("views/nikkei_forecast.py", title="日経予測", icon=":material/trending_up:"),
         st.Page("views/buy_timing.py", title="買い時銘柄", icon=":material/target:"),
         st.Page("views/bb_scanner.py", title="BBスキャナー", icon=":material/radar:"),
     ],
