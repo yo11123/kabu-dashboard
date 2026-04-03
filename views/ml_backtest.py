@@ -34,6 +34,7 @@ def _run_ml_backtest(
     initial_capital: float = 1_000_000,
     position_pct: float = 0.95,
     commission_pct: float = 0.1,
+    max_hold_bars: int = 20,
 ) -> dict:
     """
     MLモデルの予測に基づくバックテスト。
@@ -99,6 +100,7 @@ def _run_ml_backtest(
     capital = initial_capital
     position = 0  # 保有株数
     entry_price = 0
+    entry_bar = 0  # エントリーした足のインデックス
     equity = np.full(n, initial_capital, dtype=float)
     trades = []
     in_position = False
@@ -120,23 +122,29 @@ def _run_ml_backtest(
                     capital -= cost
                     position = shares
                     entry_price = price
+                    entry_bar = i
                     in_position = True
                     trades.append({
-                        "date": str(dates[i].date()),
+                        "date": str(dates[i].date()) if hasattr(dates[i], "date") else str(dates[i]),
                         "type": "BUY",
                         "price": round(price, 1),
                         "shares": shares,
                         "prob": round(prob, 1),
                     })
         else:
-            # 売りシグナル
-            if prob < sell_threshold:
+            # 売りシグナル or 最大保有期間超過
+            bars_held = i - entry_bar
+            force_sell = bars_held >= max_hold_bars
+            signal_sell = prob < sell_threshold
+
+            if signal_sell or force_sell:
                 revenue = position * price * (1 - commission_pct / 100)
                 pnl = revenue - position * entry_price
+                sell_type = "SELL(期限)" if force_sell and not signal_sell else "SELL"
                 capital += revenue
                 trades.append({
-                    "date": str(dates[i].date()),
-                    "type": "SELL",
+                    "date": str(dates[i].date()) if hasattr(dates[i], "date") else str(dates[i]),
+                    "type": sell_type,
                     "price": round(price, 1),
                     "shares": position,
                     "prob": round(prob, 1),
@@ -348,18 +356,58 @@ def main() -> None:
         selected = st.selectbox("銘柄", options, key="ml_bt_ticker") if options else None
 
         st.divider()
+        st.subheader("トレードスタイル")
+        trade_style = st.selectbox(
+            "スタイル",
+            ["スイングトレード（数日〜数週間）", "短期トレード（1〜3日）", "デイトレード（日中）"],
+            key="ml_bt_style",
+        )
+
+        st.subheader("期間")
+        period_options = {
+            "1年": ("1y", "1d"),
+            "2年": ("2y", "1d"),
+            "3年": ("3y", "1d"),
+            "5年": ("5y", "1d"),
+            "1ヶ月（分足）": ("1mo", "15m"),
+            "3ヶ月（時間足）": ("3mo", "1h"),
+        }
+        period_label = st.selectbox("バックテスト期間", list(period_options.keys()), index=3, key="ml_bt_period")
+        yf_period, yf_interval = period_options[period_label]
+
+        st.divider()
         st.subheader("パラメータ")
 
-        # 最適閾値を自動計算
+        # トレードスタイルに応じたデフォルト値
+        if "デイトレード" in trade_style:
+            default_buy, default_sell = 65, 45
+            hold_desc = "数時間以内に決済"
+        elif "短期" in trade_style:
+            default_buy, default_sell = 62, 42
+            hold_desc = "1〜3日で決済"
+        else:
+            default_buy, default_sell = 60, 40
+            hold_desc = "数日〜数週間保有"
+        st.caption(f"目安: {hold_desc}")
+
         auto_th = st.checkbox("MLが最適な閾値を自動計算", value=True, key="ml_bt_auto")
         if auto_th:
-            st.caption("銘柄選択後、バックテスト実行時に最適閾値を自動計算します")
-            buy_th = 60  # 一旦デフォルト（実行時に上書き）
-            sell_th = 40
+            st.caption("バックテスト実行時に最適閾値を自動計算します")
+            buy_th = default_buy
+            sell_th = default_sell
         else:
-            buy_th = st.slider("買い閾値（ML確率 > この値で買い）", 50, 80, 60, key="ml_bt_buy")
-            sell_th = st.slider("売り閾値（ML確率 < この値で売り）", 20, 50, 40, key="ml_bt_sell")
+            buy_th = st.slider("買い閾値（ML確率 > この値で買い）", 50, 80, default_buy, key="ml_bt_buy")
+            sell_th = st.slider("売り閾値（ML確率 < この値で売り）", 20, 50, default_sell, key="ml_bt_sell")
         initial = st.number_input("初期資金（円）", value=1_000_000, step=100_000, key="ml_bt_capital")
+
+        # 最大保有期間（トレードスタイルに応じて）
+        if "デイトレード" in trade_style:
+            max_hold = st.slider("最大保有期間（本数）", 1, 30, 8, key="ml_bt_maxhold",
+                                 help="分足/時間足の本数。超えたら強制決済")
+        elif "短期" in trade_style:
+            max_hold = st.slider("最大保有日数", 1, 10, 3, key="ml_bt_maxhold")
+        else:
+            max_hold = st.slider("最大保有日数", 5, 60, 20, key="ml_bt_maxhold")
 
         st.divider()
         run_btn = st.button("バックテスト実行", type="primary", use_container_width=True)
@@ -372,9 +420,11 @@ def main() -> None:
     company = selected.split(" ", 1)[1] if " " in selected else ticker
 
     if run_btn:
-        with helix_spinner(f"{company} のMLバックテストを実行中...（数分かかります）"):
+        _style_label = trade_style.split("（")[0]
+        with helix_spinner(f"{company} の{_style_label}バックテストを実行中..."):
             try:
-                df = yf.download(ticker, period="5y", interval="1d", progress=False, auto_adjust=True)
+                df = yf.download(ticker, period=yf_period, interval=yf_interval,
+                                 progress=False, auto_adjust=True)
                 if df is None or df.empty:
                     st.error("株価データを取得できませんでした。")
                     return
@@ -398,6 +448,7 @@ def main() -> None:
                     buy_threshold=buy_th,
                     sell_threshold=sell_th,
                     initial_capital=initial,
+                    max_hold_bars=max_hold,
                 )
 
                 if "error" in result:
@@ -406,6 +457,8 @@ def main() -> None:
 
                 st.session_state["ml_bt_result"] = result
                 st.session_state["ml_bt_company"] = company
+                st.session_state["ml_bt_style_label"] = _style_label
+                st.session_state["ml_bt_period_label"] = period_label
             except Exception as e:
                 st.error(f"エラー: {e}")
                 return
@@ -437,11 +490,14 @@ def main() -> None:
     company = st.session_state.get("ml_bt_company", "")
     opt = st.session_state.get("ml_bt_optimal")
 
-    st.markdown(f"### {company} — MLバックテスト結果")
+    _style_lbl = st.session_state.get("ml_bt_style_label", "")
+    _period_lbl = st.session_state.get("ml_bt_period_label", "")
+
+    st.markdown(f"### {company} — {_style_lbl}MLバックテスト結果")
     _opt_text = ""
     if opt and opt.get("method") == "ML最適化":
         _opt_text = f" | ML最適閾値: 買い>{opt['buy']}% / 売り<{opt['sell']}%"
-    st.caption(f"モデル: {m['model_name']} | 期間: {m['years']}年 | 取引回数: {m['total_trades']}回{_opt_text}")
+    st.caption(f"モデル: {m['model_name']} | スタイル: {_style_lbl} | 期間: {_period_lbl} | 取引回数: {m['total_trades']}回{_opt_text}")
 
     # メトリクス
     c1, c2, c3, c4, c5 = st.columns(5)
