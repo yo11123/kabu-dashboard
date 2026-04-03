@@ -32,16 +32,139 @@ def main() -> None:
             st.caption(f"modelsディレクトリ内: {[f.name for f in _models_dir.iterdir()]}")
         return
 
-    # 予測実行
+    # 予測実行（ページ内で直接データ取得→予測）
     forecast = None
     try:
-        with helix_spinner("日経平均の翌日予測を計算中..."):
-            from modules.ml_predictor import predict_nikkei_tomorrow
-            forecast = predict_nikkei_tomorrow()
+        import pickle
+        import yfinance as yf
+        import numpy as np
+        import pandas as pd
+
+        st.caption("データ取得中...")
+
+        # モデル読み込み
+        with open(_model_file, "rb") as _f:
+            _model_data = pickle.load(_f)
+        _clf = _model_data["classifier"]
+        _features = _model_data["features"]
+        _reg = _model_data.get("regressor")
+
+        st.caption(f"モデル読み込み完了。特徴量: {len(_features)}個")
+
+        # データ一括取得
+        _tickers = ["^N225", "^GSPC", "^IXIC", "^DJI", "^VIX", "JPY=X", "^TNX", "GC=F", "CL=F", "^SOX"]
+        _names = ["nikkei", "sp500", "nasdaq", "dow", "vix", "usdjpy", "us10y", "gold", "oil", "sox"]
+        _batch = yf.download(_tickers, period="1y", interval="1d",
+                             group_by="ticker", auto_adjust=True, progress=False, threads=True)
+
+        _raw = pd.DataFrame()
+        for _n, _t in zip(_names, _tickers):
+            try:
+                _d = _batch[_t].copy() if len(_tickers) > 1 else _batch.copy()
+                if isinstance(_d.columns, pd.MultiIndex):
+                    _d.columns = [str(c[0]).capitalize() for c in _d.columns]
+                else:
+                    _d.columns = [str(c).capitalize() for c in _d.columns]
+                if _d.index.tz is not None:
+                    _d.index = _d.index.tz_localize(None)
+                _d.dropna(subset=["Close"], inplace=True)
+                if not _d.empty:
+                    _raw[f"{_n}_close"] = _d["Close"]
+            except Exception:
+                continue
+
+        _raw = _raw.ffill().dropna(subset=["nikkei_close"]).fillna(0)
+        st.caption(f"データ取得完了: {len(_raw)}日分, {len(_raw.columns)}カラム")
+
+        if len(_raw) < 200:
+            st.error(f"データ不足（{len(_raw)}日）")
+        else:
+            # 特徴量計算
+            from modules.ml_predictor import _calc_features
+            _nk = _raw["nikkei_close"]
+            _feat = pd.DataFrame(index=_raw.index)
+
+            # 日経テクニカル
+            for _d in [1, 2, 3, 5, 10, 20]:
+                _feat[f"nk_ret_{_d}d"] = _nk.pct_change(_d) * 100
+            for _p in [5, 25, 75, 200]:
+                _sma = _nk.rolling(_p).mean()
+                _feat[f"nk_sma{_p}_dev"] = (_nk - _sma) / _sma * 100
+            _delta = _nk.diff()
+            _gain = _delta.clip(lower=0).rolling(14).mean()
+            _loss = (-_delta.clip(upper=0)).rolling(14).mean().replace(0, np.nan)
+            _feat["nk_rsi"] = 100 - 100 / (1 + _gain / _loss)
+            _ema12 = _nk.ewm(span=12, adjust=False).mean()
+            _ema26 = _nk.ewm(span=26, adjust=False).mean()
+            _feat["nk_macd_hist"] = (_ema12 - _ema26) - (_ema12 - _ema26).ewm(span=9, adjust=False).mean()
+            _bb_mid = _nk.rolling(20).mean()
+            _bb_std = _nk.rolling(20).std()
+            _feat["nk_bb_pos"] = (_nk - _bb_mid) / _bb_std.replace(0, np.nan)
+            _feat["nk_vol_20d"] = _nk.pct_change().rolling(20).std() * np.sqrt(252) * 100
+            _feat["nk_vol_5d"] = _nk.pct_change().rolling(5).std() * np.sqrt(252) * 100
+            _feat["nk_up_ratio_10d"] = (_nk.diff() > 0).rolling(10).mean()
+            _feat["weekday"] = _raw.index.dayofweek
+            _feat["month"] = _raw.index.month
+
+            # 米国市場
+            for _n in ["sp500", "nasdaq", "dow"]:
+                _col = f"{_n}_close"
+                if _col in _raw.columns:
+                    _feat[f"{_n}_ret_1d"] = _raw[_col].pct_change() * 100
+                    _feat[f"{_n}_ret_5d"] = _raw[_col].pct_change(5) * 100
+            if "vix_close" in _raw.columns:
+                _feat["vix"] = _raw["vix_close"]
+                _feat["vix_change"] = _raw["vix_close"].pct_change() * 100
+                _feat["vix_ma5_dev"] = (_raw["vix_close"] - _raw["vix_close"].rolling(5).mean()) / _raw["vix_close"].rolling(5).mean() * 100
+            if "usdjpy_close" in _raw.columns:
+                _feat["usdjpy"] = _raw["usdjpy_close"]
+                _feat["usdjpy_ret_1d"] = _raw["usdjpy_close"].pct_change() * 100
+                _feat["usdjpy_ret_5d"] = _raw["usdjpy_close"].pct_change(5) * 100
+            if "us10y_close" in _raw.columns:
+                _feat["us10y"] = _raw["us10y_close"]
+                _feat["us10y_change"] = _raw["us10y_close"].diff()
+            for _n in ["gold", "oil"]:
+                _col = f"{_n}_close"
+                if _col in _raw.columns:
+                    _feat[f"{_n}_ret_1d"] = _raw[_col].pct_change() * 100
+                    _feat[f"{_n}_ret_5d"] = _raw[_col].pct_change(5) * 100
+            if "sox_close" in _raw.columns:
+                _feat["sox_ret_1d"] = _raw["sox_close"].pct_change() * 100
+            if "sp500_close" in _raw.columns:
+                _feat["nk_alpha_5d"] = _feat.get("nk_ret_5d", 0) - _feat.get("sp500_ret_5d", 0)
+
+            # 最新行で予測
+            _row = _feat.iloc[-1:].copy()
+            for _f in _features:
+                if _f not in _row.columns:
+                    _row[_f] = 0
+            _row = _row[_features].fillna(0).replace([np.inf, -np.inf], 0)
+            for _col in _row.columns:
+                _row[_col] = pd.to_numeric(_row[_col], errors="coerce")
+            _row = _row.fillna(0)
+
+            _up_prob = float(_clf.predict_proba(_row)[0][1]) * 100
+            _exp_ret = float(_reg.predict(_row)[0]) if _reg else 0
+            _cur = float(_nk.iloc[-1])
+
+            forecast = {
+                "direction": "上昇" if _up_prob > 50 else "下落",
+                "probability": round(_up_prob, 1),
+                "probability_base": round(_up_prob, 1),
+                "expected_return": round(_exp_ret, 2),
+                "expected_price": round(_cur * (1 + _exp_ret / 100), 0),
+                "current_price": round(_cur, 0),
+                "confidence": "高い" if _up_prob > 65 else ("やや高い" if _up_prob > 55 else ("高い（下落）" if _up_prob < 35 else ("やや高い（下落）" if _up_prob < 45 else "五分五分"))),
+                "news_sentiment": 0,
+                "news_impact": "中立",
+                "news_headline": "",
+            }
+            st.caption("予測完了!")
+
     except Exception as e:
         import traceback
-        st.error(f"予測実行エラー: {e}")
-        st.code(traceback.format_exc()[-500:])
+        st.error(f"予測エラー: {e}")
+        st.code(traceback.format_exc()[-800:])
         return
 
     if not forecast:
