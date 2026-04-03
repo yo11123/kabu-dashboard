@@ -887,9 +887,13 @@ def main() -> None:
         st.divider()
 
     # ─── 日経平均 翌日予測（ML）─────────────────────────────────
+    _nk_forecast = None
     try:
-        from modules.ml_predictor import predict_nikkei_tomorrow
-        _nk_forecast = predict_nikkei_tomorrow()
+        from modules.ml_predictor import predict_nikkei_tomorrow, get_available_models
+        if get_available_models().get("日経平均翌日予測"):
+            _nk_forecast = predict_nikkei_tomorrow()
+        else:
+            st.caption("ML予測: モデル未学習")
         if _nk_forecast:
             _dir = _nk_forecast["direction"]
             _prob = _nk_forecast["probability"]
@@ -935,7 +939,9 @@ def main() -> None:
                 )
             st.divider()
     except Exception as _nk_err:
-        st.caption(f"ML予測: {_nk_err}")
+        import traceback
+        st.caption(f"ML予測エラー: {_nk_err}")
+        st.caption(f"```{traceback.format_exc()[-300:]}```")
 
     # ─── 日本株全体の相場観（ページ最上部）──────────────────────
     if _mkt_reload:
