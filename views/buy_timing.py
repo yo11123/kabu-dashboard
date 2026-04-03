@@ -900,15 +900,26 @@ def main() -> None:
             _dir_color = "#5ca08b" if _dir == "上昇" else "#c45c5c"
             _dir_arrow = "▲" if _dir == "上昇" else "▼"
 
+            _news_impact = _nk_forecast.get("news_impact", "中立")
+            _news_hl = _nk_forecast.get("news_headline", "")
+            _base_prob = _nk_forecast.get("probability_base", _prob)
+            _news_adj = round(_prob - _base_prob, 1)
+            _news_adj_text = ""
+            if abs(_news_adj) >= 1:
+                _news_adj_text = f"　ニュース補正: {_news_adj:+.1f}%（{_news_impact}）"
+
             st.markdown(
                 f"`ML予測`　日経平均 明日: "
                 f"<span style='color:{_dir_color};font-weight:bold;font-size:1.1em;'>"
                 f"{_dir_arrow} {_dir} {_prob:.0f}%</span>"
                 f"　予想: **¥{_exp_price:,.0f}**（{_ret:+.2f}%）"
                 f"　現在値: ¥{_cur_price:,.0f}"
-                f"　<span style='color:#6b7280;font-size:0.8em;'>確信度: {_conf} | 正解率65.8% AUC0.71</span>",
+                f"{_news_adj_text}"
+                f"　<span style='color:#6b7280;font-size:0.8em;'>確信度: {_conf} | 正解率65.8%</span>",
                 unsafe_allow_html=True,
             )
+            if _news_hl:
+                st.caption(f"注目ニュース: {_news_hl}")
             st.divider()
     except Exception:
         pass

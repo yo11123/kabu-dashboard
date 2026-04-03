@@ -348,31 +348,80 @@ def predict_nikkei_tomorrow(df: pd.DataFrame | None = None) -> dict | None:
             row[col] = pd.to_numeric(row[col], errors="coerce")
         row = row.fillna(0)
 
-        # 予測
+        # 予測（ベース）
         up_prob = float(clf.predict_proba(row)[0][1]) * 100
         expected_ret = float(reg.predict(row)[0])
         current_price = float(nk.iloc[-1])
-        expected_price = current_price * (1 + expected_ret / 100)
 
-        direction = "上昇" if up_prob > 50 else "下落"
-        if up_prob > 65:
+        # ── ニュースセンチメントで補正 ────────────────────────
+        news_sentiment = 0.0
+        news_summary = ""
+        try:
+            from modules.market_news import fetch_all_news
+            all_news = fetch_all_news()
+            if all_news:
+                pos_words = [
+                    "上昇", "高値", "好調", "増収", "増益", "上方修正", "反発", "回復",
+                    "成長", "好決算", "増配", "最高益", "黒字", "拡大", "買い",
+                    "rally", "surge", "gain", "rise", "bull", "beat",
+                ]
+                neg_words = [
+                    "下落", "安値", "低迷", "減収", "減益", "下方修正", "暴落", "悪化",
+                    "減配", "赤字", "縮小", "リスク", "懸念", "戦争", "制裁", "売り",
+                    "crash", "plunge", "loss", "fall", "bear", "miss",
+                ]
+                scores = []
+                key_headlines = []
+                for cat_name, items in all_news.items():
+                    for item in items[:5]:
+                        title = item.get("title", "").lower()
+                        p = sum(1 for w in pos_words if w in title)
+                        n = sum(1 for w in neg_words if w in title)
+                        if p + n > 0:
+                            s = (p - n) / (p + n)
+                            scores.append(s)
+                            if abs(s) > 0.3:
+                                key_headlines.append(item.get("title", ""))
+                if scores:
+                    news_sentiment = np.mean(scores)
+
+                # ニュースの影響を要約
+                if key_headlines:
+                    news_summary = key_headlines[0][:50]
+        except Exception:
+            pass
+
+        # センチメントでML予測を補正（最大±10%の補正）
+        sentiment_adjustment = news_sentiment * 10  # -10% 〜 +10%
+        up_prob_adjusted = max(0, min(100, up_prob + sentiment_adjustment))
+        ret_adjustment = news_sentiment * 0.3  # 最大±0.3%の変動幅補正
+        expected_ret_adjusted = expected_ret + ret_adjustment
+
+        expected_price = current_price * (1 + expected_ret_adjusted / 100)
+
+        direction = "上昇" if up_prob_adjusted > 50 else "下落"
+        if up_prob_adjusted > 65:
             confidence = "高い"
-        elif up_prob > 55:
+        elif up_prob_adjusted > 55:
             confidence = "やや高い"
-        elif up_prob < 35:
+        elif up_prob_adjusted < 35:
             confidence = "高い（下落）"
-        elif up_prob < 45:
+        elif up_prob_adjusted < 45:
             confidence = "やや高い（下落）"
         else:
             confidence = "五分五分"
 
         return {
             "direction": direction,
-            "probability": round(up_prob, 1),
-            "expected_return": round(expected_ret, 2),
+            "probability": round(up_prob_adjusted, 1),
+            "probability_base": round(up_prob, 1),
+            "expected_return": round(expected_ret_adjusted, 2),
             "expected_price": round(expected_price, 0),
             "current_price": round(current_price, 0),
             "confidence": confidence,
+            "news_sentiment": round(news_sentiment, 2),
+            "news_impact": "強気" if news_sentiment > 0.2 else ("弱気" if news_sentiment < -0.2 else "中立"),
+            "news_headline": news_summary,
         }
     except Exception:
         return None
