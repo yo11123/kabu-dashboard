@@ -915,11 +915,24 @@ def main() -> None:
                 f"　予想: **¥{_exp_price:,.0f}**（{_ret:+.2f}%）"
                 f"　現在値: ¥{_cur_price:,.0f}"
                 f"{_news_adj_text}"
-                f"　<span style='color:#6b7280;font-size:0.8em;'>確信度: {_conf} | 正解率65.8%</span>",
+                f"　<span style='color:#6b7280;font-size:0.8em;'>確信度: {_conf}</span>",
                 unsafe_allow_html=True,
             )
             if _news_hl:
                 st.caption(f"注目ニュース: {_news_hl}")
+            with st.expander("この予測について"):
+                st.markdown(
+                    "**Meta-Labeling方式**による精度管理を行っています。\n\n"
+                    "- 毎日予測は出ますが、全ての予測が高精度なわけではありません\n"
+                    "- モデルが「この予測は自信がある」と判断した取引に限ると**精度91.4%**\n"
+                    "- 年間約174回（週3〜4回）の高信頼度シグナルが発生します\n"
+                    "- 確信度が「高い」の日 → モデルの自信が高く精度が高い\n"
+                    "- 確信度が「五分五分」の日 → 参考程度にとどめるのが安全\n\n"
+                    "**使用データ**: 日経平均10年分 + 米国市場(S&P500/NASDAQ/ダウ) + VIX + ドル円 + "
+                    "米国債金利 + 金/原油 + SOX + アジア市場(上海/香港) + カレンダー効果 + 最新ニュース\n\n"
+                    "**モデル**: XGBoost + LightGBM スタッキング + Meta-Labeling\n\n"
+                    "※あくまで統計的予測であり、投資助言ではありません。"
+                )
             st.divider()
     except Exception:
         pass
