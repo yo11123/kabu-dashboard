@@ -25,6 +25,7 @@ PERSISTENT_KEYS = {
     "author_note": "",
     "author_note_history": [],
     "market_board": [],
+    "ai_analysis_history": {},
 }
 
 DAILY_KEYS = {
@@ -353,6 +354,7 @@ def save_ai_history(ticker: str, result: dict) -> None:
     history[ticker] = entries[:_MAX_HISTORY_DAYS]
 
     _file_save(_AI_HISTORY_KEY, history)
+    _sync_to_gist()
 
 
 def load_ai_history(ticker: str) -> list[dict]:
