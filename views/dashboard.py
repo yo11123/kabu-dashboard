@@ -356,6 +356,29 @@ def _render_ai_results(result: dict) -> None:
     _ai_score_card(cols[2], "📰 ニュース",          result["news_score"])
     _ai_score_card(cols[3], "🎯 総合スコア",        result["overall_score"])
 
+    # ── ML予測（学習済みモデル）────────────────────────────────
+    from modules.ml_predictor import get_available_models, predict_direction_xgb, predict_buy_timing
+    _ml_avail = get_available_models()
+    if any(_ml_avail.values()):
+        _ml_cols = st.columns(3)
+        if _ml_avail.get("XGBoost方向予測"):
+            _ml_dir = predict_direction_xgb(df_raw) if "df_raw" in dir() else None
+            if _ml_dir is not None:
+                _ml_cols[0].metric("ML 5日後上昇確率", f"{_ml_dir:.0f}%",
+                                   "買い有利" if _ml_dir > 60 else ("中立" if _ml_dir > 40 else "売り有利"))
+        if _ml_avail.get("最適売買タイミング"):
+            _ml_timing = predict_buy_timing(df_raw) if "df_raw" in dir() else None
+            if _ml_timing is not None:
+                _ml_cols[1].metric("ML 買いタイミング", f"{_ml_timing:.0f}%",
+                                   "好機" if _ml_timing > 60 else ("待ち" if _ml_timing > 40 else "見送り"))
+        if _ml_avail.get("決算サプライズ"):
+            from modules.ml_predictor import predict_earnings_surprise
+            _ml_earn = predict_earnings_surprise(df_raw) if "df_raw" in dir() else None
+            if _ml_earn is not None:
+                _ml_cols[2].metric("ML 決算超過確率", f"{_ml_earn:.0f}%",
+                                   "期待大" if _ml_earn > 60 else ("五分" if _ml_earn > 40 else "注意"))
+        st.caption("ML予測は東証4,091銘柄×5年分のデータで学習したモデルによる統計的予測です。投資助言ではありません。")
+
     st.divider()
     _ai_judgment_banner(result.get("judgment", "中立"), result.get("overall_detail", ""))
     st.divider()

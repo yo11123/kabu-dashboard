@@ -276,7 +276,12 @@ def _run_scan(
             )
 
             # ── AI 成功確率（モデルが存在する場合のみ）────────────────────
-            ai_prob = _lstm_predict(df) if is_model_available() else None
+            # ML予測（新モデル優先、旧モデルフォールバック）
+            try:
+                from modules.ml_predictor import predict_direction_xgb
+                ai_prob = predict_direction_xgb(df)
+            except Exception:
+                ai_prob = _lstm_predict(df) if is_model_available() else None
 
             results.append({
                 "コード":      code,

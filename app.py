@@ -33,6 +33,7 @@ pages = {
     "ツール": [
         st.Page("views/custom_screener.py", title="スクリーナー", icon=":material/filter_alt:"),
         st.Page("views/backtest.py", title="バックテスト", icon=":material/query_stats:"),
+        st.Page("views/ml_backtest.py", title="MLバックテスト", icon=":material/science:"),
         st.Page("views/author_note.py", title="制作者相場観", icon=":material/edit_note:"),
     ],
 }
