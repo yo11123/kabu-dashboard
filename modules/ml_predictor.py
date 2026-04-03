@@ -242,6 +242,142 @@ def predict_buy_timing(df: pd.DataFrame, fund: dict | None = None,
         return None
 
 
+def predict_nikkei_tomorrow(df: pd.DataFrame | None = None) -> dict | None:
+    """日経平均の翌日予測を行う。
+
+    Returns:
+        {"direction": "上昇"|"下落", "probability": float, "expected_return": float,
+         "expected_price": float, "confidence": str}
+        or None if model unavailable
+    """
+    data = _load_pickle("nikkei_forecast.pkl")
+    if data is None:
+        return None
+
+    try:
+        clf = data["classifier"]
+        reg = data["regressor"]
+        features = data["features"]
+
+        # データ取得（引数がなければ自動取得）
+        import yfinance as yf
+        tickers_map = {
+            "nikkei": "^N225", "sp500": "^GSPC", "nasdaq": "^IXIC", "dow": "^DJI",
+            "vix": "^VIX", "usdjpy": "JPY=X", "us10y": "^TNX",
+            "gold": "GC=F", "oil": "CL=F", "sox": "^SOX",
+        }
+
+        raw = pd.DataFrame()
+        for name, ticker in tickers_map.items():
+            try:
+                _df = yf.download(ticker, period="1y", interval="1d", progress=False, auto_adjust=True)
+                if _df is not None and not _df.empty:
+                    if isinstance(_df.columns, pd.MultiIndex):
+                        _df.columns = [str(c[0]).capitalize() for c in _df.columns]
+                    else:
+                        _df.columns = [str(c).capitalize() for c in _df.columns]
+                    if _df.index.tz is not None:
+                        _df.index = _df.index.tz_localize(None)
+                    raw[f"{name}_close"] = _df["Close"]
+                    raw[f"{name}_volume"] = _df.get("Volume", 0)
+            except Exception:
+                continue
+
+        raw = raw.ffill().dropna()
+        if len(raw) < 200:
+            return None
+
+        nk = raw["nikkei_close"]
+        feat = pd.DataFrame(index=raw.index)
+
+        # 特徴量計算（学習時と同じ）
+        for d in [1, 2, 3, 5, 10, 20]:
+            feat[f"nk_ret_{d}d"] = nk.pct_change(d) * 100
+        for p in [5, 25, 75, 200]:
+            sma = nk.rolling(p).mean()
+            feat[f"nk_sma{p}_dev"] = (nk - sma) / sma * 100
+        delta = nk.diff()
+        gain = delta.clip(lower=0).rolling(14).mean()
+        loss = (-delta.clip(upper=0)).rolling(14).mean().replace(0, np.nan)
+        feat["nk_rsi"] = 100 - 100 / (1 + gain / loss)
+        ema12 = nk.ewm(span=12, adjust=False).mean()
+        ema26 = nk.ewm(span=26, adjust=False).mean()
+        feat["nk_macd_hist"] = (ema12 - ema26) - (ema12 - ema26).ewm(span=9, adjust=False).mean()
+        bb_mid = nk.rolling(20).mean()
+        bb_std = nk.rolling(20).std()
+        feat["nk_bb_pos"] = (nk - bb_mid) / bb_std.replace(0, np.nan)
+        feat["nk_vol_20d"] = nk.pct_change().rolling(20).std() * np.sqrt(252) * 100
+        feat["nk_vol_5d"] = nk.pct_change().rolling(5).std() * np.sqrt(252) * 100
+        feat["nk_up_ratio_10d"] = (nk.diff() > 0).rolling(10).mean()
+        feat["weekday"] = raw.index.dayofweek
+        feat["month"] = raw.index.month
+
+        for name in ["sp500", "nasdaq", "dow"]:
+            col = f"{name}_close"
+            if col in raw.columns:
+                feat[f"{name}_ret_1d"] = raw[col].pct_change() * 100
+                feat[f"{name}_ret_5d"] = raw[col].pct_change(5) * 100
+        if "vix_close" in raw.columns:
+            feat["vix"] = raw["vix_close"]
+            feat["vix_change"] = raw["vix_close"].pct_change() * 100
+            feat["vix_ma5_dev"] = (raw["vix_close"] - raw["vix_close"].rolling(5).mean()) / raw["vix_close"].rolling(5).mean() * 100
+        if "usdjpy_close" in raw.columns:
+            feat["usdjpy"] = raw["usdjpy_close"]
+            feat["usdjpy_ret_1d"] = raw["usdjpy_close"].pct_change() * 100
+            feat["usdjpy_ret_5d"] = raw["usdjpy_close"].pct_change(5) * 100
+        if "us10y_close" in raw.columns:
+            feat["us10y"] = raw["us10y_close"]
+            feat["us10y_change"] = raw["us10y_close"].diff()
+        for name in ["gold", "oil"]:
+            col = f"{name}_close"
+            if col in raw.columns:
+                feat[f"{name}_ret_1d"] = raw[col].pct_change() * 100
+                feat[f"{name}_ret_5d"] = raw[col].pct_change(5) * 100
+        if "sox_close" in raw.columns:
+            feat["sox_ret_1d"] = raw["sox_close"].pct_change() * 100
+        if "sp500_close" in raw.columns:
+            feat["nk_alpha_5d"] = feat.get("nk_ret_5d", 0) - feat.get("sp500_ret_5d", 0)
+
+        # 最新行で予測
+        row = feat.iloc[-1:]
+        for f in features:
+            if f not in row.columns:
+                row[f] = 0
+        row = row[features].fillna(0).replace([np.inf, -np.inf], 0)
+        for col in row.columns:
+            row[col] = pd.to_numeric(row[col], errors="coerce")
+        row = row.fillna(0)
+
+        # 予測
+        up_prob = float(clf.predict_proba(row)[0][1]) * 100
+        expected_ret = float(reg.predict(row)[0])
+        current_price = float(nk.iloc[-1])
+        expected_price = current_price * (1 + expected_ret / 100)
+
+        direction = "上昇" if up_prob > 50 else "下落"
+        if up_prob > 65:
+            confidence = "高い"
+        elif up_prob > 55:
+            confidence = "やや高い"
+        elif up_prob < 35:
+            confidence = "高い（下落）"
+        elif up_prob < 45:
+            confidence = "やや高い（下落）"
+        else:
+            confidence = "五分五分"
+
+        return {
+            "direction": direction,
+            "probability": round(up_prob, 1),
+            "expected_return": round(expected_ret, 2),
+            "expected_price": round(expected_price, 0),
+            "current_price": round(current_price, 0),
+            "confidence": confidence,
+        }
+    except Exception:
+        return None
+
+
 def get_available_models() -> dict[str, bool]:
     """利用可能なモデルの一覧を返す。"""
     return {
@@ -249,6 +385,7 @@ def get_available_models() -> dict[str, bool]:
         "LSTM方向予測": (_MODELS_DIR / "lstm_direction.pt").exists(),
         "決算サプライズ": (_MODELS_DIR / "xgboost_earnings.pkl").exists(),
         "最適売買タイミング": (_MODELS_DIR / "xgboost_timing.pkl").exists(),
+        "日経平均翌日予測": (_MODELS_DIR / "nikkei_forecast.pkl").exists(),
     }
 
 

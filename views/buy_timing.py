@@ -886,6 +886,33 @@ def main() -> None:
         )
         st.divider()
 
+    # ─── 日経平均 翌日予測（ML）─────────────────────────────────
+    try:
+        from modules.ml_predictor import predict_nikkei_tomorrow
+        _nk_forecast = predict_nikkei_tomorrow()
+        if _nk_forecast:
+            _dir = _nk_forecast["direction"]
+            _prob = _nk_forecast["probability"]
+            _ret = _nk_forecast["expected_return"]
+            _exp_price = _nk_forecast["expected_price"]
+            _cur_price = _nk_forecast["current_price"]
+            _conf = _nk_forecast["confidence"]
+            _dir_color = "#5ca08b" if _dir == "上昇" else "#c45c5c"
+            _dir_arrow = "▲" if _dir == "上昇" else "▼"
+
+            st.markdown(
+                f"`ML予測`　日経平均 明日: "
+                f"<span style='color:{_dir_color};font-weight:bold;font-size:1.1em;'>"
+                f"{_dir_arrow} {_dir} {_prob:.0f}%</span>"
+                f"　予想: **¥{_exp_price:,.0f}**（{_ret:+.2f}%）"
+                f"　現在値: ¥{_cur_price:,.0f}"
+                f"　<span style='color:#6b7280;font-size:0.8em;'>確信度: {_conf} | 正解率65.8% AUC0.71</span>",
+                unsafe_allow_html=True,
+            )
+            st.divider()
+    except Exception:
+        pass
+
     # ─── 日本株全体の相場観（ページ最上部）──────────────────────
     if _mkt_reload:
         fetch_market_context_text.clear()
