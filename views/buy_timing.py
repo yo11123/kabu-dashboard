@@ -549,7 +549,7 @@ def _render_card(rank: int, item: dict) -> None:
                 use_container_width=True,
             ):
                 # この銘柄のAI分析キャッシュを全クリアして再実行
-                get_comprehensive_analysis.clear()
+                #  cache removed
                 st.session_state[f"_reanalyze_{item['ticker']}"] = True
                 st.rerun()
 
@@ -1031,7 +1031,7 @@ def main() -> None:
             from modules.market_context import fetch_market_snapshot
             _run_screen.clear()
             _calc_sector_strength.clear()
-            get_comprehensive_analysis.clear()
+            #  cache removed
             fetch_market_context_text.clear()
             fetch_market_snapshot.clear()
             fetch_fundamental_yfinance.clear()

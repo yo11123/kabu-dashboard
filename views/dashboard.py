@@ -943,14 +943,14 @@ def main() -> None:
                 _cached_result = None
                 if _analyzed_key in st.session_state[_cache_key]:
                     del st.session_state[_cache_key][_analyzed_key]
-                get_comprehensive_analysis.clear()
+                #  cache removed
         else:
             if btn_col.button("AI総合分析を実行", type="primary", key="main_ai_btn", use_container_width=True):
                 _cached_result = "__run__"
 
         if clear_col.button("🗑️ キャッシュクリア", key="main_ai_clear_btn", use_container_width=True,
                             help="前回の分析結果を削除して再実行します"):
-            get_comprehensive_analysis.clear()
+            #  cache removed
             if _analyzed_key in st.session_state[_cache_key]:
                 del st.session_state[_cache_key][_analyzed_key]
                 save_daily(_cache_key, st.session_state[_cache_key])
