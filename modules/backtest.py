@@ -183,6 +183,43 @@ def evaluate_condition(row: pd.Series, condition: str) -> bool:
 # ---------------------------------------------------------------------------
 
 
+def evaluate_compound_condition(row: pd.Series, condition: str) -> bool:
+    """AND/OR を含む複合条件を評価する。
+
+    対応形式:
+        - "rsi <= 30 AND macd_histogram > 0"
+        - "rsi >= 70 OR bb_sigma > 2.0"
+        - 単一条件も対応（従来の evaluate_condition と同等）
+    """
+    condition = condition.strip()
+
+    # OR で分割（OR は AND より優先度が低い）
+    if " OR " in condition:
+        parts = [p.strip() for p in condition.split(" OR ")]
+        return any(evaluate_compound_condition(row, p) for p in parts)
+
+    # AND で分割
+    if " AND " in condition:
+        parts = [p.strip() for p in condition.split(" AND ")]
+        return all(evaluate_compound_condition(row, p) for p in parts)
+
+    # 単一条件
+    return evaluate_condition(row, condition)
+
+
+# ---------------------------------------------------------------------------
+# 有効なフィールド・演算子一覧（LLM に提示用）
+# ---------------------------------------------------------------------------
+
+VALID_FIELDS = {
+    "rsi", "macd_histogram", "bb_sigma", "volume_ratio",
+    "sma25_above", "price_change_pct", "macd", "macd_signal",
+    "golden_cross", "death_cross", "macd_cross_up", "macd_cross_down",
+    "bb_lower", "bb_upper", "volume_breakout",
+}
+VALID_OPS = {"<=", ">=", "<", ">", "==", "!="}
+
+
 def parse_custom_conditions(conditions: list[dict]) -> tuple[str, str]:
     """ユーザー定義条件リストから buy/sell 条件文字列を生成する。
 
@@ -191,25 +228,13 @@ def parse_custom_conditions(conditions: list[dict]) -> tuple[str, str]:
     conditions : list[dict]
         各要素は ``{"field": str, "operator": str, "value": number, "side": "buy"|"sell"}``。
         ``side`` が ``"buy"`` のものを買い条件、``"sell"`` のものを売り条件として結合する。
+        複数条件は AND で結合される。
 
     Returns
     -------
     tuple[str, str]
         (buy_condition_str, sell_condition_str)
-
-    対応フィールド: rsi, macd_histogram, bb_sigma, volume_ratio,
-                    sma25_above, price_change_pct
     """
-    _VALID_FIELDS = {
-        "rsi",
-        "macd_histogram",
-        "bb_sigma",
-        "volume_ratio",
-        "sma25_above",
-        "price_change_pct",
-    }
-    _VALID_OPS = {"<=", ">=", "<", ">", "==", "!="}
-
     buy_parts: list[str] = []
     sell_parts: list[str] = []
 
@@ -219,10 +244,10 @@ def parse_custom_conditions(conditions: list[dict]) -> tuple[str, str]:
         value = cond.get("value", 0)
         side = cond.get("side", "buy")
 
-        if field not in _VALID_FIELDS:
+        if field not in VALID_FIELDS:
             logger.warning("未対応のフィールド: %s", field)
             continue
-        if op not in _VALID_OPS:
+        if op not in VALID_OPS:
             logger.warning("未対応の演算子: %s", op)
             continue
 
@@ -232,13 +257,8 @@ def parse_custom_conditions(conditions: list[dict]) -> tuple[str, str]:
         else:
             sell_parts.append(expr)
 
-    buy_str = buy_parts[0] if buy_parts else "rsi <= 30"
-    sell_str = sell_parts[0] if sell_parts else "rsi >= 70"
-
-    if len(buy_parts) > 1:
-        logger.info("複数の買い条件が指定されました。最初の条件のみ使用します: %s", buy_str)
-    if len(sell_parts) > 1:
-        logger.info("複数の売り条件が指定されました。最初の条件のみ使用します: %s", sell_str)
+    buy_str = " AND ".join(buy_parts) if buy_parts else "rsi <= 30"
+    sell_str = " AND ".join(sell_parts) if sell_parts else "rsi >= 70"
 
     return buy_str, sell_str
 
@@ -339,7 +359,9 @@ def run_backtest(
     entry_date = None
     shares = 0
 
-    for i in range(len(df) - 1):
+    # 指標の安定に必要な最低限の期間（75日SMAが最長）をスキップ
+    start_idx = max(75, 0)
+    for i in range(start_idx, len(df) - 1):
         row = df.iloc[i]
         next_row = df.iloc[i + 1]
         current_date = df.index[i]
@@ -348,7 +370,7 @@ def run_backtest(
 
         if not position_open:
             # --- 買いシグナル判定 ---
-            if evaluate_condition(row, buy_condition):
+            if evaluate_compound_condition(row, buy_condition):
                 if pd.isna(next_open) or next_open <= 0:
                     equity_values.append(capital)
                     equity_dates.append(current_date)
@@ -361,7 +383,7 @@ def run_backtest(
                     position_open = True
         else:
             # --- 売りシグナル判定 ---
-            if evaluate_condition(row, sell_condition):
+            if evaluate_compound_condition(row, sell_condition):
                 if pd.isna(next_open) or next_open <= 0:
                     equity_values.append(capital + shares * row["Close"])
                     equity_dates.append(current_date)
