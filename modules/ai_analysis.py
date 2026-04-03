@@ -389,6 +389,10 @@ def _build_prompt(
     margin_section = f"\n## 信用取引情報\n{margin_text}" if margin_text else ""
     market_section = f"\n{market_text}" if market_text else ""
 
+    # チャートパターンをf-stringの外で事前計算（dict型がf-stringに混入するのを防止）
+    _cp = tech.get("chart_pattern")
+    chart_pattern_text = _format_chart_pattern(_cp if isinstance(_cp, dict) else {})
+
     # ── 過去リターン ──────────────────────────────────────────
     returns = tech.get("returns", {})
     returns_lines = []
@@ -450,7 +454,7 @@ def _build_prompt(
 - 20日上昇日比率: {tech.get('up_day_ratio_20d', 'N/A')}  ※0.6超で強気、0.4未満で弱気
 
 ## チャートパターン分析（視覚的特徴のテキスト記述）
-{_format_chart_pattern(tech.get('chart_pattern', {{}}))}
+{chart_pattern_text}
 
 ## ファンダメンタル
 {fund_text}{margin_section}{market_section}
