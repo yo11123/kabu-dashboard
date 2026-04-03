@@ -792,8 +792,10 @@ def get_comprehensive_analysis(
         return result
 
     except Exception as e:
+        import traceback
+        tb = traceback.format_exc()
         detail = _classify_error(str(e), label)
-        return {**_default, "overall_detail": detail, "error": True}
+        return {**_default, "overall_detail": f"{detail}\n\n[Debug] {tb[-500:]}", "error": True}
 
 
 # ─── AI チャット ──────────────────────────────────────────────────────────
