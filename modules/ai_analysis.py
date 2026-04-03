@@ -1069,10 +1069,10 @@ def prepare_analysis_inputs(
         fund_text = fund_text + "\n\n" + earnings_text
 
     news_titles = tuple(
-        item["title"]
+        str(item.get("title", "") if isinstance(item, dict) else item)
         for ev in news_events
         for item in ev.get("all_items", [{"title": ev.get("title", "")}])
-        if item.get("title")
+        if (item.get("title") if isinstance(item, dict) else item)
     )[:20]
 
     margin_data = fetch_margin_data(ticker)
