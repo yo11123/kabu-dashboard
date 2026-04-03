@@ -577,7 +577,7 @@ def _render_trading_guide(style: str) -> None:
     st.caption(data.get("overview", ""))
 
     # タブで整理
-    tabs = st.tabs(["エントリー/エグジット", "テクニカル指標", "リスク管理", "銘柄選定", "よくある失敗", "共通原則"])
+    tabs = st.tabs(["エントリー/エグジット", "テクニカル指標", "リスク管理", "銘柄選定", "よくある失敗", "市場心理", "共通原則"])
 
     with tabs[0]:
         if data.get("entry_rules"):
@@ -633,6 +633,61 @@ def _render_trading_guide(style: str) -> None:
                 st.markdown(f"- **{mistake}** → {solution}")
 
     with tabs[5]:
+        psych = KNOWLEDGE.get("市場心理", {})
+        if psych:
+            st.caption(psych.get("overview", ""))
+
+            # センチメント指標
+            st.markdown("**センチメント指標と閾値**")
+            for ind_name, ind_data in psych.get("sentiment_indicators", {}).items():
+                with st.expander(f"📊 {ind_name}"):
+                    st.caption(ind_data["description"])
+                    for val, meaning in ind_data["thresholds"]:
+                        st.markdown(f"- **{val}**: {meaning}")
+
+            # 行動バイアス
+            st.markdown("**投資家の心理バイアス**")
+            for bias, desc, solution in psych.get("behavioral_biases", []):
+                st.markdown(f"- **{bias}**: {desc} → *{solution}*")
+
+            # 出来高×心理
+            st.markdown("**出来高から読む群衆心理**")
+            for pattern, meaning in psych.get("volume_psychology", []):
+                st.markdown(f"- **{pattern}**: {meaning}")
+
+            # ローソク足×心理
+            st.markdown("**ローソク足が示す心理**")
+            for pattern, meaning in psych.get("candle_psychology", []):
+                st.markdown(f"- **{pattern}**: {meaning}")
+
+            # 市場サイクル
+            cycle = psych.get("market_cycle", {})
+            if cycle:
+                st.markdown("**市場サイクルの感情マップ**")
+                st.caption(cycle["description"])
+                for phase, desc in cycle["phases"]:
+                    _color = "#5ca08b" if phase in ("希望", "楽観", "安堵") else (
+                        "#c45c5c" if phase in ("恐怖", "パニック", "降伏") else "#d4af37"
+                    )
+                    st.markdown(f"<span style='color:{_color}'>● **{phase}**</span>: {desc}", unsafe_allow_html=True)
+
+            # 逆張りシグナル
+            col_buy, col_sell = st.columns(2)
+            with col_buy:
+                st.markdown("**底値圏の買いシグナル**")
+                for signal, stars in psych.get("contrarian_buy_signals", []):
+                    st.markdown(f"- {stars} {signal}")
+            with col_sell:
+                st.markdown("**天井圏の売りシグナル**")
+                for signal, stars in psych.get("contrarian_sell_signals", []):
+                    st.markdown(f"- {stars} {signal}")
+
+            # 週次チェックリスト
+            st.markdown("**毎週確認すべき指標**")
+            for item in psych.get("weekly_checklist", []):
+                st.markdown(f"- [ ] {item}")
+
+    with tabs[6]:
         for section, items in common.items():
             labels = {"money_management": "資金管理の鉄則", "mental": "メンタル管理", "multi_timeframe": "マルチタイムフレーム分析"}
             st.markdown(f"**{labels.get(section, section)}**")
