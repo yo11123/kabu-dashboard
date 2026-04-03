@@ -943,59 +943,48 @@ def main() -> None:
             if _analyzed_key in st.session_state[_cache_key]:
                 del st.session_state[_cache_key][_analyzed_key]
 
-        # 実行フラグ
-        _run_flag_key = f"_run_ai_{ticker}"
-        _should_run = st.session_state.get(_run_flag_key, False)
+        has_cached = bool(_cached_result)
 
-        if _cached_result:
+        if has_cached:
             st.caption("✅ 本日の分析結果を表示中（キャッシュ済み・API消費なし）")
-            if btn_col.button("再分析を実行（API消費あり）", key="main_ai_btn", use_container_width=True):
-                if _analyzed_key in st.session_state[_cache_key]:
-                    del st.session_state[_cache_key][_analyzed_key]
-                    save_daily(_cache_key, st.session_state[_cache_key])
-                st.session_state[_run_flag_key] = True
-                st.rerun()
-        else:
-            if btn_col.button("AI総合分析を実行", type="primary", key="main_ai_btn", use_container_width=True):
-                st.session_state[_run_flag_key] = True
-                st.rerun()
+        _run_btn = btn_col.button(
+            "再分析を実行（API消費あり）" if has_cached else "AI総合分析を実行",
+            key="main_ai_btn",
+            use_container_width=True,
+            type="secondary" if has_cached else "primary",
+        )
+        _clear_btn = clear_col.button("🗑️ キャッシュクリア", key="main_ai_clear_btn",
+                                       use_container_width=True)
 
-        if clear_col.button("🗑️ キャッシュクリア", key="main_ai_clear_btn", use_container_width=True,
-                            help="前回の分析結果を削除して再実行します"):
+        if _clear_btn:
             st.session_state[_cache_key] = {}
             save_daily(_cache_key, {})
-            st.session_state[_run_flag_key] = False
             st.rerun()
 
-        if _cached_result and not _should_run:
-            _render_ai_results(_cached_result)
-        elif _should_run:
-            _ai_placeholder = st.empty()
-            from modules.loading import show_loading
-            _ai_placeholder.markdown("")
-            show_loading("AI 分析を実行中...")
-            _ai_result = get_comprehensive_analysis(
-                ticker=ticker,
-                company_name=company_name,
-                tech_json=tech_json,
-                fund_text=fund_text,
-                news_titles=news_titles,
-                margin_text=_margin_text,
-                market_text=_market_text,
-                provider=ai_provider,
-                api_key=ai_api_key,
-            )
-            # 実行フラグをリセット
-            st.session_state[_run_flag_key] = False
-            # エラー結果はキャッシュに保存しない
+        if _run_btn:
+            # 即座に実行（st.rerunせず直接処理）
+            with helix_spinner(f"{_provider_label} が分析中..."):
+                _ai_result = get_comprehensive_analysis(
+                    ticker=ticker,
+                    company_name=company_name,
+                    tech_json=tech_json,
+                    fund_text=fund_text,
+                    news_titles=news_titles,
+                    margin_text=_margin_text,
+                    market_text=_market_text,
+                    provider=ai_provider,
+                    api_key=ai_api_key,
+                )
             if not _ai_result.get("error"):
                 st.session_state[_cache_key][_analyzed_key] = _ai_result
                 save_daily(_cache_key, st.session_state[_cache_key])
                 from modules.persistence import save_ai_history
                 save_ai_history(ticker, _ai_result)
+                _render_ai_results(_ai_result)
             else:
                 st.error(f"分析エラー: {_ai_result.get('overall_detail', '不明なエラー')}")
-            st.rerun()
+        elif has_cached:
+            _render_ai_results(_cached_result)
         else:
             st.caption(
                 f"「AI総合分析を実行」ボタンを押すと、テクニカル・ファンダメンタル・ニュース・マーケット環境を"
