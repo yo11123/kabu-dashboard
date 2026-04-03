@@ -250,3 +250,81 @@ def get_available_models() -> dict[str, bool]:
         "決算サプライズ": (_MODELS_DIR / "xgboost_earnings.pkl").exists(),
         "最適売買タイミング": (_MODELS_DIR / "xgboost_timing.pkl").exists(),
     }
+
+
+def calc_optimal_thresholds(df: pd.DataFrame) -> dict:
+    """学習済みモデルの予測確率分布から最適な売買閾値を計算する。
+
+    過去データに対する予測確率を算出し、
+    実際のリターンとの関係から最もシャープレシオが高くなる閾値を探索する。
+
+    Returns:
+        {"buy": float, "sell": float, "method": str}
+    """
+    data = _load_pickle("xgboost_timing.pkl") or _load_pickle("xgboost_direction.pkl")
+    if data is None or len(df) < 350:
+        return {"buy": 60, "sell": 40, "method": "デフォルト"}
+
+    model = data["model"]
+    features = data["features"]
+
+    try:
+        feat = _calc_features(df)
+        # 5日後リターン
+        future_ret = df["Close"].shift(-5) / df["Close"] - 1
+        feat["future_ret"] = future_ret
+        feat = feat.dropna()
+        if len(feat) < 100:
+            return {"buy": 60, "sell": 40, "method": "データ不足"}
+
+        # 予測確率を計算
+        X = feat.drop(columns=["future_ret"])
+        for f in features:
+            if f not in X.columns:
+                X[f] = 0
+        X = X[features].fillna(0).replace([np.inf, -np.inf], 0)
+        for col in X.columns:
+            X[col] = pd.to_numeric(X[col], errors="coerce")
+        X = X.fillna(0)
+
+        probs = model.predict_proba(X)[:, 1] * 100
+        rets = feat["future_ret"].values
+
+        # グリッドサーチで最適閾値を探索
+        best_sharpe = -999
+        best_buy = 60
+        best_sell = 40
+
+        for buy_th in range(55, 80, 5):
+            for sell_th in range(25, buy_th - 5, 5):
+                # シミュレーション
+                in_pos = False
+                trade_rets = []
+                for i in range(len(probs)):
+                    if not in_pos and probs[i] > buy_th:
+                        in_pos = True
+                        entry_ret = rets[i]
+                    elif in_pos and probs[i] < sell_th:
+                        in_pos = False
+                        trade_rets.append(entry_ret)
+
+                if len(trade_rets) < 5:
+                    continue
+                arr = np.array(trade_rets)
+                mean_r = arr.mean()
+                std_r = arr.std()
+                if std_r > 0:
+                    sharpe = mean_r / std_r * np.sqrt(52)  # 週次換算
+                    if sharpe > best_sharpe:
+                        best_sharpe = sharpe
+                        best_buy = buy_th
+                        best_sell = sell_th
+
+        return {
+            "buy": best_buy,
+            "sell": best_sell,
+            "sharpe": round(best_sharpe, 2),
+            "method": "ML最適化",
+        }
+    except Exception:
+        return {"buy": 60, "sell": 40, "method": "計算エラー"}

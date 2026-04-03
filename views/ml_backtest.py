@@ -349,8 +349,16 @@ def main() -> None:
 
         st.divider()
         st.subheader("パラメータ")
-        buy_th = st.slider("買い閾値（ML確率 > この値で買い）", 50, 80, 60, key="ml_bt_buy")
-        sell_th = st.slider("売り閾値（ML確率 < この値で売り）", 20, 50, 40, key="ml_bt_sell")
+
+        # 最適閾値を自動計算
+        auto_th = st.checkbox("MLが最適な閾値を自動計算", value=True, key="ml_bt_auto")
+        if auto_th:
+            st.caption("銘柄選択後、バックテスト実行時に最適閾値を自動計算します")
+            buy_th = 60  # 一旦デフォルト（実行時に上書き）
+            sell_th = 40
+        else:
+            buy_th = st.slider("買い閾値（ML確率 > この値で買い）", 50, 80, 60, key="ml_bt_buy")
+            sell_th = st.slider("売り閾値（ML確率 < この値で売り）", 20, 50, 40, key="ml_bt_sell")
         initial = st.number_input("初期資金（円）", value=1_000_000, step=100_000, key="ml_bt_capital")
 
         st.divider()
@@ -376,6 +384,14 @@ def main() -> None:
                     df.columns = [str(c).capitalize() for c in df.columns]
                 if df.index.tz is not None:
                     df.index = df.index.tz_localize(None)
+
+                # 最適閾値の自動計算
+                if auto_th:
+                    from modules.ml_predictor import calc_optimal_thresholds
+                    opt = calc_optimal_thresholds(df)
+                    buy_th = opt["buy"]
+                    sell_th = opt["sell"]
+                    st.session_state["ml_bt_optimal"] = opt
 
                 result = _run_ml_backtest(
                     df,
@@ -419,9 +435,13 @@ def main() -> None:
 
     m = result["metrics"]
     company = st.session_state.get("ml_bt_company", "")
+    opt = st.session_state.get("ml_bt_optimal")
 
     st.markdown(f"### {company} — MLバックテスト結果")
-    st.caption(f"モデル: {m['model_name']} | 期間: {m['years']}年 | 取引回数: {m['total_trades']}回")
+    _opt_text = ""
+    if opt and opt.get("method") == "ML最適化":
+        _opt_text = f" | ML最適閾値: 買い>{opt['buy']}% / 売り<{opt['sell']}%"
+    st.caption(f"モデル: {m['model_name']} | 期間: {m['years']}年 | 取引回数: {m['total_trades']}回{_opt_text}")
 
     # メトリクス
     c1, c2, c3, c4, c5 = st.columns(5)
