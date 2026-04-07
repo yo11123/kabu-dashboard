@@ -43,43 +43,52 @@ def get_transcript(video_id: str, languages: list[str] | None = None) -> str:
     if languages is None:
         languages = ["ja", "en"]
 
-    try:
-        transcript_list = YouTubeTranscriptApi.list_transcripts(video_id)
+    api = YouTubeTranscriptApi()
 
-        # 手動字幕を優先
-        transcript = None
+    # 方法1: 指定言語で直接取得
+    try:
+        result = api.fetch(video_id, languages=languages)
+        text = " ".join(s.text for s in result.snippets)
+        if text.strip():
+            return text
+    except Exception:
+        pass
+
+    # 方法2: 利用可能な字幕を列挙して手動字幕を優先
+    try:
+        transcript_list = api.list(video_id)
+        # 手動字幕を優先（指定言語順）
         for lang in languages:
+            for t in transcript_list:
+                if t.language_code == lang and not t.is_generated:
+                    result = api.fetch(video_id, languages=[lang])
+                    text = " ".join(s.text for s in result.snippets)
+                    if text.strip():
+                        return text
+
+        # 自動生成字幕にフォールバック（指定言語順）
+        for lang in languages:
+            for t in transcript_list:
+                if t.language_code == lang and t.is_generated:
+                    result = api.fetch(video_id, languages=[lang])
+                    text = " ".join(s.text for s in result.snippets)
+                    if text.strip():
+                        return text
+
+        # 何でもいいから取得
+        for t in transcript_list:
             try:
-                transcript = transcript_list.find_manually_created_transcript([lang])
-                break
+                result = api.fetch(video_id, languages=[t.language_code])
+                text = " ".join(s.text for s in result.snippets)
+                if text.strip():
+                    return text
             except Exception:
                 continue
 
-        # 自動生成字幕にフォールバック
-        if transcript is None:
-            for lang in languages:
-                try:
-                    transcript = transcript_list.find_generated_transcript([lang])
-                    break
-                except Exception:
-                    continue
-
-        if transcript is None:
-            # 何でもいいから取得
-            for t in transcript_list:
-                transcript = t
-                break
-
-        if transcript is None:
-            return ""
-
-        entries = transcript.fetch()
-        text = " ".join(e.get("text", e.text) if hasattr(e, "text") else e["text"] for e in entries)
-        return text
-
     except Exception as e:
         st.warning(f"字幕取得エラー: {e}")
-        return ""
+
+    return ""
 
 
 # ─── 動画タイトル取得 ─────────────────────────────────────────────────────
