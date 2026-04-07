@@ -27,6 +27,7 @@ PERSISTENT_KEYS = {
     "market_board": [],
     "ai_analysis_history": {},
     "youtube_summaries": [],
+    "youtube_reports": [],
     "alerts": [],
 }
 

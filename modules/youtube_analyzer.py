@@ -364,6 +364,32 @@ def chat_with_videos(
         return f"エラー: {str(e)[:200]}"
 
 
+# ─── レポート永続化 ──────────────────────────────────────────────
+
+def save_report(report_text: str, video_titles: list[str]) -> None:
+    """統合レポートを保存する。"""
+    history = _file_load("youtube_reports", [])
+    if not isinstance(history, list):
+        history = []
+
+    entry = {
+        "date": date.today().isoformat(),
+        "report": report_text,
+        "video_count": len(video_titles),
+        "video_titles": video_titles[:10],
+    }
+    history.insert(0, entry)
+    history = history[:20]  # 最大20件
+    _file_save("youtube_reports", history)
+    _sync_to_gist()
+
+
+def load_reports() -> list[dict]:
+    """保存済みの統合レポートを読み込む。"""
+    history = _file_load("youtube_reports", [])
+    return history if isinstance(history, list) else []
+
+
 def get_market_insights_from_youtube() -> str:
     """保存済みのYouTube分析から最新の市場インサイトをテキストで返す（AI分析用）。"""
     summaries = load_youtube_summaries()

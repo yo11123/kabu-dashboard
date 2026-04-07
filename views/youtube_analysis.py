@@ -10,7 +10,9 @@ from modules.youtube_analyzer import (
     chat_with_videos,
     extract_video_id,
     generate_integrated_report,
+    load_reports,
     load_youtube_summaries,
+    save_report,
     save_youtube_summaries,
 )
 
@@ -170,10 +172,13 @@ def _render_report_tab(gemini_key: str, history: list[dict]) -> None:
         with st.spinner(f"{len(selected)}本の動画を統合分析中..."):
             report = generate_integrated_report(selected, gemini_key)
 
+        # 永続保存
+        video_titles = [s.get("title", "不明") for s in selected]
+        save_report(report, video_titles)
+
         st.divider()
         st.markdown(report)
 
-        # ダウンロードボタン
         st.download_button(
             "レポートをダウンロード (.md)",
             data=report,
@@ -181,10 +186,34 @@ def _render_report_tab(gemini_key: str, history: list[dict]) -> None:
             mime="text/markdown",
         )
 
-    # 前回のレポートがセッションにあれば表示
-    if "last_report" in st.session_state:
-        with st.expander("前回のレポート", expanded=False):
-            st.markdown(st.session_state["last_report"])
+    # 過去のレポート履歴
+    saved_reports = load_reports()
+    if saved_reports:
+        st.divider()
+        st.markdown("### 過去のレポート")
+        for i, rpt in enumerate(saved_reports):
+            rpt_date = rpt.get("date", "不明")
+            rpt_count = rpt.get("video_count", 0)
+            rpt_titles = rpt.get("video_titles", [])
+            label = f"{rpt_date} ({rpt_count}本の動画から生成)"
+            with st.expander(label, expanded=i == 0):
+                st.markdown(rpt.get("report", ""))
+                if rpt_titles:
+                    st.caption("参照動画: " + " / ".join(rpt_titles[:5]))
+                col_dl, col_del, _ = st.columns([1, 1, 4])
+                col_dl.download_button(
+                    "ダウンロード",
+                    data=rpt.get("report", ""),
+                    file_name=f"market_report_{rpt_date}.md",
+                    mime="text/markdown",
+                    key=f"dl_rpt_{i}",
+                )
+                if col_del.button("削除", key=f"del_rpt_{i}"):
+                    saved_reports.pop(i)
+                    from modules.persistence import _file_save, _sync_to_gist
+                    _file_save("youtube_reports", saved_reports)
+                    _sync_to_gist()
+                    st.rerun()
 
 
 # ═══════════════════════════════════════════════════════════════════
