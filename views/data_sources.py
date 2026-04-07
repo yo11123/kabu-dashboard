@@ -188,41 +188,102 @@ def main() -> None:
 
     # ── データフロー図 ──────────────────────────────────────
     st.markdown("### データフロー概要")
-    st.code(
-        """
-┌─────────────────────────────────────────────────────────────────┐
-│                        外部データソース                          │
-├──────────┬──────────┬──────────┬──────────┬──────────┬──────────┤
-│ Yahoo    │ Google   │ Kabutan  │ FRED     │ J-Quants │ TDNet    │
-│ Finance  │ News RSS │ (株探)   │ (米経済) │ (JPX)    │ (適時開示)│
-└────┬─────┴────┬─────┴────┬─────┴────┬─────┴────┬─────┴────┬─────┘
-     │          │          │          │          │          │
-     ▼          ▼          ▼          ▼          ▼          ▼
-┌─────────────────────────────────────────────────────────────────┐
-│                    Streamlit キャッシュ層                        │
-│              st.cache_data (TTL: 60秒 ～ 24時間)                │
-└──────────────────────────┬──────────────────────────────────────┘
-                           │
-          ┌────────────────┼────────────────┐
-          ▼                ▼                ▼
-┌──────────────┐  ┌──────────────┐  ┌──────────────┐
-│  テクニカル   │  │ ファンダ     │  │   ニュース   │
-│  分析モジュール│  │ メンタル     │  │   イベント   │
-└──────┬───────┘  └──────┬───────┘  └──────┬───────┘
-       │                 │                 │
-       ▼                 ▼                 ▼
-┌─────────────────────────────────────────────────────────────────┐
-│                     AI 分析エンジン                              │
-│            Claude / OpenAI / Gemini / ローカルML                 │
-└──────────────────────────┬──────────────────────────────────────┘
-                           │
-                           ▼
-┌─────────────────────────────────────────────────────────────────┐
-│                      永続化ストレージ                            │
-│               GitHub Gist ＋ ローカルファイル                     │
-└─────────────────────────────────────────────────────────────────┘
-""",
-        language=None,
+    st.markdown(
+        """<div style="display:flex; flex-direction:column; gap:0; align-items:center; max-width:620px; margin:0 auto;">
+
+  <!-- Layer 1: 外部データソース -->
+  <div style="width:100%; margin-bottom:2px;">
+    <div style="color:#9ca3af; font-size:0.7em; letter-spacing:0.15em; text-align:center; margin-bottom:6px;">EXTERNAL DATA SOURCES</div>
+    <div style="display:flex; gap:6px; flex-wrap:wrap; justify-content:center;">
+      <div style="background:#0d1f17; border:1px solid #2d7a5a; border-radius:6px; padding:8px 12px; text-align:center; flex:1; min-width:80px;">
+        <div style="color:#5ca08b; font-weight:600; font-size:0.85em;">Yahoo Finance</div>
+        <div style="color:#6b7280; font-size:0.65em;">株価・指数・為替</div>
+      </div>
+      <div style="background:#0d1720; border:1px solid #2d5a7a; border-radius:6px; padding:8px 12px; text-align:center; flex:1; min-width:80px;">
+        <div style="color:#5a8cb0; font-weight:600; font-size:0.85em;">Google News</div>
+        <div style="color:#6b7280; font-size:0.65em;">ニュースRSS</div>
+      </div>
+      <div style="background:#1a1520; border:1px solid #6b5aad; border-radius:6px; padding:8px 12px; text-align:center; flex:1; min-width:80px;">
+        <div style="color:#9b8ec4; font-weight:600; font-size:0.85em;">Kabutan</div>
+        <div style="color:#6b7280; font-size:0.65em;">財務・決算</div>
+      </div>
+      <div style="background:#1f1a10; border:1px solid #8a7a3a; border-radius:6px; padding:8px 12px; text-align:center; flex:1; min-width:80px;">
+        <div style="color:#d4af37; font-weight:600; font-size:0.85em;">FRED</div>
+        <div style="color:#6b7280; font-size:0.65em;">米マクロ経済</div>
+      </div>
+      <div style="background:#0d1720; border:1px solid #2d5a7a; border-radius:6px; padding:8px 12px; text-align:center; flex:1; min-width:80px;">
+        <div style="color:#5a8cb0; font-weight:600; font-size:0.85em;">J-Quants</div>
+        <div style="color:#6b7280; font-size:0.65em;">JPX公式データ</div>
+      </div>
+      <div style="background:#1a1015; border:1px solid #7a3a4a; border-radius:6px; padding:8px 12px; text-align:center; flex:1; min-width:80px;">
+        <div style="color:#c45c6c; font-weight:600; font-size:0.85em;">TDNet</div>
+        <div style="color:#6b7280; font-size:0.65em;">適時開示</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Arrow -->
+  <div style="color:#4a5568; font-size:1.5em; line-height:1; margin:4px 0;">▼</div>
+
+  <!-- Layer 2: キャッシュ -->
+  <div style="width:100%; background:linear-gradient(135deg,#111827,#0f172a); border:1px solid #374151;
+              border-radius:8px; padding:12px 20px; text-align:center; margin-bottom:2px;">
+    <div style="color:#6b7280; font-size:0.7em; letter-spacing:0.15em; margin-bottom:2px;">CACHE LAYER</div>
+    <div style="color:#e8ecf1; font-weight:500;">Streamlit キャッシュ</div>
+    <div style="color:#9ca3af; font-size:0.75em;">TTL: 60秒（リアルタイム株価）〜 24時間（銘柄リスト）</div>
+  </div>
+
+  <!-- Arrow -->
+  <div style="color:#4a5568; font-size:1.5em; line-height:1; margin:4px 0;">▼</div>
+
+  <!-- Layer 3: 分析モジュール -->
+  <div style="width:100%; margin-bottom:2px;">
+    <div style="color:#9ca3af; font-size:0.7em; letter-spacing:0.15em; text-align:center; margin-bottom:6px;">ANALYSIS MODULES</div>
+    <div style="display:flex; gap:8px; justify-content:center;">
+      <div style="background:#0d1f17; border:1px solid #2d7a5a; border-radius:6px; padding:10px 16px; text-align:center; flex:1;">
+        <div style="color:#5ca08b; font-weight:600; font-size:0.9em;">テクニカル</div>
+        <div style="color:#6b7280; font-size:0.7em;">RSI / MACD / 一目均衡表</div>
+      </div>
+      <div style="background:#1a1520; border:1px solid #6b5aad; border-radius:6px; padding:10px 16px; text-align:center; flex:1;">
+        <div style="color:#9b8ec4; font-weight:600; font-size:0.9em;">ファンダメンタル</div>
+        <div style="color:#6b7280; font-size:0.7em;">PER / PBR / 財務諸表</div>
+      </div>
+      <div style="background:#0d1720; border:1px solid #2d5a7a; border-radius:6px; padding:10px 16px; text-align:center; flex:1;">
+        <div style="color:#5a8cb0; font-weight:600; font-size:0.9em;">ニュース</div>
+        <div style="color:#6b7280; font-size:0.7em;">センチメント / IR</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Arrow -->
+  <div style="color:#4a5568; font-size:1.5em; line-height:1; margin:4px 0;">▼</div>
+
+  <!-- Layer 4: AI -->
+  <div style="width:100%; background:linear-gradient(135deg,#1a1520,#13101f); border:1px solid #6b5aad;
+              border-radius:8px; padding:12px 20px; text-align:center; margin-bottom:2px;">
+    <div style="color:#6b7280; font-size:0.7em; letter-spacing:0.15em; margin-bottom:2px;">AI ENGINE</div>
+    <div style="color:#e8ecf1; font-weight:500;">AI 分析エンジン</div>
+    <div style="display:flex; gap:12px; justify-content:center; margin-top:6px;">
+      <span style="color:#9b8ec4; font-size:0.8em; background:#1a1530; padding:2px 10px; border-radius:10px;">Claude</span>
+      <span style="color:#5ca08b; font-size:0.8em; background:#0d1f17; padding:2px 10px; border-radius:10px;">Gemini</span>
+      <span style="color:#5a8cb0; font-size:0.8em; background:#0d1720; padding:2px 10px; border-radius:10px;">OpenAI</span>
+      <span style="color:#d4af37; font-size:0.8em; background:#1f1a10; padding:2px 10px; border-radius:10px;">ローカルML</span>
+    </div>
+  </div>
+
+  <!-- Arrow -->
+  <div style="color:#4a5568; font-size:1.5em; line-height:1; margin:4px 0;">▼</div>
+
+  <!-- Layer 5: 永続化 -->
+  <div style="width:100%; background:linear-gradient(135deg,#1f1a10,#1a1508); border:1px solid #d4af3744;
+              border-radius:8px; padding:12px 20px; text-align:center;">
+    <div style="color:#6b7280; font-size:0.7em; letter-spacing:0.15em; margin-bottom:2px;">PERSISTENCE</div>
+    <div style="color:#e8ecf1; font-weight:500;">永続化ストレージ</div>
+    <div style="color:#9ca3af; font-size:0.75em;">GitHub Gist + ローカルキャッシュ</div>
+  </div>
+
+</div>""",
+        unsafe_allow_html=True,
     )
 
 
