@@ -320,6 +320,16 @@ def _format_chart_pattern(pattern: dict) -> str:
     return "\n".join(lines)
 
 
+def _get_youtube_insights() -> str:
+    """YouTube分析からのインサイトを取得する（あれば）。"""
+    try:
+        from modules.youtube_analyzer import get_market_insights_from_youtube
+        insights = get_market_insights_from_youtube()
+        return insights if insights else ""
+    except Exception:
+        return ""
+
+
 def _build_prompt(
     ticker: str,
     company_name: str,
@@ -463,6 +473,8 @@ def _build_prompt(
 {news_text}
 
 {market_news_text}
+
+{_get_youtube_insights()}
 
 ## 分析手順（この順番で段階的に思考してください）
 

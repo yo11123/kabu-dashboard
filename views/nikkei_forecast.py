@@ -243,9 +243,10 @@ def main() -> None:
 
 | 指標 | 値 |
 |------|-----|
-| 高信頼度時の精度 | **91.4%** |
-| 高信頼度の取引回数 | 年間約174回（週3〜4回） |
-| 変動幅の平均誤差 | 0.963% |
+| 高信頼度時の精度 | **88.2%** |
+| 高信頼度の取引回数 | 年間約204回（週4回程度） |
+| 変動幅の平均誤差 | 0.977% |
+| テクニカル特徴量 | 107個（一目均衡表・ストキャス・ADX等含む） |
 
 **ポイント:**
 - 毎日予測は出ますが、全ての予測が高精度なわけではありません
@@ -276,22 +277,81 @@ def main() -> None:
 | カレンダー | 曜日、月、祝前日効果、でかんしょ節効果 |
 | ニュース | リアルタイムニュースのセンチメントスコア |
 
-### モデル構成
-
-```
-Level 0: ベースモデル
-├── XGBoost（800本の決定木、GPU学習）
-└── LightGBM（800本の決定木）
-
-Level 1: スタッキング
-└── Logistic Regression（メタラーナー）
-
-Meta-Labeling: 信頼度モデル
-└── XGBoost（予測が正しい確率を推定）
-```
-
 ※あくまで統計的予測であり、投資助言ではありません。
 """
+        )
+
+        # ── モデル構成図（ビジュアル）──────────────────────────
+        st.markdown("### モデル構成")
+        st.markdown(
+            """<div style="display:flex; flex-direction:column; gap:12px; max-width:560px;">
+
+  <!-- Step 1 -->
+  <div style="display:flex; gap:10px; align-items:stretch;">
+    <div style="background:linear-gradient(135deg,#1a3a2a,#0d1f17); border:1px solid #2d7a5a;
+                border-radius:8px; padding:14px 16px; flex:1; text-align:center;">
+      <div style="color:#5ca08b; font-size:0.7em; letter-spacing:0.1em; margin-bottom:4px;">MODEL A</div>
+      <div style="color:#e8ecf1; font-weight:600;">XGBoost</div>
+      <div style="color:#9ca3af; font-size:0.75em; margin-top:2px;">決定木 800本</div>
+    </div>
+    <div style="background:linear-gradient(135deg,#1a2a3a,#0d1720); border:1px solid #2d5a7a;
+                border-radius:8px; padding:14px 16px; flex:1; text-align:center;">
+      <div style="color:#5a8cb0; font-size:0.7em; letter-spacing:0.1em; margin-bottom:4px;">MODEL B</div>
+      <div style="color:#e8ecf1; font-weight:600;">LightGBM</div>
+      <div style="color:#9ca3af; font-size:0.75em; margin-top:2px;">決定木 800本</div>
+    </div>
+  </div>
+
+  <!-- Arrow -->
+  <div style="text-align:center; color:#4a5568; font-size:1.2em; line-height:1;">
+    <div>それぞれが「上がる確率」を出す</div>
+    <div style="font-size:1.4em; margin-top:2px;">▼</div>
+  </div>
+
+  <!-- Step 2 -->
+  <div style="background:linear-gradient(135deg,#1f1a30,#13101f); border:1px solid #6b5aad;
+              border-radius:8px; padding:14px 20px; text-align:center;">
+    <div style="color:#9b8ec4; font-size:0.7em; letter-spacing:0.1em; margin-bottom:4px;">STEP 2 — スタッキング</div>
+    <div style="color:#e8ecf1; font-weight:600;">2つの予測を最適な比率で合成</div>
+    <div style="color:#9ca3af; font-size:0.8em; margin-top:4px;">
+      Logistic Regression が A と B の意見をまとめて最終的な「上昇確率」を算出
+    </div>
+  </div>
+
+  <!-- Arrow -->
+  <div style="text-align:center; color:#4a5568; font-size:1.2em; line-height:1;">
+    <div>この予測は信頼できる？</div>
+    <div style="font-size:1.4em; margin-top:2px;">▼</div>
+  </div>
+
+  <!-- Step 3 -->
+  <div style="background:linear-gradient(135deg,#2a1f1a,#1f1510); border:1px solid #d4af37;
+              border-radius:8px; padding:14px 20px; text-align:center;">
+    <div style="color:#d4af37; font-size:0.7em; letter-spacing:0.1em; margin-bottom:4px;">STEP 3 — Meta-Labeling</div>
+    <div style="color:#e8ecf1; font-weight:600;">信頼度を判定</div>
+    <div style="color:#9ca3af; font-size:0.8em; margin-top:4px;">
+      「この予測が当たるかどうか」を別のXGBoostモデルが推定<br>
+      <span style="color:#d4af37;">→ 信頼度が高い予測だけを採用すると精度 88.2%</span>
+    </div>
+  </div>
+
+  <!-- Arrow -->
+  <div style="text-align:center; color:#4a5568; font-size:1.2em; line-height:1;">
+    <div style="font-size:1.4em;">▼</div>
+  </div>
+
+  <!-- Result -->
+  <div style="background:linear-gradient(135deg,#0f1a2a,#0a1018); border:1px solid #3b82f6;
+              border-radius:8px; padding:14px 20px; text-align:center;">
+    <div style="color:#3b82f6; font-size:0.7em; letter-spacing:0.1em; margin-bottom:4px;">OUTPUT</div>
+    <div style="color:#e8ecf1; font-weight:600;">明日の予測結果</div>
+    <div style="color:#9ca3af; font-size:0.8em; margin-top:4px;">
+      上昇/下落の方向 ＋ 予想変動幅 ＋ 確信度
+    </div>
+  </div>
+
+</div>""",
+            unsafe_allow_html=True,
         )
 
 

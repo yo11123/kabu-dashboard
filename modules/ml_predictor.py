@@ -299,51 +299,208 @@ def predict_nikkei_tomorrow(df: pd.DataFrame | None = None) -> dict | None:
         nk = raw["nikkei_close"]
         feat = pd.DataFrame(index=raw.index)
 
-        # 特徴量計算（学習時と同じ）
-        for d in [1, 2, 3, 5, 10, 20]:
+        # ── 特徴量計算（学習時と完全に一致） ──────────────────
+
+        # リターン
+        for d in [1, 2, 3, 5, 10, 20, 60]:
             feat[f"nk_ret_{d}d"] = nk.pct_change(d) * 100
-        for p in [5, 25, 75, 200]:
+
+        # SMA 乖離率
+        for p in [5, 10, 25, 50, 75, 200]:
             sma = nk.rolling(p).mean()
             feat[f"nk_sma{p}_dev"] = (nk - sma) / sma * 100
+
+        # SMA の傾き
+        feat["nk_sma25_slope"] = nk.rolling(25).mean().pct_change(5) * 100
+        feat["nk_sma75_slope"] = nk.rolling(75).mean().pct_change(10) * 100
+
+        # RSI
         delta = nk.diff()
         gain = delta.clip(lower=0).rolling(14).mean()
         loss = (-delta.clip(upper=0)).rolling(14).mean().replace(0, np.nan)
         feat["nk_rsi"] = 100 - 100 / (1 + gain / loss)
+        feat["nk_rsi_5"] = 100 - 100 / (
+            1 + delta.clip(lower=0).rolling(5).mean()
+            / (-delta.clip(upper=0)).rolling(5).mean().replace(0, np.nan)
+        )
+
+        # MACD
         ema12 = nk.ewm(span=12, adjust=False).mean()
         ema26 = nk.ewm(span=26, adjust=False).mean()
-        feat["nk_macd_hist"] = (ema12 - ema26) - (ema12 - ema26).ewm(span=9, adjust=False).mean()
+        macd_line = ema12 - ema26
+        feat["nk_macd_hist"] = macd_line - macd_line.ewm(span=9, adjust=False).mean()
+        feat["nk_macd_hist_diff"] = feat["nk_macd_hist"].diff()
+
+        # ボリンジャーバンド
         bb_mid = nk.rolling(20).mean()
         bb_std = nk.rolling(20).std()
         feat["nk_bb_pos"] = (nk - bb_mid) / bb_std.replace(0, np.nan)
+        feat["nk_bb_width"] = (bb_std * 4) / bb_mid.replace(0, np.nan) * 100
+        feat["nk_bb_width_change"] = feat["nk_bb_width"].pct_change(5)
+
+        # ボラティリティ
         feat["nk_vol_20d"] = nk.pct_change().rolling(20).std() * np.sqrt(252) * 100
         feat["nk_vol_5d"] = nk.pct_change().rolling(5).std() * np.sqrt(252) * 100
+        feat["nk_vol_ratio"] = feat["nk_vol_5d"] / feat["nk_vol_20d"].replace(0, np.nan)
+
+        # 上昇日比率
+        feat["nk_up_ratio_5d"] = (nk.diff() > 0).rolling(5).mean()
         feat["nk_up_ratio_10d"] = (nk.diff() > 0).rolling(10).mean()
+        feat["nk_up_ratio_20d"] = (nk.diff() > 0).rolling(20).mean()
+
+        # ローリングシャープレシオ
+        ret = nk.pct_change()
+        feat["nk_sharpe_20d"] = ret.rolling(20).mean() / ret.rolling(20).std().replace(0, np.nan) * np.sqrt(252)
+
+        # 52週高値/安値比
+        feat["nk_from_52w_high"] = (nk / nk.rolling(252).max() - 1) * 100
+        feat["nk_from_52w_low"] = (nk / nk.rolling(252).min() - 1) * 100
+
+        # ── ストキャスティクス (%K, %D) ──────────────────────
+        for period in [14, 9]:
+            low_min = nk.rolling(period).min()
+            high_max = nk.rolling(period).max()
+            k = (nk - low_min) / (high_max - low_min).replace(0, np.nan) * 100
+            d = k.rolling(3).mean()
+            feat[f"nk_stoch_k_{period}"] = k
+            feat[f"nk_stoch_d_{period}"] = d
+
+        # ── CCI (Commodity Channel Index) ────────────────────
+        for period in [20, 14]:
+            tp_sma = nk.rolling(period).mean()
+            tp_mad = nk.rolling(period).apply(lambda x: np.abs(x - x.mean()).mean(), raw=True)
+            feat[f"nk_cci_{period}"] = (nk - tp_sma) / (0.015 * tp_mad).replace(0, np.nan)
+
+        # ── ADX (Average Directional Index) ──────────────────
+        nk_diff = nk.diff()
+        plus_dm = nk_diff.clip(lower=0)
+        minus_dm = (-nk_diff).clip(lower=0)
+        atr_14 = nk_diff.abs().rolling(14).mean().replace(0, np.nan)
+        plus_di = 100 * plus_dm.rolling(14).mean() / atr_14
+        minus_di = 100 * minus_dm.rolling(14).mean() / atr_14
+        dx = (plus_di - minus_di).abs() / (plus_di + minus_di).replace(0, np.nan) * 100
+        feat["nk_adx"] = dx.rolling(14).mean()
+        feat["nk_plus_di"] = plus_di
+        feat["nk_minus_di"] = minus_di
+        feat["nk_di_diff"] = plus_di - minus_di
+
+        # ── ATR ──────────────────────────────────────────────
+        feat["nk_atr_14"] = nk_diff.abs().rolling(14).mean()
+        feat["nk_atr_pct"] = feat["nk_atr_14"] / nk * 100
+
+        # ── 一目均衡表 (Ichimoku Cloud) ──────────────────────
+        high_9 = nk.rolling(9).max()
+        low_9 = nk.rolling(9).min()
+        high_26 = nk.rolling(26).max()
+        low_26 = nk.rolling(26).min()
+        high_52 = nk.rolling(52).max()
+        low_52 = nk.rolling(52).min()
+        tenkan = (high_9 + low_9) / 2
+        kijun = (high_26 + low_26) / 2
+        senkou_a = (tenkan + kijun) / 2
+        senkou_b = (high_52 + low_52) / 2
+        feat["nk_ichimoku_tenkan_dev"] = (nk - tenkan) / tenkan.replace(0, np.nan) * 100
+        feat["nk_ichimoku_kijun_dev"] = (nk - kijun) / kijun.replace(0, np.nan) * 100
+        feat["nk_ichimoku_tk_cross"] = (tenkan - kijun) / kijun.replace(0, np.nan) * 100
+        feat["nk_ichimoku_cloud_top"] = (nk - senkou_a.shift(26)) / nk * 100
+        feat["nk_ichimoku_cloud_bottom"] = (nk - senkou_b.shift(26)) / nk * 100
+        feat["nk_ichimoku_cloud_thickness"] = (senkou_a - senkou_b) / nk * 100
+        above_cloud = ((nk > senkou_a.shift(26)) & (nk > senkou_b.shift(26))).astype(int)
+        below_cloud = ((nk < senkou_a.shift(26)) & (nk < senkou_b.shift(26))).astype(int)
+        feat["nk_ichimoku_above_cloud"] = above_cloud
+        feat["nk_ichimoku_below_cloud"] = below_cloud
+
+        # ── Williams %R ──────────────────────────────────────
+        for period in [14, 28]:
+            highest = nk.rolling(period).max()
+            lowest = nk.rolling(period).min()
+            feat[f"nk_williams_r_{period}"] = (highest - nk) / (highest - lowest).replace(0, np.nan) * -100
+
+        # ── OBV トレンド ─────────────────────────────────────
+        if "nikkei_volume" in raw.columns:
+            vol = raw["nikkei_volume"]
+            obv_sign = np.sign(nk.diff()).fillna(0)
+            obv = (obv_sign * vol).cumsum()
+            obv_sma20 = obv.rolling(20).mean()
+            feat["nk_obv_dev"] = (obv - obv_sma20) / obv_sma20.abs().replace(0, np.nan) * 100
+            feat["nk_obv_slope"] = obv.pct_change(5) * 100
+
+        # ── MA クロスオーバーシグナル ─────────────────────────
+        sma5 = nk.rolling(5).mean()
+        sma25 = nk.rolling(25).mean()
+        sma75 = nk.rolling(75).mean()
+        feat["nk_golden_cross_5_25"] = ((sma5 > sma25) & (sma5.shift(1) <= sma25.shift(1))).astype(int)
+        feat["nk_dead_cross_5_25"] = ((sma5 < sma25) & (sma5.shift(1) >= sma25.shift(1))).astype(int)
+        feat["nk_golden_cross_25_75"] = ((sma25 > sma75) & (sma25.shift(1) <= sma75.shift(1))).astype(int)
+        feat["nk_dead_cross_25_75"] = ((sma25 < sma75) & (sma25.shift(1) >= sma75.shift(1))).astype(int)
+        gc_5_25 = feat["nk_golden_cross_5_25"].replace(0, np.nan)
+        dc_5_25 = feat["nk_dead_cross_5_25"].replace(0, np.nan)
+        feat["nk_days_since_gc_5_25"] = gc_5_25.groupby(gc_5_25.cumsum()).cumcount()
+        feat["nk_days_since_dc_5_25"] = dc_5_25.groupby(dc_5_25.cumsum()).cumcount()
+
+        # ── ドンチャンチャネル ────────────────────────────────
+        for period in [20, 50]:
+            dc_high = nk.rolling(period).max()
+            dc_low = nk.rolling(period).min()
+            feat[f"nk_donchian_pos_{period}"] = (nk - dc_low) / (dc_high - dc_low).replace(0, np.nan)
+
+        # ── TRIX ─────────────────────────────────────────────
+        ema1 = nk.ewm(span=15, adjust=False).mean()
+        ema2 = ema1.ewm(span=15, adjust=False).mean()
+        ema3 = ema2.ewm(span=15, adjust=False).mean()
+        feat["nk_trix"] = ema3.pct_change() * 10000
+
+        # ── 出来高比率 ───────────────────────────────────────
+        if "nikkei_volume" in raw.columns:
+            nvol = raw["nikkei_volume"]
+            feat["nk_vol_ratio_5_20"] = nvol.rolling(5).mean() / nvol.rolling(20).mean().replace(0, np.nan)
+            feat["nk_vol_spike"] = nvol / nvol.rolling(20).mean().replace(0, np.nan)
+
+        # ── カレンダー ───────────────────────────────────────
         feat["weekday"] = raw.index.dayofweek
         feat["month"] = raw.index.month
+        feat["is_first_half"] = (raw.index.month <= 6).astype(int)
+        feat["is_month_end"] = (raw.index.day >= 25).astype(int)
+        feat["is_month_start"] = (raw.index.day <= 5).astype(int)
 
+        # ── 米国市場 ─────────────────────────────────────────
         for name in ["sp500", "nasdaq", "dow"]:
-            col = f"{name}_close"
-            if col in raw.columns:
-                feat[f"{name}_ret_1d"] = raw[col].pct_change() * 100
-                feat[f"{name}_ret_5d"] = raw[col].pct_change(5) * 100
-        if "vix_close" in raw.columns:
-            feat["vix"] = raw["vix_close"]
-            feat["vix_change"] = raw["vix_close"].pct_change() * 100
-            feat["vix_ma5_dev"] = (raw["vix_close"] - raw["vix_close"].rolling(5).mean()) / raw["vix_close"].rolling(5).mean() * 100
-        if "usdjpy_close" in raw.columns:
-            feat["usdjpy"] = raw["usdjpy_close"]
-            feat["usdjpy_ret_1d"] = raw["usdjpy_close"].pct_change() * 100
-            feat["usdjpy_ret_5d"] = raw["usdjpy_close"].pct_change(5) * 100
-        if "us10y_close" in raw.columns:
-            feat["us10y"] = raw["us10y_close"]
-            feat["us10y_change"] = raw["us10y_close"].diff()
-        for name in ["gold", "oil"]:
             col = f"{name}_close"
             if col in raw.columns:
                 feat[f"{name}_ret_1d"] = raw[col].pct_change() * 100
                 feat[f"{name}_ret_5d"] = raw[col].pct_change(5) * 100
         if "sox_close" in raw.columns:
             feat["sox_ret_1d"] = raw["sox_close"].pct_change() * 100
+            feat["sox_ret_5d"] = raw["sox_close"].pct_change(5) * 100
+
+        # ── VIX ──────────────────────────────────────────────
+        if "vix_close" in raw.columns:
+            feat["vix"] = raw["vix_close"]
+            feat["vix_change"] = raw["vix_close"].pct_change() * 100
+            feat["vix_ma5_dev"] = (raw["vix_close"] - raw["vix_close"].rolling(5).mean()) / raw["vix_close"].rolling(5).mean() * 100
+            feat["vix_ma20_dev"] = (raw["vix_close"] - raw["vix_close"].rolling(20).mean()) / raw["vix_close"].rolling(20).mean() * 100
+            feat["vix_regime"] = pd.cut(raw["vix_close"], bins=[0, 15, 20, 30, 100], labels=[0, 1, 2, 3]).astype(float)
+
+        # ── 為替 ─────────────────────────────────────────────
+        if "usdjpy_close" in raw.columns:
+            feat["usdjpy"] = raw["usdjpy_close"]
+            feat["usdjpy_ret_1d"] = raw["usdjpy_close"].pct_change() * 100
+            feat["usdjpy_ret_5d"] = raw["usdjpy_close"].pct_change(5) * 100
+            feat["usdjpy_ret_20d"] = raw["usdjpy_close"].pct_change(20) * 100
+
+        # ── 金利 ─────────────────────────────────────────────
+        if "us10y_close" in raw.columns:
+            feat["us10y"] = raw["us10y_close"]
+            feat["us10y_change"] = raw["us10y_close"].diff()
+
+        # ── コモディティ ─────────────────────────────────────
+        for name in ["gold", "oil"]:
+            col = f"{name}_close"
+            if col in raw.columns:
+                feat[f"{name}_ret_1d"] = raw[col].pct_change() * 100
+                feat[f"{name}_ret_5d"] = raw[col].pct_change(5) * 100
+
+        # ── 日経 vs S&P500 アルファ ──────────────────────────
         if "sp500_close" in raw.columns:
             feat["nk_alpha_5d"] = feat.get("nk_ret_5d", 0) - feat.get("sp500_ret_5d", 0)
 

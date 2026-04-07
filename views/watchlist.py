@@ -15,6 +15,11 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from modules.styles import apply_theme
 from modules.data_loader import load_tickers, load_all_tse_stocks
 from modules.persistence import load_into_session, save_from_session, try_restore_from_cookies
+from modules.alerts import (
+    add_alert, remove_alert, get_alerts, get_active_alerts,
+    get_triggered_alerts, check_alerts, reset_alert, deactivate_alert,
+    format_condition, CONDITION_TYPES, CONDITION_DEFAULTS, CONDITION_SIDE,
+)
 
 apply_theme()
 
@@ -203,73 +208,94 @@ def main() -> None:
             _fetch_quote.clear()
             st.rerun()
 
-    # ─── メインエリア ─────────────────────────────────────────────
+    # ─── ページロード時にアラートチェック ───────────────────────────
+    if "alerts_checked_this_run" not in st.session_state:
+        newly = check_alerts()
+        for a in newly:
+            side = CONDITION_SIDE.get(a["condition_type"], "neutral")
+            icon = "🟢" if side == "buy" else "🔴" if side == "sell" else "🔔"
+            st.toast(
+                f"{icon} {a['name']} ({a['ticker']}) — {format_condition(a['condition_type'], a['threshold'])}",
+                icon=icon,
+            )
+        st.session_state["alerts_checked_this_run"] = True
+
+    # ─── メインエリア（タブ） ─────────────────────────────────────
+    triggered_count = len(get_triggered_alerts())
+    alert_tab_label = f"アラート ({triggered_count})" if triggered_count else "アラート"
+    tab_watchlist, tab_alerts = st.tabs(["ウォッチリスト", alert_tab_label])
+
     watchlist = st.session_state.watchlist
 
-    if not watchlist:
-        st.markdown(
-            "<div style='text-align:center; color:#6b7280; padding:4em 1em; "
-            "font-family:Inter,Noto Sans JP,sans-serif; font-size:0.9em;'>"
-            "サイドバーから監視したい銘柄を追加してください"
-            "</div>",
-            unsafe_allow_html=True,
-        )
-        st.stop()
-
-    # アラートがある銘柄を先に表示
-    items_with_alerts = []
-    items_normal = []
-
-    for i, w in enumerate(watchlist):
-        quote = _fetch_quote(w["code"])
-        alerts = _check_alerts(quote, w) if quote else []
-        entry = {"idx": i, "watch": w, "quote": quote, "alerts": alerts}
-        if alerts:
-            items_with_alerts.append(entry)
+    # ━━━ ウォッチリストタブ ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+    with tab_watchlist:
+        if not watchlist:
+            st.markdown(
+                "<div style='text-align:center; color:#6b7280; padding:4em 1em; "
+                "font-family:Inter,Noto Sans JP,sans-serif; font-size:0.9em;'>"
+                "サイドバーから監視したい銘柄を追加してください"
+                "</div>",
+                unsafe_allow_html=True,
+            )
         else:
-            items_normal.append(entry)
+            # アラートがある銘柄を先に表示
+            items_with_alerts = []
+            items_normal = []
 
-    # ─── アラート銘柄 ────────────────────────────────────────────
-    if items_with_alerts:
-        st.subheader("条件到達銘柄")
-        for item in items_with_alerts:
-            _render_watch_card(item, alert=True)
-        st.divider()
+            for i, w in enumerate(watchlist):
+                quote = _fetch_quote(w["code"])
+                alerts = _check_alerts(quote, w) if quote else []
+                entry = {"idx": i, "watch": w, "quote": quote, "alerts": alerts}
+                if alerts:
+                    items_with_alerts.append(entry)
+                else:
+                    items_normal.append(entry)
 
-    # ─── 通常銘柄 ────────────────────────────────────────────────
-    st.subheader(f"監視中 ({len(watchlist)}銘柄)")
-    for item in items_normal:
-        _render_watch_card(item, alert=False)
+            # ─── アラート銘柄 ─────────────────────────────────────
+            if items_with_alerts:
+                st.subheader("条件到達銘柄")
+                for item in items_with_alerts:
+                    _render_watch_card(item, alert=True)
+                st.divider()
 
-    # ─── 削除処理 ────────────────────────────────────────────────
-    if "wl_remove" in st.session_state and st.session_state.wl_remove is not None:
-        idx = st.session_state.wl_remove
-        if 0 <= idx < len(st.session_state.watchlist):
-            st.session_state.watchlist.pop(idx)
-            _save_watchlist()
-        st.session_state.wl_remove = None
-        st.rerun()
+            # ─── 通常銘柄 ─────────────────────────────────────────
+            st.subheader(f"監視中 ({len(watchlist)}銘柄)")
+            for item in items_normal:
+                _render_watch_card(item, alert=False)
 
-    # ─── 全銘柄チャート一覧 ───────────────────────────────────────
-    st.divider()
+            # ─── 削除処理 ─────────────────────────────────────────
+            if "wl_remove" in st.session_state and st.session_state.wl_remove is not None:
+                idx = st.session_state.wl_remove
+                if 0 <= idx < len(st.session_state.watchlist):
+                    st.session_state.watchlist.pop(idx)
+                    _save_watchlist()
+                st.session_state.wl_remove = None
+                st.rerun()
 
-    if "wl_show_charts" not in st.session_state:
-        st.session_state.wl_show_charts = False
+            # ─── 全銘柄チャート一覧 ──────────────────────────────
+            st.divider()
 
-    if st.button(
-        "チャートを閉じる" if st.session_state.wl_show_charts else "全銘柄のチャートを表示",
-        use_container_width=True,
-    ):
-        st.session_state.wl_show_charts = not st.session_state.wl_show_charts
-        st.rerun()
+            if "wl_show_charts" not in st.session_state:
+                st.session_state.wl_show_charts = False
 
-    if st.session_state.wl_show_charts:
-        period_opts = {"1ヶ月": "1mo", "3ヶ月": "3mo", "6ヶ月": "6mo", "1年": "1y", "2年": "2y"}
-        selected_period = st.selectbox("表示期間", list(period_opts.keys()), index=2, key="wl_chart_period")
-        yf_period = period_opts[selected_period]
+            if st.button(
+                "チャートを閉じる" if st.session_state.wl_show_charts else "全銘柄のチャートを表示",
+                use_container_width=True,
+            ):
+                st.session_state.wl_show_charts = not st.session_state.wl_show_charts
+                st.rerun()
 
-        for w in watchlist:
-            _render_mini_chart(w["code"], w["name"] or w["code"], yf_period)
+            if st.session_state.wl_show_charts:
+                period_opts = {"1ヶ月": "1mo", "3ヶ月": "3mo", "6ヶ月": "6mo", "1年": "1y", "2年": "2y"}
+                selected_period = st.selectbox("表示期間", list(period_opts.keys()), index=2, key="wl_chart_period")
+                yf_period = period_opts[selected_period]
+
+                for w in watchlist:
+                    _render_mini_chart(w["code"], w["name"] or w["code"], yf_period)
+
+    # ━━━ アラートタブ ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+    with tab_alerts:
+        _render_alert_tab(watchlist, stock_map)
 
 
 def _render_watch_card(item: dict, alert: bool) -> None:
@@ -419,6 +445,175 @@ def _render_mini_chart(ticker: str, name: str, period: str) -> None:
         yaxis=dict(showgrid=True, gridcolor="#111620"),
     )
     st.plotly_chart(fig, use_container_width=True)
+
+
+def _render_alert_tab(watchlist: list, stock_map: dict) -> None:
+    """アラート管理タブのUI。"""
+
+    # ─── アラート追加フォーム ─────────────────────────────────────
+    st.subheader("アラートを追加")
+
+    if not watchlist:
+        st.info("ウォッチリストに銘柄を追加してからアラートを設定してください。")
+    else:
+        with st.form("alert_form", clear_on_submit=True):
+            # ウォッチリストから銘柄選択
+            ticker_options = [
+                f"{w['code']} {w['name'] or stock_map.get(w['code'], '')}"
+                for w in watchlist
+            ]
+            selected_ticker = st.selectbox("銘柄", ticker_options, key="alert_ticker")
+
+            # 条件タイプ選択
+            condition_labels = list(CONDITION_TYPES.values())
+            condition_keys = list(CONDITION_TYPES.keys())
+            selected_condition_label = st.selectbox("条件", condition_labels, key="alert_condition")
+            condition_idx = condition_labels.index(selected_condition_label)
+            condition_key = condition_keys[condition_idx]
+
+            # 閾値入力
+            default_val = CONDITION_DEFAULTS.get(condition_key, 0.0)
+            if condition_key in ("price_above", "price_below"):
+                threshold = st.number_input(
+                    "閾値 (¥)", min_value=0.0, value=default_val, step=100.0,
+                    key="alert_threshold",
+                    help="株価の閾値を円で入力",
+                )
+            elif condition_key in ("rsi_above", "rsi_below"):
+                threshold = st.number_input(
+                    "閾値 (RSI)", min_value=0.0, max_value=100.0, value=default_val, step=1.0,
+                    key="alert_threshold",
+                    help="RSIの閾値（0〜100）",
+                )
+            else:  # volume_spike
+                threshold = st.number_input(
+                    "閾値 (倍率)", min_value=0.1, value=default_val, step=0.1,
+                    key="alert_threshold",
+                    help="出来高の倍率（5日平均 / 30日平均）",
+                )
+
+            submitted = st.form_submit_button("アラート追加", type="primary", use_container_width=True)
+            if submitted and selected_ticker:
+                code = selected_ticker.split(" ")[0]
+                name = " ".join(selected_ticker.split(" ")[1:])
+                add_alert(code, name, condition_key, float(threshold))
+                st.rerun()
+
+    # ─── トリガー済みアラート ─────────────────────────────────────
+    triggered = get_triggered_alerts()
+    if triggered:
+        st.divider()
+        st.subheader("トリガー済み")
+        for a in triggered:
+            side = CONDITION_SIDE.get(a["condition_type"], "neutral")
+            border = "#5ca08b" if side == "buy" else "#c45c5c" if side == "sell" else "#d4af37"
+            bg = (
+                "rgba(92,160,139,0.08)" if side == "buy"
+                else "rgba(196,92,92,0.08)" if side == "sell"
+                else "rgba(212,175,55,0.06)"
+            )
+            triggered_time = ""
+            if a.get("triggered_at"):
+                try:
+                    from datetime import datetime as _dt
+                    dt = _dt.fromisoformat(a["triggered_at"])
+                    triggered_time = dt.strftime("%m/%d %H:%M")
+                except Exception:
+                    triggered_time = ""
+
+            st.markdown(
+                f'<div style="background:{bg}; border:1px solid {border}; border-left:3px solid {border};'
+                f' border-radius:2px; padding:14px 20px; margin-bottom:6px;">'
+                f'<div style="display:flex; align-items:center; gap:12px; flex-wrap:wrap;">'
+                f'<span style="font-family:Cormorant Garamond,serif; font-size:1.05em; color:#f0ece4;">'
+                f'{a["name"]}</span>'
+                f'<span style="font-family:Inter,sans-serif; font-size:0.6em; color:#6b7280; letter-spacing:0.1em;">'
+                f'{a["ticker"]}</span>'
+                f'<span style="font-family:Inter,sans-serif; font-size:0.72em; color:{border}; margin-left:auto;">'
+                f'{format_condition(a["condition_type"], a["threshold"])}</span>'
+                f'</div>'
+                f'<div style="font-size:0.6em; color:#6b7280; margin-top:4px;">'
+                f'トリガー: {triggered_time}</div>'
+                f'</div>',
+                unsafe_allow_html=True,
+            )
+            c1, c2, c3 = st.columns([1, 1, 6])
+            if c1.button("再設定", key=f"alert_reset_{a['id']}"):
+                reset_alert(a["id"])
+                st.rerun()
+            if c2.button("削除", key=f"alert_del_t_{a['id']}"):
+                remove_alert(a["id"])
+                st.rerun()
+
+    # ─── アクティブアラート一覧 ───────────────────────────────────
+    active = get_active_alerts()
+    st.divider()
+    st.subheader(f"アクティブアラート ({len(active)}件)")
+
+    if not active:
+        st.markdown(
+            "<div style='text-align:center; color:#6b7280; padding:2em 1em; "
+            "font-family:Inter,Noto Sans JP,sans-serif; font-size:0.85em;'>"
+            "アラートが設定されていません"
+            "</div>",
+            unsafe_allow_html=True,
+        )
+    else:
+        for a in active:
+            side = CONDITION_SIDE.get(a["condition_type"], "neutral")
+            indicator_color = "#5ca08b" if side == "buy" else "#c45c5c" if side == "sell" else "#d4af37"
+
+            created_str = ""
+            if a.get("created_at"):
+                try:
+                    from datetime import datetime as _dt
+                    dt = _dt.fromisoformat(a["created_at"])
+                    created_str = dt.strftime("%m/%d")
+                except Exception:
+                    created_str = ""
+
+            st.markdown(
+                f'<div style="background:rgba(10,15,26,0.5); border:1px solid rgba(212,175,55,0.06);'
+                f' border-left:3px solid {indicator_color}; border-radius:2px; padding:14px 20px; margin-bottom:6px;">'
+                f'<div style="display:flex; align-items:center; gap:12px; flex-wrap:wrap;">'
+                f'<span style="font-family:Cormorant Garamond,serif; font-size:1.05em; color:#f0ece4;">'
+                f'{a["name"]}</span>'
+                f'<span style="font-family:Inter,sans-serif; font-size:0.6em; color:#6b7280; letter-spacing:0.1em;">'
+                f'{a["ticker"]}</span>'
+                f'<span style="font-family:Inter,sans-serif; font-size:0.72em; color:{indicator_color}; margin-left:auto;">'
+                f'{format_condition(a["condition_type"], a["threshold"])}</span>'
+                f'</div>'
+                f'<div style="font-size:0.6em; color:#6b7280; margin-top:4px;">'
+                f'設定日: {created_str}</div>'
+                f'</div>',
+                unsafe_allow_html=True,
+            )
+            c1, c2, c3 = st.columns([1, 1, 6])
+            if c1.button("無効化", key=f"alert_deact_{a['id']}"):
+                deactivate_alert(a["id"])
+                st.rerun()
+            if c2.button("削除", key=f"alert_del_a_{a['id']}"):
+                remove_alert(a["id"])
+                st.rerun()
+
+    # ─── 手動チェックボタン ───────────────────────────────────────
+    st.divider()
+    if st.button("今すぐアラートチェック", use_container_width=True):
+        from modules.alerts import _fetch_market_data
+        _fetch_market_data.clear()
+        newly = check_alerts()
+        if newly:
+            for a in newly:
+                side = CONDITION_SIDE.get(a["condition_type"], "neutral")
+                icon = "🟢" if side == "buy" else "🔴" if side == "sell" else "🔔"
+                st.toast(
+                    f"{icon} {a['name']} ({a['ticker']}) — "
+                    f"{format_condition(a['condition_type'], a['threshold'])}",
+                    icon=icon,
+                )
+            st.rerun()
+        else:
+            st.info("条件に達したアラートはありません。")
 
 
 main()

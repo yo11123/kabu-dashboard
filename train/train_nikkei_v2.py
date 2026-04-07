@@ -143,6 +143,112 @@ def calc_features_v2(data: pd.DataFrame) -> pd.DataFrame:
     feat["nk_from_52w_high"] = (nk / nk.rolling(252).max() - 1) * 100
     feat["nk_from_52w_low"] = (nk / nk.rolling(252).min() - 1) * 100
 
+    # ── ストキャスティクス (%K, %D) ──────────────────────────
+    for period in [14, 9]:
+        low_min = nk.rolling(period).min()
+        high_max = data.get("nikkei_close", nk).rolling(period).max()  # 本来はHigh
+        k = (nk - low_min) / (high_max - low_min).replace(0, np.nan) * 100
+        d = k.rolling(3).mean()
+        feat[f"nk_stoch_k_{period}"] = k
+        feat[f"nk_stoch_d_{period}"] = d
+
+    # ── CCI (Commodity Channel Index) ────────────────────────
+    tp = nk  # 本来は (H+L+C)/3 だが Close のみ使用
+    for period in [20, 14]:
+        tp_sma = tp.rolling(period).mean()
+        tp_mad = tp.rolling(period).apply(lambda x: np.abs(x - x.mean()).mean(), raw=True)
+        feat[f"nk_cci_{period}"] = (tp - tp_sma) / (0.015 * tp_mad).replace(0, np.nan)
+
+    # ── ADX (Average Directional Index) ──────────────────────
+    # Close のみなので、近似的に計算
+    nk_diff = nk.diff()
+    plus_dm = nk_diff.clip(lower=0)
+    minus_dm = (-nk_diff).clip(lower=0)
+    atr_14 = nk_diff.abs().rolling(14).mean().replace(0, np.nan)
+    plus_di = 100 * plus_dm.rolling(14).mean() / atr_14
+    minus_di = 100 * minus_dm.rolling(14).mean() / atr_14
+    dx = (plus_di - minus_di).abs() / (plus_di + minus_di).replace(0, np.nan) * 100
+    feat["nk_adx"] = dx.rolling(14).mean()
+    feat["nk_plus_di"] = plus_di
+    feat["nk_minus_di"] = minus_di
+    feat["nk_di_diff"] = plus_di - minus_di
+
+    # ── ATR (Average True Range) ─────────────────────────────
+    feat["nk_atr_14"] = nk_diff.abs().rolling(14).mean()
+    feat["nk_atr_pct"] = feat["nk_atr_14"] / nk * 100  # 価格比率
+
+    # ── 一目均衡表 (Ichimoku Cloud) ──────────────────────────
+    high_9 = nk.rolling(9).max()
+    low_9 = nk.rolling(9).min()
+    high_26 = nk.rolling(26).max()
+    low_26 = nk.rolling(26).min()
+    high_52 = nk.rolling(52).max()
+    low_52 = nk.rolling(52).min()
+
+    tenkan = (high_9 + low_9) / 2       # 転換線
+    kijun = (high_26 + low_26) / 2      # 基準線
+    senkou_a = (tenkan + kijun) / 2     # 先行スパンA
+    senkou_b = (high_52 + low_52) / 2   # 先行スパンB
+
+    feat["nk_ichimoku_tenkan_dev"] = (nk - tenkan) / tenkan.replace(0, np.nan) * 100
+    feat["nk_ichimoku_kijun_dev"] = (nk - kijun) / kijun.replace(0, np.nan) * 100
+    feat["nk_ichimoku_tk_cross"] = (tenkan - kijun) / kijun.replace(0, np.nan) * 100  # TK差
+    feat["nk_ichimoku_cloud_top"] = (nk - senkou_a.shift(26)) / nk * 100  # 雲上限との乖離
+    feat["nk_ichimoku_cloud_bottom"] = (nk - senkou_b.shift(26)) / nk * 100  # 雲下限との乖離
+    feat["nk_ichimoku_cloud_thickness"] = (senkou_a - senkou_b) / nk * 100  # 雲の厚さ
+    # 三役好転/三役逆転のシグナル
+    above_cloud = ((nk > senkou_a.shift(26)) & (nk > senkou_b.shift(26))).astype(int)
+    below_cloud = ((nk < senkou_a.shift(26)) & (nk < senkou_b.shift(26))).astype(int)
+    feat["nk_ichimoku_above_cloud"] = above_cloud
+    feat["nk_ichimoku_below_cloud"] = below_cloud
+
+    # ── Williams %R ──────────────────────────────────────────
+    for period in [14, 28]:
+        highest = nk.rolling(period).max()
+        lowest = nk.rolling(period).min()
+        feat[f"nk_williams_r_{period}"] = (highest - nk) / (highest - lowest).replace(0, np.nan) * -100
+
+    # ── OBV (On-Balance Volume) トレンド ─────────────────────
+    if "nikkei_volume" in data.columns:
+        vol = data["nikkei_volume"]
+        obv_sign = np.sign(nk.diff()).fillna(0)
+        obv = (obv_sign * vol).cumsum()
+        obv_sma20 = obv.rolling(20).mean()
+        feat["nk_obv_dev"] = (obv - obv_sma20) / obv_sma20.abs().replace(0, np.nan) * 100
+        feat["nk_obv_slope"] = obv.pct_change(5) * 100
+
+    # ── MA クロスオーバーシグナル ─────────────────────────────
+    sma5 = nk.rolling(5).mean()
+    sma25 = nk.rolling(25).mean()
+    sma75 = nk.rolling(75).mean()
+    feat["nk_golden_cross_5_25"] = ((sma5 > sma25) & (sma5.shift(1) <= sma25.shift(1))).astype(int)
+    feat["nk_dead_cross_5_25"] = ((sma5 < sma25) & (sma5.shift(1) >= sma25.shift(1))).astype(int)
+    feat["nk_golden_cross_25_75"] = ((sma25 > sma75) & (sma25.shift(1) <= sma75.shift(1))).astype(int)
+    feat["nk_dead_cross_25_75"] = ((sma25 < sma75) & (sma25.shift(1) >= sma75.shift(1))).astype(int)
+    # クロスからの経過日数
+    gc_5_25 = feat["nk_golden_cross_5_25"].replace(0, np.nan)
+    dc_5_25 = feat["nk_dead_cross_5_25"].replace(0, np.nan)
+    feat["nk_days_since_gc_5_25"] = gc_5_25.groupby(gc_5_25.cumsum()).cumcount()
+    feat["nk_days_since_dc_5_25"] = dc_5_25.groupby(dc_5_25.cumsum()).cumcount()
+
+    # ── ドンチャンチャネル ────────────────────────────────────
+    for period in [20, 50]:
+        dc_high = nk.rolling(period).max()
+        dc_low = nk.rolling(period).min()
+        feat[f"nk_donchian_pos_{period}"] = (nk - dc_low) / (dc_high - dc_low).replace(0, np.nan)
+
+    # ── TRIX (Triple EMA) ────────────────────────────────────
+    ema1 = nk.ewm(span=15, adjust=False).mean()
+    ema2 = ema1.ewm(span=15, adjust=False).mean()
+    ema3 = ema2.ewm(span=15, adjust=False).mean()
+    feat["nk_trix"] = ema3.pct_change() * 10000
+
+    # ── 出来高比率の変化 ──────────────────────────────────────
+    if "nikkei_volume" in data.columns:
+        vol = data["nikkei_volume"]
+        feat["nk_vol_ratio_5_20"] = vol.rolling(5).mean() / vol.rolling(20).mean().replace(0, np.nan)
+        feat["nk_vol_spike"] = vol / vol.rolling(20).mean().replace(0, np.nan)
+
     # ── カレンダーアノマリー（日本市場特有）────────────────────
     feat["weekday"] = data.index.dayofweek
     feat["month"] = data.index.month

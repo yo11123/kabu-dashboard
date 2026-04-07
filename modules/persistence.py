@@ -26,6 +26,8 @@ PERSISTENT_KEYS = {
     "author_note_history": [],
     "market_board": [],
     "ai_analysis_history": {},
+    "youtube_summaries": [],
+    "alerts": [],
 }
 
 DAILY_KEYS = {

@@ -1,6 +1,7 @@
 import os
 import streamlit as st
 from streamlit_autorefresh import st_autorefresh
+from concurrent.futures import ThreadPoolExecutor
 
 import pandas as pd
 
@@ -28,11 +29,13 @@ from streamlit_cookies_controller import CookieController
 from modules.ai_analysis import (
     get_comprehensive_analysis,
     prepare_analysis_inputs,
+    calc_technical_summary,
     build_chat_system_prompt,
     get_chat_response,
 )
 
 from modules.loading import helix_spinner
+from modules.tech_scorecard import render_scorecard
 apply_theme()
 try_restore_from_cookies()
 
@@ -669,21 +672,48 @@ def main() -> None:
     if show_cci:
         df = calc_cci(df)
 
-    # ─── イベントデータ取得 ──────────────────────────────────────────
+    # ─── イベント・ファンダメンタル・信用残データを並列取得 ───────────
     chart_start = df.index[0].strftime("%Y-%m-%d")
     chart_end = df.index[-1].strftime("%Y-%m-%d")
+    _ai_end = df.index[-1].strftime("%Y-%m-%d")
+    _ai_start = (df.index[-1] - pd.Timedelta(days=30)).strftime("%Y-%m-%d")
 
-    with helix_spinner("イベントデータを取得中..."):
-        ticker_info = fetch_ticker_info(ticker)
-        earnings_events = fetch_earnings_events(ticker, chart_start, chart_end) if show_earnings else []
-        # company_name を渡すことで Google News RSS の日経検索精度を高める
-        news_events = fetch_news_events(
-            ticker, chart_start, chart_end, ticker_info.get("name", "")
-        ) if show_news else []
+    # --- フェーズ1: 独立したデータを並列取得 ---
+    # ticker_info, earnings_events, margin, fundamental(yfinance/kabutan) は互いに依存しない
+    with helix_spinner("データを一括取得中..."):
+        _futures: dict[str, object] = {}
+        with ThreadPoolExecutor(max_workers=5) as _pool:
+            _futures["ticker_info"] = _pool.submit(fetch_ticker_info, ticker)
+            if show_earnings:
+                _futures["earnings"] = _pool.submit(
+                    fetch_earnings_events, ticker, chart_start, chart_end,
+                )
+            _futures["margin"] = _pool.submit(fetch_margin_data, ticker)
+            _futures["fund_yf"] = _pool.submit(fetch_fundamental_yfinance, ticker)
+            _futures["fund_kb"] = _pool.submit(fetch_fundamental_kabutan, ticker)
+
+        # フェーズ1の結果を回収
+        ticker_info = _futures["ticker_info"].result()
+        earnings_events = _futures["earnings"].result() if "earnings" in _futures else []
+        _margin = _futures["margin"].result()
+        _fund_yf = _futures["fund_yf"].result()
+        _fund_kb = _futures["fund_kb"].result()
 
     # 銘柄名: JPXリスト(filtered)に日本語名があれば優先、なければ yfinance の名前を使用
     company_name = next((t["name"] for t in filtered if t["code"] == ticker), "")
     company_name = company_name or ticker_info.get("name", ticker)
+
+    # --- フェーズ2: company_name に依存するニュース取得を並列実行 ---
+    with ThreadPoolExecutor(max_workers=2) as _pool2:
+        _fut_news = _pool2.submit(
+            fetch_news_events, ticker, chart_start, chart_end, company_name,
+        ) if show_news else None
+        _fut_news_30d = _pool2.submit(
+            fetch_news_events, ticker, _ai_start, _ai_end, company_name,
+        )
+
+    news_events = _fut_news.result() if _fut_news is not None else []
+    _news_30d = _fut_news_30d.result()
 
     # ─── ティッカーバナー ───────────────────────────────────────────
     df_view = df.iloc[_default_start:]
@@ -815,18 +845,13 @@ def main() -> None:
             original_date = raw_cd[0] if isinstance(raw_cd, list) else (raw_cd or clicked_date)
             show_news_dialog(str(original_date), news_events, ticker, ticker_info)
 
-    # ─── データ事前取得（タブ共用）──────────────────────────────────
-    with helix_spinner("データを取得中..."):
-        _margin = fetch_margin_data(ticker)
-        _fund_yf = fetch_fundamental_yfinance(ticker)
-        _fund_kb = fetch_fundamental_kabutan(ticker)
-
-    _ai_end = df.index[-1].strftime("%Y-%m-%d")
-    _ai_start = (df.index[-1] - pd.Timedelta(days=30)).strftime("%Y-%m-%d")
-    _news_30d = fetch_news_events(ticker, _ai_start, _ai_end, company_name)
+    # ─── AI分析入力データ準備（データは並列取得済み）─────────────────
     tech_json, fund_text, news_titles, _margin_text, _market_text = prepare_analysis_inputs(
         ticker, company_name, df, _news_30d
     )
+
+    # テクニカルスコアカード用のサマリー辞書
+    _tech_summary = calc_technical_summary(df)
 
     _provider_label = {
         "claude": "Claude (Anthropic)",
@@ -835,12 +860,19 @@ def main() -> None:
     }.get(ai_provider, ai_provider)
 
     # ─── タブレイアウト ───────────────────────────────────────────
-    tab_fund, tab_ai, tab_history, tab_chat = st.tabs([
+    tab_score, tab_fund, tab_ai, tab_history, tab_chat = st.tabs([
+        "📋 テクニカルスコア",
         "📊 ファンダメンタルズ",
         f"🤖 AI分析（{_provider_label}）",
         "📈 分析履歴",
         "💬 AIチャット",
     ])
+
+    # ════════════════════════════════════════════════════════════════
+    # TAB 0: テクニカルスコアカード
+    # ════════════════════════════════════════════════════════════════
+    with tab_score:
+        render_scorecard(_tech_summary, last_close)
 
     # ════════════════════════════════════════════════════════════════
     # TAB 1: ファンダメンタルズ + 信用残

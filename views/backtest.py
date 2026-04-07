@@ -197,7 +197,11 @@ def main() -> None:
 
         # 戦略選択
         st.header("戦略")
-        strategy_mode = st.radio("モード", ["プリセット", "全戦略比較", "AI提案"], key="bt_mode")
+        strategy_mode = st.radio(
+            "モード",
+            ["プリセット", "全戦略比較", "AI提案", "AI自動最適化"],
+            key="bt_mode",
+        )
 
         if strategy_mode == "プリセット":
             strat_name = st.selectbox("戦略", list(PRESET_STRATEGIES.keys()), key="bt_strat")
@@ -210,6 +214,24 @@ def main() -> None:
                 api_key = ""
             if not api_key:
                 api_key = st.text_input("APIキー", type="password", key="bt_api_key")
+
+        if strategy_mode == "AI自動最適化":
+            from modules.strategy_generator import AVAILABLE_MODELS
+            st.divider()
+            st.subheader("最適化設定")
+            opt_iterations = st.slider("反復回数", 1, 5, 3, key="bt_opt_iter")
+            opt_feedback = st.radio(
+                "フィードバック情報",
+                ["basic", "advanced"],
+                format_func=lambda x: "基本情報のみ" if x == "basic" else "追加情報含む（IC・エクスポージャー等）",
+                key="bt_opt_feedback",
+            )
+            opt_model = st.selectbox(
+                "使用モデル",
+                list(AVAILABLE_MODELS.keys()),
+                key="bt_opt_model",
+            )
+            st.caption("⚠️ 高性能モデルは精度が高いですがAPI料金が増加します")
 
     # ─── バックテスト実行 ─────────────────────────────────────────
     company_name = stock_map.get(ticker, ticker)
@@ -391,6 +413,159 @@ def main() -> None:
                 st.markdown("**パラメータ調整の提案**")
                 for p in ai_result["parameter_tuning"]:
                     st.markdown(f"- {p}")
+
+    elif strategy_mode == "AI自動最適化":
+        from modules.strategy_generator import run_iterative_optimization
+        from modules.ai_analysis import get_light_llm_provider
+
+        st.subheader("AI戦略自動最適化")
+        st.caption(
+            "論文「LLMを用いた投資戦略の自動生成におけるフィードバック設計」のアプローチで、"
+            "AIが反復的に戦略を改善します。"
+        )
+
+        # 免責事項
+        st.info(
+            "⚠️ 本機能は教育・研究目的です。自動生成された戦略は投資助言ではありません。"
+            "過去のバックテスト結果は将来のパフォーマンスを保証しません。",
+            icon="📋",
+        )
+
+        if st.button("最適化を開始", key="bt_opt_start", type="primary"):
+            progress_bar = st.progress(0)
+            status_text = st.empty()
+            iterations_container = st.container()
+
+            all_results: list[dict] = []
+
+            for event in run_iterative_optimization(
+                df=df,
+                ticker=ticker,
+                company_name=company_name,
+                max_iterations=opt_iterations,
+                feedback_level=opt_feedback,
+                model_key=opt_model,
+                capital=capital,
+            ):
+                status = event.get("status", "")
+                message = event.get("message", "")
+                iteration = event.get("iteration", 0)
+
+                status_text.markdown(f"**{message}**")
+
+                if status == "preset_backtest":
+                    progress_bar.progress(0.05)
+
+                elif status == "generating":
+                    progress_bar.progress(0.1)
+
+                elif status == "backtesting":
+                    pct = 0.1 + (iteration / opt_iterations) * 0.8
+                    progress_bar.progress(min(pct, 0.9))
+
+                elif status == "iteration_complete":
+                    result = event.get("backtest_result", {})
+                    all_results.append({
+                        "iteration": iteration,
+                        "buy_condition": event.get("buy_condition", ""),
+                        "sell_condition": event.get("sell_condition", ""),
+                        "result": result,
+                        "strategy_info": event.get("strategy_info", {}),
+                    })
+
+                    with iterations_container:
+                        with st.expander(f"反復 {iteration}: リターン {result.get('total_return', 0):+.1f}% / シャープ {result.get('sharpe_ratio', 0):.2f}", expanded=(iteration == opt_iterations)):
+                            info = event.get("strategy_info", {})
+                            if info.get("analysis"):
+                                st.markdown(f"**分析:** {info['analysis']}")
+                            if info.get("changes_made"):
+                                st.markdown(f"**変更点:** {info['changes_made']}")
+
+                            st.code(f"買い条件: {event.get('buy_condition', '')}\n売り条件: {event.get('sell_condition', '')}")
+
+                            mc1, mc2, mc3, mc4 = st.columns(4)
+                            mc1.metric("リターン", f"{result.get('total_return', 0):+.1f}%")
+                            mc2.metric("勝率", f"{result.get('win_rate', 0):.0f}%")
+                            mc3.metric("最大DD", f"{result.get('max_drawdown', 0):.1f}%")
+                            mc4.metric("シャープ", f"{result.get('sharpe_ratio', 0):.2f}")
+
+                            # 資産推移チャート
+                            if result.get("equity_curve") is not None and not result["equity_curve"].empty:
+                                fig = _equity_chart(result, ticker)
+                                st.plotly_chart(fig, use_container_width=True, key=f"opt_chart_{iteration}")
+
+                elif status == "improving":
+                    pct = 0.1 + (iteration / opt_iterations) * 0.8
+                    progress_bar.progress(min(pct, 0.9))
+
+                elif status == "approved":
+                    result = event.get("backtest_result", {})
+                    all_results.append({
+                        "iteration": iteration,
+                        "buy_condition": event.get("buy_condition", ""),
+                        "sell_condition": event.get("sell_condition", ""),
+                        "result": result,
+                        "strategy_info": {},
+                    })
+
+                elif status == "complete":
+                    progress_bar.progress(1.0)
+                    status_text.markdown("**✅ 最適化完了**")
+
+                    # 全反復の比較テーブル
+                    if all_results:
+                        st.divider()
+                        st.subheader("全反復の比較")
+
+                        compare_data = []
+                        for r in all_results:
+                            res = r["result"]
+                            compare_data.append({
+                                "反復": r["iteration"],
+                                "買い条件": r["buy_condition"],
+                                "売り条件": r["sell_condition"],
+                                "リターン": f"{res.get('total_return', 0):+.1f}%",
+                                "勝率": f"{res.get('win_rate', 0):.0f}%",
+                                "最大DD": f"{res.get('max_drawdown', 0):.1f}%",
+                                "シャープ": f"{res.get('sharpe_ratio', 0):.2f}",
+                                "PF": f"{res.get('profit_factor', 0):.2f}",
+                                "取引数": res.get("num_trades", 0),
+                            })
+                        st.dataframe(pd.DataFrame(compare_data), use_container_width=True, hide_index=True)
+
+                        # 最良戦略のハイライト
+                        best = event.get("best_strategy", {})
+                        if best:
+                            st.divider()
+                            st.markdown(
+                                f"""<div style="
+                                    background: rgba(10,15,26,0.5); border: 1px solid rgba(212,175,55,0.08);
+                                    border-left: 2px solid #d4af37; border-radius: 2px; padding: 20px 28px;
+                                ">
+                                    <span style="font-family:'Inter',sans-serif; font-size:0.65em; color:#d4af37;
+                                         letter-spacing:0.15em; text-transform:uppercase;">Best Strategy Found</span>
+                                    <div style="font-family:'IBM Plex Mono',monospace; font-size:0.9em; color:#f0ece4;
+                                         margin-top:8px;">
+                                        買い: <code>{best.get('buy_condition', '')}</code><br>
+                                        売り: <code>{best.get('sell_condition', '')}</code>
+                                    </div>
+                                    <div style="font-family:'Inter',sans-serif; font-size:0.85em; color:#a0a0a0;
+                                         margin-top:8px;">
+                                        シャープレシオ: {best.get('sharpe_ratio', 0):.2f} /
+                                        リターン: {best.get('total_return', 0):+.1f}% /
+                                        最大DD: {best.get('max_drawdown', 0):.1f}%
+                                    </div>
+                                </div>""",
+                                unsafe_allow_html=True,
+                            )
+
+                elif status == "error":
+                    progress_bar.progress(1.0)
+                    st.error(message)
+                    break
+
+                elif status == "warning":
+                    st.warning(message)
 
 
 main()
