@@ -36,9 +36,15 @@ def extract_video_id(url: str) -> str | None:
 
 # ─── 字幕取得 ────────────────────────────────────────────────────────────
 
-def get_transcript(video_id: str, languages: list[str] | None = None) -> str:
-    """YouTube 動画の字幕テキストを取得する。"""
-    from youtube_transcript_api import YouTubeTranscriptApi
+def get_transcript(video_id: str, languages: list[str] | None = None, silent: bool = False) -> str:
+    """YouTube 動画の字幕テキストを取得する。
+
+    silent=True の場合、エラー時に st.warning を表示しない（フォールバック前提）。
+    """
+    try:
+        from youtube_transcript_api import YouTubeTranscriptApi
+    except ImportError:
+        return ""
 
     if languages is None:
         languages = ["ja", "en"]
@@ -57,7 +63,6 @@ def get_transcript(video_id: str, languages: list[str] | None = None) -> str:
     # 方法2: 利用可能な字幕を列挙して手動字幕を優先
     try:
         transcript_list = api.list(video_id)
-        # 手動字幕を優先（指定言語順）
         for lang in languages:
             for t in transcript_list:
                 if t.language_code == lang and not t.is_generated:
@@ -66,7 +71,6 @@ def get_transcript(video_id: str, languages: list[str] | None = None) -> str:
                     if text.strip():
                         return text
 
-        # 自動生成字幕にフォールバック（指定言語順）
         for lang in languages:
             for t in transcript_list:
                 if t.language_code == lang and t.is_generated:
@@ -75,7 +79,6 @@ def get_transcript(video_id: str, languages: list[str] | None = None) -> str:
                     if text.strip():
                         return text
 
-        # 何でもいいから取得
         for t in transcript_list:
             try:
                 result = api.fetch(video_id, languages=[t.language_code])
@@ -85,8 +88,8 @@ def get_transcript(video_id: str, languages: list[str] | None = None) -> str:
             except Exception:
                 continue
 
-    except Exception as e:
-        st.warning(f"字幕取得エラー: {e}")
+    except Exception:
+        pass  # フォールバック（Gemini直接分析）に任せる
 
     return ""
 
@@ -169,7 +172,7 @@ def summarize_with_gemini(transcript_or_video_id: str, api_key: str, *, is_video
                 contents=[
                     types.Content(parts=[
                         types.Part.from_uri(file_uri=video_url, mime_type="video/mp4"),
-                        types.Part.from_text("この動画を分析してください。"),
+                        types.Part.from_text(text="この動画を分析してください。"),
                     ]),
                 ],
                 config=config,
