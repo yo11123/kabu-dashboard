@@ -115,7 +115,7 @@ def _render_analyze_tab(gemini_key: str, history: list[dict]) -> None:
                     results = analyze_videos(valid_urls, gemini_key, progress)
                 save_youtube_summaries(results)
                 st.success(f"{len(results)}本の動画を分析しました")
-                _display_results(results)
+                _display_results(results, key_prefix="new_")
 
     # 履歴
     st.divider()
@@ -124,7 +124,7 @@ def _render_analyze_tab(gemini_key: str, history: list[dict]) -> None:
         st.caption("まだ分析結果がありません。上のフォームからYouTube URLを入力して分析を開始してください。")
     else:
         st.caption(f"{len(history)}件の分析結果")
-        _display_results(history)
+        _display_results(history, key_prefix="hist_")
 
 
 # ═══════════════════════════════════════════════════════════════════
@@ -333,9 +333,9 @@ def _render_qa_tab(gemini_key: str, history: list[dict]) -> None:
 # ═══════════════════════════════════════════════════════════════════
 
 
-def _display_results(results: list[dict]) -> None:
+def _display_results(results: list[dict], key_prefix: str = "") -> None:
     """分析結果を表示する。"""
-    for r in results:
+    for idx, r in enumerate(results):
         if "error" in r and "summary" not in r:
             st.error(f"{r.get('title', r.get('url', '不明'))}: {r['error']}")
             continue
@@ -427,7 +427,7 @@ def _display_results(results: list[dict]) -> None:
             if captions:
                 st.caption(" | ".join(captions))
 
-            if st.button("削除", key=f"del_{video_id}_{analysis_date}"):
+            if st.button("削除", key=f"del_{key_prefix}{idx}_{video_id}_{analysis_date}"):
                 all_history = load_youtube_summaries()
                 all_history = [h for h in all_history if h.get("video_id") != video_id]
                 from modules.persistence import _file_save, _sync_to_gist
