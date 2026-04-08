@@ -424,7 +424,7 @@ def _score_single_stock(code: str, name: str, sector: str,
         tech_score, tech_signals = _calc_technical_score(df)
 
         # ファンダメンタル補正
-        fund_bonus = 0.0
+        fund_bonus: float | None = None
         fund_details: dict[str, str] = {}
         if use_fundamental:
             fund_bonus, fund_details = _get_fundamental_bonus(t)
@@ -443,15 +443,16 @@ def _score_single_stock(code: str, name: str, sector: str,
                 pass
 
         # 複合スコア算出
+        fb = fund_bonus if fund_bonus is not None else 0.0
         if direction_prob is not None and timing_prob is not None:
             ml_score = direction_prob * 0.5 + timing_prob * 0.5
-            composite = ml_score * 0.5 + tech_score * 0.4 + fund_bonus * 0.1 * 10
+            composite = ml_score * 0.5 + tech_score * 0.4 + fb * 0.1 * 10
         elif direction_prob is not None:
-            composite = direction_prob * 0.4 + tech_score * 0.5 + fund_bonus * 0.1 * 10
+            composite = direction_prob * 0.4 + tech_score * 0.5 + fb * 0.1 * 10
         elif timing_prob is not None:
-            composite = timing_prob * 0.4 + tech_score * 0.5 + fund_bonus * 0.1 * 10
+            composite = timing_prob * 0.4 + tech_score * 0.5 + fb * 0.1 * 10
         else:
-            composite = tech_score + fund_bonus
+            composite = tech_score + fb
 
         composite = max(0.0, min(100.0, composite))
 
@@ -480,7 +481,7 @@ def _score_single_stock(code: str, name: str, sector: str,
             "テクニカルシグナル": _summarize_signals(tech_signals),
             "_ticker": code,
             "_tech_score": round(tech_score, 1),
-            "_fund_bonus": round(fund_bonus, 1),
+            "_fund_bonus": round(fund_bonus, 1) if fund_bonus is not None else None,
             "_direction_prob": direction_prob,
             "_timing_prob": timing_prob,
             "_tech_signals": tech_signals,
@@ -577,7 +578,7 @@ def _render_detail_card(rank: int, item: dict) -> None:
         sc1.metric("複合スコア", f"{score:.0f} / 100")
         sc2.metric("テクニカル", f"{item['_tech_score']:.0f} / 100")
         fb = item.get("_fund_bonus", 0)
-        sc3.metric("ファンダ補正", f"{fb:+.0f}" if fb else "N/A")
+        sc3.metric("ファンダ補正", f"{fb:+.0f}" if fb is not None else "N/A")
         dp = item.get("_direction_prob")
         sc4.metric("方向予測(ML)", f"{dp:.0f}%" if dp is not None else "N/A")
         tp = item.get("_timing_prob")
