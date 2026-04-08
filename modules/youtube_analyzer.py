@@ -6,6 +6,11 @@ import re
 import json
 from datetime import date
 
+
+def _redact_keys(text: str) -> str:
+    """エラーメッセージからAPIキーを除去する。"""
+    return re.sub(r'(sk-[a-zA-Z0-9]{20,}|ghp_[a-zA-Z0-9]{20,}|AIza[a-zA-Z0-9_-]{20,})', '[REDACTED]', text)
+
 import streamlit as st
 from google import genai
 from google.genai import types
@@ -179,7 +184,7 @@ def summarize_with_gemini(transcript_or_video_id: str, api_key: str, *, is_video
             )
             return _parse_gemini_json(response.text)
         except Exception as e:
-            return {"error": f"Gemini動画分析エラー: {str(e)[:200]}"}
+            return {"error": f"Gemini動画分析エラー: {_redact_keys(str(e)[:200])}"}
 
     # ── 方法2: 字幕テキストで分析（フォールバック）──
     transcript = transcript_or_video_id
@@ -198,7 +203,7 @@ def summarize_with_gemini(transcript_or_video_id: str, api_key: str, *, is_video
         )
         return _parse_gemini_json(response.text)
     except Exception as e:
-        return {"error": f"Gemini API エラー: {str(e)[:200]}"}
+        return {"error": f"Gemini API エラー: {_redact_keys(str(e)[:200])}"}
 
 
 # ─── 複数動画の一括分析 ──────────────────────────────────────────────────
@@ -353,7 +358,7 @@ def generate_integrated_report(summaries: list[dict], api_key: str) -> str:
         )
         return response.text.strip()
     except Exception as e:
-        return f"レポート生成エラー: {str(e)[:200]}"
+        return f"レポート生成エラー: {_redact_keys(str(e)[:200])}"
 
 
 # ─── 動画Q&A ────────────────────────────────────────────────────
@@ -410,7 +415,7 @@ def chat_with_videos(
         )
         return response.text.strip()
     except Exception as e:
-        return f"エラー: {str(e)[:200]}"
+        return f"エラー: {_redact_keys(str(e)[:200])}"
 
 
 # ─── レポート永続化 ──────────────────────────────────────────────

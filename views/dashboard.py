@@ -528,7 +528,15 @@ def main() -> None:
 
         # 海外ETF・ADRなど東証外のコードを直接入力する場合（省略可）
         manual = st.text_input("海外ETF等の直接入力（例: VTI）", value="")
-        ticker = manual.strip() if manual.strip() else selected_ticker
+        if manual.strip():
+            import re as _re
+            if _re.fullmatch(r"[A-Za-z0-9.\-\^]{1,15}", manual.strip()):
+                ticker = manual.strip()
+            else:
+                st.error("ティッカーコードは英数字・ドット・ハイフン・^のみ、15文字以内で入力してください。")
+                ticker = selected_ticker
+        else:
+            ticker = selected_ticker
 
         period = "6mo"
         fetch_btn = True
@@ -1166,30 +1174,33 @@ def main() -> None:
         if _user_input := st.chat_input(
             f"{company_name} について質問...", key="stock_chat_input"
         ):
-            st.session_state[_chat_key].append({"role": "user", "content": _user_input})
-            with _chat_window:
-                st.markdown(render_user_bubble(_user_input), unsafe_allow_html=True)
-                # 口パクロボット + スピナー
-                _thinking_html = render_ai_bubble(
-                    '<span style="color:#6b7280;font-style:italic;">回答を生成中...</span>',
-                    talking=True,
-                )
-                _spinner_placeholder = st.empty()
-                _spinner_placeholder.markdown(_thinking_html, unsafe_allow_html=True)
-                _sys_prompt = build_chat_system_prompt(
-                    ticker, company_name, tech_json, fund_text, _margin_text,
-                    news_titles=news_titles,
-                )
-                _response = get_chat_response(
-                    messages=st.session_state[_chat_key],
-                    system_prompt=_sys_prompt,
-                    provider=ai_provider,
-                    api_key=ai_api_key,
-                )
-                # 口パク停止 → 通常表示に置換
-                _resp_html = _md.markdown(_response, extensions=["tables", "fenced_code"])
-                _spinner_placeholder.markdown(render_ai_bubble(_resp_html, talking=False), unsafe_allow_html=True)
-            st.session_state[_chat_key].append({"role": "assistant", "content": _response})
+            if len(_user_input) > 2000:
+                st.warning("入力は2000文字以内にしてください。")
+            else:
+                st.session_state[_chat_key].append({"role": "user", "content": _user_input})
+                with _chat_window:
+                    st.markdown(render_user_bubble(_user_input), unsafe_allow_html=True)
+                    # 口パクロボット + スピナー
+                    _thinking_html = render_ai_bubble(
+                        '<span style="color:#6b7280;font-style:italic;">回答を生成中...</span>',
+                        talking=True,
+                    )
+                    _spinner_placeholder = st.empty()
+                    _spinner_placeholder.markdown(_thinking_html, unsafe_allow_html=True)
+                    _sys_prompt = build_chat_system_prompt(
+                        ticker, company_name, tech_json, fund_text, _margin_text,
+                        news_titles=news_titles,
+                    )
+                    _response = get_chat_response(
+                        messages=st.session_state[_chat_key],
+                        system_prompt=_sys_prompt,
+                        provider=ai_provider,
+                        api_key=ai_api_key,
+                    )
+                    # 口パク停止 → 通常表示に置換
+                    _resp_html = _md.markdown(_response, extensions=["tables", "fenced_code"])
+                    _spinner_placeholder.markdown(render_ai_bubble(_resp_html, talking=False), unsafe_allow_html=True)
+                st.session_state[_chat_key].append({"role": "assistant", "content": _response})
 
 
 if __name__ == "__main__":

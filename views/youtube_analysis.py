@@ -2,6 +2,7 @@
 YouTube動画分析ページ
 株式関連のYouTube動画を字幕から分析し、投資インサイトを抽出する。
 """
+import html
 import streamlit as st
 
 from modules.styles import apply_theme
@@ -261,12 +262,13 @@ def _render_qa_tab(gemini_key: str, history: list[dict]) -> None:
     # チャット履歴表示
     for msg in st.session_state["yt_chat_history"]:
         role = msg["role"]
+        _escaped = html.escape(msg["content"]).replace("\n", "<br>")
         if role == "user":
             st.markdown(
                 f"<div style='background:#1a2233; border-radius:8px; padding:10px 14px;"
                 f" margin:6px 0 6px 40px; border:1px solid #2a3a50;'>"
                 f"<span style='color:#9ca3af; font-size:0.75em;'>あなた</span><br>"
-                f"{msg['content']}</div>",
+                f"{_escaped}</div>",
                 unsafe_allow_html=True,
             )
         else:
@@ -274,7 +276,7 @@ def _render_qa_tab(gemini_key: str, history: list[dict]) -> None:
                 f"<div style='background:#0f1a2a; border-radius:8px; padding:10px 14px;"
                 f" margin:6px 40px 6px 0; border:1px solid #1a2a3a;'>"
                 f"<span style='color:#5ca08b; font-size:0.75em;'>AI</span><br>"
-                f"{msg['content']}</div>",
+                f"{_escaped}</div>",
                 unsafe_allow_html=True,
             )
 
@@ -282,20 +284,23 @@ def _render_qa_tab(gemini_key: str, history: list[dict]) -> None:
     question = st.chat_input("動画の内容について質問...", disabled=not gemini_key)
 
     if question:
-        # ユーザーメッセージを追加
-        st.session_state["yt_chat_history"].append({"role": "user", "content": question})
+        if len(question) > 2000:
+            st.warning("入力は2000文字以内にしてください。")
+        else:
+            # ユーザーメッセージを追加
+            st.session_state["yt_chat_history"].append({"role": "user", "content": question})
 
-        # 回答生成
-        with st.spinner("回答を生成中..."):
-            answer = chat_with_videos(
-                question,
-                selected,
-                gemini_key,
-                st.session_state["yt_chat_history"],
-            )
+            # 回答生成
+            with st.spinner("回答を生成中..."):
+                answer = chat_with_videos(
+                    question,
+                    selected,
+                    gemini_key,
+                    st.session_state["yt_chat_history"],
+                )
 
-        st.session_state["yt_chat_history"].append({"role": "assistant", "content": answer})
-        st.rerun()
+            st.session_state["yt_chat_history"].append({"role": "assistant", "content": answer})
+            st.rerun()
 
     # クリアボタン
     col1, col2 = st.columns([1, 5])

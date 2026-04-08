@@ -1,11 +1,17 @@
 import json
 import logging
+import re
 
 import anthropic
 import pandas as pd
 import streamlit as st
 
 logger = logging.getLogger(__name__)
+
+
+def _redact_keys(text: str) -> str:
+    """エラーメッセージからAPIキーを除去する。"""
+    return re.sub(r'(sk-[a-zA-Z0-9]{20,}|ghp_[a-zA-Z0-9]{20,}|AIza[a-zA-Z0-9_-]{20,})', '[REDACTED]', text)
 
 from modules.fundamental import (
     fetch_financial_statements_jquants,
@@ -638,7 +644,7 @@ def _call_claude_with_fallback(prompt: str, api_key: str, model: str = "claude-h
             # それ以外（クレジット不足、レート制限、認証エラー等）→ Gemini フォールバック
             import logging
             logging.getLogger(__name__).warning(
-                "Claude API failed (%s), falling back to Gemini: %s", model, str(e)[:200]
+                "Claude API failed (%s), falling back to Gemini: %s", model, _redact_keys(str(e)[:200])
             )
 
     # Gemini フォールバック
@@ -675,7 +681,8 @@ def call_light_llm(prompt: str) -> str:
 
 def _classify_error(err_str: str, provider: str) -> str:
     """エラー文字列から分かりやすいメッセージを生成する。"""
-    s = err_str.lower()
+    safe = _redact_keys(err_str)
+    s = safe.lower()
     if "credit balance is too low" in s or "upgrade or purchase credits" in s:
         return (
             "💳 APIクレジットが不足しています。\n"
@@ -686,10 +693,10 @@ def _classify_error(err_str: str, provider: str) -> str:
     if "invalid_api_key" in s or "incorrect api key" in s or "api_key_invalid" in s:
         return f"🔑 APIキーが無効です（{provider}）。入力した API キーを確認してください。"
     if "authentication" in s or "unauthorized" in s:
-        return f"🔑 認証エラーです（{provider}）。APIキーを確認してください。\n\n詳細: {err_str[:300]}"
+        return f"🔑 認証エラーです（{provider}）。APIキーを確認してください。\n\n詳細: {safe[:300]}"
     if "permission" in s and "denied" in s:
-        return f"🔑 権限エラーです（{provider}）。APIキーの権限を確認してください。\n\n詳細: {err_str[:300]}"
-    return f"分析エラー ({provider}): {err_str[:500]}"
+        return f"🔑 権限エラーです（{provider}）。APIキーの権限を確認してください。\n\n詳細: {safe[:300]}"
+    return f"分析エラー ({provider}): {safe[:500]}"
 
 
 def get_comprehensive_analysis(
@@ -808,10 +815,10 @@ def get_comprehensive_analysis(
         return result
 
     except Exception as e:
-        import traceback
-        tb = traceback.format_exc()
+        import logging as _logging
+        _logging.getLogger(__name__).exception("AI analysis failed")
         detail = _classify_error(str(e), label)
-        return {**_default, "overall_detail": f"{detail}\n\n[Debug] {tb[-500:]}", "error": True}
+        return {**_default, "overall_detail": detail, "error": True}
 
 
 # ─── AI チャット ──────────────────────────────────────────────────────────
@@ -945,7 +952,7 @@ def get_chat_response(
                 gemini_key = _get_gemini_key()
                 if gemini_key:
                     import logging
-                    logging.getLogger(__name__).warning("Claude chat failed, falling back to Gemini: %s", str(e)[:200])
+                    logging.getLogger(__name__).warning("Claude chat failed, falling back to Gemini: %s", _redact_keys(str(e)[:200]))
                     # system_prompt + messages を1つのプロンプトに結合
                     combined = system_prompt + "\n\n"
                     for msg in messages:
@@ -1002,7 +1009,7 @@ def get_chat_response(
             return f"❌ 不明なプロバイダー: {provider}"
 
     except Exception as e:
-        return f"❌ {_classify_error(str(e), label)}"
+        return f"❌ {_classify_error(str(e), label)}"  # _classify_error already calls _redact_keys
 
 
 def _format_earnings_for_prompt(ticker: str) -> str:

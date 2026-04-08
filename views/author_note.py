@@ -6,6 +6,8 @@
 """
 import html as _html
 from datetime import datetime
+from hmac import compare_digest
+from time import time as _time
 
 import streamlit as st
 
@@ -46,7 +48,7 @@ def _delete_post(index: int, password: str) -> bool:
         correct = st.secrets.get("AUTHOR_PASSWORD", "")
     except Exception:
         correct = ""
-    if not correct or password != correct:
+    if not correct or not compare_digest(password, correct):
         return False
     posts = _load_posts()
     if 0 <= index < len(posts):
@@ -152,22 +154,36 @@ def main() -> None:
     if has_admin and posts:
         st.divider()
         with st.expander("🔧 管理者メニュー"):
-            admin_pw = st.text_input("管理者パスワード", type="password", key="board_admin_pw")
-            if admin_pw:
-                try:
-                    correct = st.secrets.get("AUTHOR_PASSWORD", "")
-                except Exception:
-                    correct = ""
-                if admin_pw == correct:
-                    st.caption("削除したい投稿の番号を入力")
-                    del_idx = st.number_input("投稿番号（0から）", min_value=0,
-                                              max_value=max(len(posts) - 1, 0), key="board_del_idx")
-                    if st.button("削除", key="board_del_btn"):
-                        if _delete_post(del_idx, admin_pw):
-                            st.success("削除しました")
-                            st.rerun()
-                else:
-                    st.error("パスワードが違います")
+            # ── レートリミット ──
+            _rl = st.session_state.setdefault("_admin_rate", {"attempts": [], "locked_until": 0.0})
+            _now = _time()
+            if _now < _rl["locked_until"]:
+                st.error("試行回数が上限に達しました。しばらく待ってから再度お試しください。")
+            else:
+                # 5分以上前の試行を除去
+                _rl["attempts"] = [t for t in _rl["attempts"] if _now - t < 300]
+
+                admin_pw = st.text_input("管理者パスワード", type="password", key="board_admin_pw")
+                if admin_pw:
+                    try:
+                        correct = st.secrets.get("AUTHOR_PASSWORD", "")
+                    except Exception:
+                        correct = ""
+                    if compare_digest(admin_pw, correct):
+                        st.caption("削除したい投稿の番号を入力")
+                        del_idx = st.number_input("投稿番号（0から）", min_value=0,
+                                                  max_value=max(len(posts) - 1, 0), key="board_del_idx")
+                        if st.button("削除", key="board_del_btn"):
+                            if _delete_post(del_idx, admin_pw):
+                                st.success("削除しました")
+                                st.rerun()
+                    else:
+                        _rl["attempts"].append(_now)
+                        if len(_rl["attempts"]) >= 5:
+                            _rl["locked_until"] = _now + 300
+                            st.error("試行回数が上限に達しました。5分後に再度お試しください。")
+                        else:
+                            st.error("パスワードが違います")
 
 
 main()
