@@ -270,6 +270,66 @@ def calc_features_v2(df: pd.DataFrame, market: pd.DataFrame | None = None) -> pd
     feat["upper_shadow"] = (high - pd.concat([close, opn], axis=1).max(axis=1)) / close * 100
     feat["lower_shadow"] = (pd.concat([close, opn], axis=1).min(axis=1) - low) / close * 100
 
+    # ── 一目均衡表 ─────────────────────────────────────────
+    if len(close) >= 52:
+        h9, l9 = high.rolling(9).max(), low.rolling(9).min()
+        h26, l26 = high.rolling(26).max(), low.rolling(26).min()
+        h52, l52 = high.rolling(52).max(), low.rolling(52).min()
+        tenkan = (h9 + l9) / 2
+        kijun = (h26 + l26) / 2
+        senkou_a = (tenkan + kijun) / 2
+        senkou_b = (h52 + l52) / 2
+        feat["ichimoku_tenkan_dev"] = (close - tenkan) / tenkan.replace(0, np.nan) * 100
+        feat["ichimoku_kijun_dev"] = (close - kijun) / kijun.replace(0, np.nan) * 100
+        feat["ichimoku_tk_cross"] = (tenkan - kijun) / kijun.replace(0, np.nan) * 100
+        feat["ichimoku_cloud_top"] = (close - senkou_a.shift(26)) / close * 100
+        feat["ichimoku_cloud_bottom"] = (close - senkou_b.shift(26)) / close * 100
+        feat["ichimoku_cloud_thickness"] = (senkou_a - senkou_b) / close * 100
+        feat["ichimoku_above_cloud"] = ((close > senkou_a.shift(26)) & (close > senkou_b.shift(26))).astype(int)
+        feat["ichimoku_below_cloud"] = ((close < senkou_a.shift(26)) & (close < senkou_b.shift(26))).astype(int)
+
+    # ── ADX / DMI ────────────────────────────────────────
+    if len(close) >= 28:
+        plus_dm = (high.diff()).clip(lower=0)
+        minus_dm = (-low.diff()).clip(lower=0)
+        feat["adx_plus_di"] = 100 * plus_dm.rolling(14).mean() / tr.rolling(14).mean().replace(0, np.nan)
+        feat["adx_minus_di"] = 100 * minus_dm.rolling(14).mean() / tr.rolling(14).mean().replace(0, np.nan)
+        di_diff = (feat["adx_plus_di"] - feat["adx_minus_di"]).abs()
+        di_sum = (feat["adx_plus_di"] + feat["adx_minus_di"]).replace(0, np.nan)
+        feat["adx"] = (di_diff / di_sum * 100).rolling(14).mean()
+        feat["di_diff"] = feat["adx_plus_di"] - feat["adx_minus_di"]
+
+    # ── Williams %R ──────────────────────────────────────
+    for period in [14, 28]:
+        highest = high.rolling(period).max()
+        lowest = low.rolling(period).min()
+        feat[f"williams_r_{period}"] = (highest - close) / (highest - lowest).replace(0, np.nan) * -100
+
+    # ── ドンチャンチャネル位置 ────────────────────────────
+    for period in [20, 50]:
+        dc_high = high.rolling(period).max()
+        dc_low = low.rolling(period).min()
+        feat[f"donchian_pos_{period}"] = (close - dc_low) / (dc_high - dc_low).replace(0, np.nan)
+
+    # ── TRIX ─────────────────────────────────────────────
+    e1 = close.ewm(span=15, adjust=False).mean()
+    e2 = e1.ewm(span=15, adjust=False).mean()
+    e3 = e2.ewm(span=15, adjust=False).mean()
+    feat["trix"] = e3.pct_change() * 10000
+
+    # ── MA クロスシグナル ─────────────────────────────────
+    if len(close) >= 75:
+        feat["golden_cross_5_25"] = ((sma25 > sma75) & (sma25.shift(1) <= sma75.shift(1))).astype(int)
+        feat["dead_cross_5_25"] = ((sma25 < sma75) & (sma25.shift(1) >= sma75.shift(1))).astype(int)
+
+    # ── OBV ──────────────────────────────────────────────
+    if volume.sum() > 0:
+        obv_sign = np.sign(close.diff()).fillna(0)
+        obv = (obv_sign * volume).cumsum()
+        obv_sma20 = obv.rolling(20).mean()
+        feat["obv_dev"] = (obv - obv_sma20) / obv_sma20.abs().replace(0, np.nan) * 100
+        feat["obv_slope"] = obv.pct_change(5) * 100
+
     feat["weekday"] = df.index.dayofweek
     feat["month"] = df.index.month
 
@@ -818,27 +878,19 @@ if __name__ == "__main__":
     # マーケット全体指標
     market = fetch_market_data("5y")
 
-    # 1. アンサンブル方向予測（既に完了済み→スキップ）
-    if not (MODELS_DIR / "xgboost_direction.pkl").exists():
-        train_ensemble_direction(tickers, market)
-    else:
-        print("\n[SKIP] モデル1: 既に学習済み (xgboost_direction.pkl)")
+    # 全モデル強制再学習（特徴量を大幅強化したため）
+    # 1. アンサンブル方向予測
+    train_ensemble_direction(tickers, market)
 
     # 2. LSTM方向予測
-    if not (MODELS_DIR / "lstm_direction.pt").exists():
-        try:
-            import torch
-            train_lstm_direction_v2(tickers, market)
-        except ImportError:
-            print("[WARN] PyTorch未インストール。LSTMスキップ。")
-    else:
-        print("\n[SKIP] モデル2: 既に学習済み (lstm_direction.pt)")
+    try:
+        import torch
+        train_lstm_direction_v2(tickers, market)
+    except ImportError:
+        print("[WARN] PyTorch未インストール。LSTMスキップ。")
 
     # 3. 決算サプライズ
-    if not (MODELS_DIR / "xgboost_earnings.pkl").exists():
-        train_earnings_surprise_v2(tickers, market)
-    else:
-        print("\n[SKIP] モデル3: 既に学習済み (xgboost_earnings.pkl)")
+    train_earnings_surprise_v2(tickers, market)
 
     # 4. 最適タイミング
     train_optimal_timing_v2(tickers, market)
