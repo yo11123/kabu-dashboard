@@ -394,13 +394,138 @@ def _notebooklm_answer_to_summary(answer: str) -> dict:
     }
 
 
+def _fetch_related_news(summary: dict) -> list[dict]:
+    """分析結果から関連ニュースを検索する。"""
+    try:
+        from modules.market_news import fetch_rss
+    except ImportError:
+        return []
+
+    # 検索クエリを構築（銘柄名 + キーワード）
+    queries = set()
+    for t in summary.get("mentioned_tickers", [])[:5]:
+        ticker_name = t.get("ticker", "")
+        if ticker_name and len(ticker_name) >= 2:
+            queries.add(ticker_name)
+
+    # 要点からキーワード抽出
+    for kp in summary.get("key_points", [])[:3]:
+        # 重要そうな固有名詞を抽出（カタカナ語、英数字）
+        names = re.findall(r"[ァ-ヶー]{3,}|[A-Za-z]{3,}", kp)
+        for n in names[:2]:
+            queries.add(n)
+
+    # 市場見通しのキーワード
+    outlook = summary.get("market_outlook", "")
+    if "停戦" in outlook or "戦争" in outlook:
+        queries.add("停戦 株式")
+    if "利上げ" in outlook or "金利" in outlook:
+        queries.add("金利 日銀")
+
+    if not queries:
+        queries = {"日本株 市場"}
+
+    all_news = []
+    seen_titles = set()
+    for q in list(queries)[:5]:
+        try:
+            items = fetch_rss(f"{q} 株", max_items=5)
+            for item in items:
+                t = item.get("title", "")
+                if t and t not in seen_titles:
+                    seen_titles.add(t)
+                    all_news.append(item)
+        except Exception:
+            continue
+
+    return all_news[:15]
+
+
+_DEEP_ANALYSIS_PROMPT = """あなたは日本株市場の上級アナリストです。
+
+以下の3つの情報源を統合して、投資判断に役立つ深い分析を行ってください:
+1. YouTube動画の分析結果（NotebookLMまたは字幕から）
+2. 関連する最新ニュース
+3. あなた自身の市場知識
+
+## 出力ルール（厳守）
+- 下記JSON形式のみを出力すること
+- 全キーを必ず含めること
+- 動画の分析結果とニュースの両方を踏まえた統合分析をすること
+- 動画とニュースで矛盾がある場合は両方の見解を併記すること
+
+## 出力形式
+{
+  "title_summary": "動画＋ニュースを踏まえた総合テーマ（1行）",
+  "market_outlook": "強気/弱気/中立: 動画とニュースを踏まえた理由",
+  "mentioned_tickers": [
+    {"ticker": "4桁コードまたは名前", "direction": "買い/売り/中立", "reason": "動画＋ニュースからの根拠"}
+  ],
+  "key_points": ["動画からの要点1", "ニュースからの要点2", "統合分析3"],
+  "risk_factors": ["リスク1", "リスク2"],
+  "catalysts": ["カタリスト1", "カタリスト2"],
+  "sector_outlook": {"セクター名": "見通し"},
+  "confidence": "高/中/低",
+  "news_context": "関連ニュースの要約（2-3行）",
+  "integrated_view": "動画の見解とニュースを統合した投資判断（3-5行）"
+}
+"""
+
+
+def _deep_analyze_with_gemini(
+    base_summary: dict,
+    news_items: list[dict],
+    api_key: str,
+    video_title: str = "",
+) -> dict:
+    """NotebookLM/字幕分析結果 + ニュースをGeminiで深掘り分析する。"""
+    # 入力テキスト構築
+    parts = [f"## 動画分析結果: {video_title}\n"]
+    parts.append(json.dumps(base_summary, ensure_ascii=False, indent=2))
+
+    if news_items:
+        parts.append("\n## 関連する最新ニュース\n")
+        for item in news_items[:10]:
+            title = item.get("title", "")
+            pub = item.get("publisher", "")
+            d = item.get("date", "")
+            parts.append(f"- [{d}] {title} ({pub})")
+
+    combined = "\n".join(parts)
+
+    try:
+        client = genai.Client(api_key=api_key)
+        response = client.models.generate_content(
+            model="gemini-2.5-flash",
+            contents=f"以下のYouTube動画分析と関連ニュースを統合して深い分析をしてください:\n\n{combined}",
+            config=types.GenerateContentConfig(
+                system_instruction=_DEEP_ANALYSIS_PROMPT,
+                temperature=0,
+                top_p=0.1,
+                top_k=1,
+                max_output_tokens=3000,
+            ),
+        )
+        result = _parse_gemini_json(response.text)
+        if "error" not in result:
+            result["_source"] = base_summary.get("_source", "Gemini")
+            return result
+    except Exception:
+        pass
+
+    # 深掘り失敗時はベースの分析結果をそのまま返す
+    return base_summary
+
+
 def analyze_videos(urls: list[str], api_key: str, progress_bar=None) -> list[dict]:
     """複数のYouTube動画を一括分析する。
 
-    分析優先順位:
-    1. 字幕取得(youtube-transcript-api/Supadata) → Geminiで分析
-    2. Geminiに直接YouTube URLを渡す
-    3. NotebookLMで分析（認証済みの場合）
+    分析フロー:
+    1. NotebookLMで動画を分析（最優先）
+    2. 失敗時: 字幕取得(youtube-transcript-api/Supadata) → Gemini分析
+    3. 失敗時: Geminiに直接YouTube URLを渡す
+    4. 一次分析結果から関連ニュースを検索
+    5. 一次分析＋ニュースをGeminiで統合的に深掘り分析
     """
     results = []
     for i, url in enumerate(urls):
@@ -411,45 +536,56 @@ def analyze_videos(urls: list[str], api_key: str, progress_bar=None) -> list[dic
 
         title = get_video_title(video_id)
         transcript = ""
-        summary = None
+        base_summary = None
         source_method = ""
 
-        # ── 方法1: 字幕取得 → Gemini分析 ──
-        try:
-            transcript = get_transcript(video_id)
-        except Exception:
-            pass
+        # ── STEP 1: NotebookLM分析（最優先）──
+        nlm_answer = _analyze_with_notebooklm(video_id)
+        if nlm_answer:
+            base_summary = _notebooklm_answer_to_summary(nlm_answer)
+            source_method = "NotebookLM"
 
-        if transcript:
-            summary = summarize_with_gemini(transcript, api_key, is_video_id=False)
-            source_method = "字幕+Gemini"
+        # ── STEP 2: 字幕取得 → Gemini分析 ──
+        if base_summary is None or (isinstance(base_summary, dict) and "error" in base_summary):
+            try:
+                transcript = get_transcript(video_id)
+            except Exception:
+                pass
+            if transcript:
+                base_summary = summarize_with_gemini(transcript, api_key, is_video_id=False)
+                source_method = "字幕+Gemini"
 
-        # ── 方法2: Gemini直接動画分析 ──
-        if summary is None or (isinstance(summary, dict) and "error" in summary):
+        # ── STEP 3: Gemini直接動画分析 ──
+        if base_summary is None or (isinstance(base_summary, dict) and "error" in base_summary):
             gemini_result = summarize_with_gemini(video_id, api_key, is_video_id=True)
             if not (isinstance(gemini_result, dict) and "error" in gemini_result):
-                summary = gemini_result
+                base_summary = gemini_result
                 source_method = "Gemini直接分析"
 
-        # ── 方法3: NotebookLM分析 ──
-        if summary is None or (isinstance(summary, dict) and "error" in summary):
-            nlm_answer = _analyze_with_notebooklm(video_id)
-            if nlm_answer:
-                summary = _notebooklm_answer_to_summary(nlm_answer)
-                source_method = "NotebookLM"
+        if base_summary is None:
+            base_summary = {"error": "全ての分析方法が失敗しました"}
 
-        # まだ失敗ならGeminiのエラー結果を使う
-        if summary is None:
-            summary = {"error": "全ての分析方法が失敗しました"}
+        # ── STEP 4: 関連ニュース検索 ──
+        news_items = []
+        if isinstance(base_summary, dict) and "error" not in base_summary:
+            news_items = _fetch_related_news(base_summary)
+
+        # ── STEP 5: Geminiで深掘り統合分析 ──
+        final_summary = base_summary
+        if isinstance(base_summary, dict) and "error" not in base_summary and api_key:
+            final_summary = _deep_analyze_with_gemini(base_summary, news_items, api_key, title)
+            if source_method:
+                source_method += " → Gemini深掘り"
 
         results.append({
             "url": url,
             "video_id": video_id,
             "title": title,
-            "summary": summary,
+            "summary": final_summary,
             "date": date.today().isoformat(),
             "transcript_length": len(transcript),
             "source_method": source_method,
+            "news_count": len(news_items),
         })
 
         if progress_bar:

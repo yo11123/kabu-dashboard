@@ -415,15 +415,38 @@ def _display_results(results: list[dict], key_prefix: str = "") -> None:
                 sector_text = " / ".join(f"{k}: {v}" for k, v in sector.items())
                 st.caption(sector_text)
 
+            # ニュースコンテキスト（深掘り分析で追加される）
+            news_ctx = summary.get("news_context", "")
+            if news_ctx:
+                st.markdown(
+                    f"<div style='border-left:3px solid #5a8cb0; padding:8px 16px; "
+                    f"background:rgba(10,20,40,0.3); margin:8px 0; border-radius:2px;'>"
+                    f"<span style='color:#5a8cb0; font-weight:600; font-size:0.85em;'>関連ニュース:</span><br>"
+                    f"{html.escape(news_ctx)}</div>",
+                    unsafe_allow_html=True,
+                )
+
+            # 統合分析（深掘り分析で追加される）
+            integrated = summary.get("integrated_view", "")
+            if integrated:
+                st.markdown(
+                    f"<div style='border-left:3px solid #d4af37; padding:8px 16px; "
+                    f"background:rgba(30,25,10,0.3); margin:8px 0; border-radius:2px;'>"
+                    f"<span style='color:#d4af37; font-weight:600; font-size:0.85em;'>統合分析:</span><br>"
+                    f"{html.escape(integrated)}</div>",
+                    unsafe_allow_html=True,
+                )
+
             confidence = summary.get("confidence", "")
             source_method = r.get("source_method", "")
+            news_count = r.get("news_count", 0)
             captions = []
             if confidence:
                 captions.append(f"信頼度: {confidence}")
             if source_method:
-                captions.append(f"分析方法: {source_method}")
-            if summary.get("_source") == "NotebookLM":
-                captions.append("via NotebookLM")
+                captions.append(f"分析: {source_method}")
+            if news_count:
+                captions.append(f"関連ニュース: {news_count}件")
             if captions:
                 st.caption(" | ".join(captions))
 
