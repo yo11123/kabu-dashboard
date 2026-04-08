@@ -119,7 +119,7 @@ def _render_nlm_import_tab(gemini_key: str, history: list[dict]) -> None:
         placeholder="NotebookLMからコピーした分析テキストをここに貼り付けてください...",
     )
 
-    import_btn = st.button("分析開始", type="primary", disabled=not nlm_text.strip())
+    import_btn = st.button("分析開始", type="primary", disabled=not nlm_text.strip(), key="nlm_import_btn")
 
     if import_btn and nlm_text.strip():
         # 動画ID抽出
@@ -194,7 +194,7 @@ def _render_analyze_tab(gemini_key: str, history: list[dict]) -> None:
         placeholder="https://www.youtube.com/watch?v=xxxxx\nhttps://youtu.be/yyyyy",
     )
 
-    analyze_btn = st.button("分析開始", type="primary", disabled=not gemini_key)
+    analyze_btn = st.button("分析開始", type="primary", disabled=not gemini_key, key="auto_analyze_btn")
 
     if analyze_btn and urls_text.strip():
         urls = [u.strip() for u in urls_text.strip().split("\n") if u.strip()]
