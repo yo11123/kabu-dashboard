@@ -39,24 +39,15 @@ def extract_video_id(url: str) -> str | None:
     return None
 
 
-# ─── 字幕取得 ────────────────────────────────────────────────────────────
+# ─── 字幕取得（3段階フォールバック）──────────────────────────────────
 
-def get_transcript(video_id: str, languages: list[str] | None = None, silent: bool = False) -> str:
-    """YouTube 動画の字幕テキストを取得する。
-
-    silent=True の場合、エラー時に st.warning を表示しない（フォールバック前提）。
-    """
+def _get_transcript_youtube_api(video_id: str, languages: list[str]) -> str:
+    """方法1: youtube-transcript-api（ローカル環境向け）。"""
     try:
         from youtube_transcript_api import YouTubeTranscriptApi
     except ImportError:
         return ""
-
-    if languages is None:
-        languages = ["ja", "en"]
-
     api = YouTubeTranscriptApi()
-
-    # 方法1: 指定言語で直接取得
     try:
         result = api.fetch(video_id, languages=languages)
         text = " ".join(s.text for s in result.snippets)
@@ -64,26 +55,15 @@ def get_transcript(video_id: str, languages: list[str] | None = None, silent: bo
             return text
     except Exception:
         pass
-
-    # 方法2: 利用可能な字幕を列挙して手動字幕を優先
     try:
         transcript_list = api.list(video_id)
         for lang in languages:
             for t in transcript_list:
-                if t.language_code == lang and not t.is_generated:
+                if t.language_code == lang:
                     result = api.fetch(video_id, languages=[lang])
                     text = " ".join(s.text for s in result.snippets)
                     if text.strip():
                         return text
-
-        for lang in languages:
-            for t in transcript_list:
-                if t.language_code == lang and t.is_generated:
-                    result = api.fetch(video_id, languages=[lang])
-                    text = " ".join(s.text for s in result.snippets)
-                    if text.strip():
-                        return text
-
         for t in transcript_list:
             try:
                 result = api.fetch(video_id, languages=[t.language_code])
@@ -92,9 +72,122 @@ def get_transcript(video_id: str, languages: list[str] | None = None, silent: bo
                     return text
             except Exception:
                 continue
-
     except Exception:
-        pass  # フォールバック（Gemini直接分析）に任せる
+        pass
+    return ""
+
+
+def _get_transcript_supadata(video_id: str, api_key: str) -> str:
+    """方法2: Supadata API（クラウド環境対応、月100件無料）。"""
+    if not api_key:
+        return ""
+    try:
+        from supadata import Supadata
+        client = Supadata(api_key=api_key)
+        url = f"https://www.youtube.com/watch?v={video_id}"
+        result = client.transcript(url=url, lang="ja", text=True)
+        if hasattr(result, "text") and result.text:
+            return result.text
+        if hasattr(result, "content") and result.content:
+            return " ".join(c.text for c in result.content if hasattr(c, "text"))
+        if isinstance(result, str):
+            return result
+    except Exception:
+        pass
+    return ""
+
+
+def _analyze_with_notebooklm(video_id: str) -> dict | None:
+    """方法3: NotebookLMでYouTube動画を分析（最も高品質）。
+
+    NotebookLMにYouTube URLを渡して分析し、結果をチャットで取得する。
+    認証が必要（事前に notebooklm auth login でブラウザ認証が必要）。
+    """
+    try:
+        import asyncio
+        from notebooklm.client import NotebookLMClient
+
+        async def _run():
+            async with NotebookLMClient.from_storage() as client:
+                # ノートブック作成
+                nb = await client.notebooks.create(f"YouTube分析_{video_id}")
+                nb_id = nb.id
+
+                # YouTube URLをソースとして追加
+                url = f"https://www.youtube.com/watch?v={video_id}"
+                await client.sources.add_url(nb_id, url, wait=True)
+
+                # NotebookLMに分析を依頼
+                prompt = (
+                    "この動画の内容を株式投資の観点から分析してください。\n"
+                    "以下を含めてください:\n"
+                    "1. 動画の主題\n"
+                    "2. 市場全体の見通し（強気/弱気/中立と理由）\n"
+                    "3. 言及されている銘柄（銘柄名、買い/売り/中立、理由）\n"
+                    "4. 重要なポイント（3-5個）\n"
+                    "5. リスク要因\n"
+                    "6. カタリスト（今後の材料）\n"
+                    "7. セクター別の見通し\n"
+                )
+                result = await client.chat.ask(nb_id, prompt)
+                answer = result.answer if hasattr(result, "answer") else str(result)
+
+                # ノートブック削除（掃除）
+                try:
+                    await client.notebooks.delete(nb_id)
+                except Exception:
+                    pass
+
+                return answer
+
+        # asyncio のイベントループ処理
+        try:
+            loop = asyncio.get_event_loop()
+            if loop.is_running():
+                import concurrent.futures
+                with concurrent.futures.ThreadPoolExecutor() as pool:
+                    answer = pool.submit(lambda: asyncio.run(_run())).result(timeout=120)
+            else:
+                answer = loop.run_until_complete(_run())
+        except RuntimeError:
+            answer = asyncio.run(_run())
+
+        return answer
+
+    except ImportError:
+        return None
+    except FileNotFoundError:
+        # 認証ファイルがない
+        return None
+    except Exception:
+        return None
+
+
+def get_transcript(video_id: str, languages: list[str] | None = None, silent: bool = False) -> str:
+    """YouTube 動画の字幕テキストを取得する（3段階フォールバック）。
+
+    1. youtube-transcript-api（ローカル環境向け）
+    2. Supadata API（クラウド環境対応）
+    3. 空文字を返す（呼び出し元でGemini直接分析 or NotebookLMにフォールバック）
+    """
+    if languages is None:
+        languages = ["ja", "en"]
+
+    # 方法1: youtube-transcript-api
+    text = _get_transcript_youtube_api(video_id, languages)
+    if text:
+        return text
+
+    # 方法2: Supadata API
+    supadata_key = ""
+    try:
+        supadata_key = st.secrets.get("SUPADATA_API_KEY", "")
+    except Exception:
+        pass
+    if supadata_key:
+        text = _get_transcript_supadata(video_id, supadata_key)
+        if text:
+            return text
 
     return ""
 
@@ -259,8 +352,56 @@ def summarize_with_gemini(transcript_or_video_id: str, api_key: str, *, is_video
 
 # ─── 複数動画の一括分析 ──────────────────────────────────────────────────
 
+def _notebooklm_answer_to_summary(answer: str) -> dict:
+    """NotebookLMのテキスト応答を構造化dictに変換する。"""
+    lines = [l.strip() for l in answer.split("\n") if l.strip()]
+    key_points = []
+    tickers = []
+    outlook = ""
+    risks = []
+    catalysts = []
+
+    for line in lines:
+        lower = line.lower()
+        # 市場見通し検出
+        if any(w in line for w in ["見通し", "市場全体", "マーケット", "強気", "弱気"]) and not outlook:
+            outlook = line.strip("- ・●#*").strip()
+        # リスク検出
+        elif any(w in line for w in ["リスク", "懸念", "注意", "不安"]):
+            risks.append(line.strip("- ・●#*").strip())
+        # カタリスト検出
+        elif any(w in line for w in ["カタリスト", "材料", "イベント", "注目"]):
+            catalysts.append(line.strip("- ・●#*").strip())
+        # 銘柄検出（4桁数字 or 銘柄名っぽいもの）
+        elif re.search(r"\d{4}", line) and any(w in line for w in ["買い", "売り", "注目", "推奨"]):
+            code_match = re.search(r"(\d{4})", line)
+            direction = "買い" if any(w in line for w in ["買い", "推奨", "注目"]) else ("売り" if "売り" in line else "中立")
+            tickers.append({"ticker": code_match.group(1) if code_match else "不明", "direction": direction, "reason": line.strip("- ・●#*").strip()[:100]})
+        # その他は要点
+        elif len(line) > 10 and not line.startswith("#"):
+            key_points.append(line.strip("- ・●#*").strip())
+
+    return {
+        "title_summary": key_points[0][:100] if key_points else "NotebookLM分析",
+        "market_outlook": outlook or "中立: 詳細は要点を参照",
+        "mentioned_tickers": tickers[:10],
+        "key_points": key_points[:7],
+        "risk_factors": risks[:5],
+        "catalysts": catalysts[:5],
+        "sector_outlook": {},
+        "confidence": "高",
+        "_source": "NotebookLM",
+    }
+
+
 def analyze_videos(urls: list[str], api_key: str, progress_bar=None) -> list[dict]:
-    """複数のYouTube動画を一括分析する。"""
+    """複数のYouTube動画を一括分析する。
+
+    分析優先順位:
+    1. 字幕取得(youtube-transcript-api/Supadata) → Geminiで分析
+    2. Geminiに直接YouTube URLを渡す
+    3. NotebookLMで分析（認証済みの場合）
+    """
     results = []
     for i, url in enumerate(urls):
         video_id = extract_video_id(url)
@@ -269,9 +410,11 @@ def analyze_videos(urls: list[str], api_key: str, progress_bar=None) -> list[dic
             continue
 
         title = get_video_title(video_id)
-
-        # 字幕取得を試みる → 失敗したらGeminiに直接YouTube URLを渡す
         transcript = ""
+        summary = None
+        source_method = ""
+
+        # ── 方法1: 字幕取得 → Gemini分析 ──
         try:
             transcript = get_transcript(video_id)
         except Exception:
@@ -279,9 +422,26 @@ def analyze_videos(urls: list[str], api_key: str, progress_bar=None) -> list[dic
 
         if transcript:
             summary = summarize_with_gemini(transcript, api_key, is_video_id=False)
-        else:
-            # Gemini に YouTube URL を直接渡して分析（クラウド環境対応）
-            summary = summarize_with_gemini(video_id, api_key, is_video_id=True)
+            source_method = "字幕+Gemini"
+
+        # ── 方法2: Gemini直接動画分析 ──
+        if summary is None or (isinstance(summary, dict) and "error" in summary):
+            gemini_result = summarize_with_gemini(video_id, api_key, is_video_id=True)
+            if not (isinstance(gemini_result, dict) and "error" in gemini_result):
+                summary = gemini_result
+                source_method = "Gemini直接分析"
+
+        # ── 方法3: NotebookLM分析 ──
+        if summary is None or (isinstance(summary, dict) and "error" in summary):
+            nlm_answer = _analyze_with_notebooklm(video_id)
+            if nlm_answer:
+                summary = _notebooklm_answer_to_summary(nlm_answer)
+                source_method = "NotebookLM"
+
+        # まだ失敗ならGeminiのエラー結果を使う
+        if summary is None:
+            summary = {"error": "全ての分析方法が失敗しました"}
+
         results.append({
             "url": url,
             "video_id": video_id,
@@ -289,6 +449,7 @@ def analyze_videos(urls: list[str], api_key: str, progress_bar=None) -> list[dic
             "summary": summary,
             "date": date.today().isoformat(),
             "transcript_length": len(transcript),
+            "source_method": source_method,
         })
 
         if progress_bar:

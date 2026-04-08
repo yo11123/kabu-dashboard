@@ -22,5 +22,6 @@ lightgbm>=4.0.0,<5.0.0
 scikit-learn>=1.4.0,<2.0.0
 google-genai>=1.0.0,<2.0.0
 youtube-transcript-api>=1.0.0,<2.0.0
+supadata>=1.0.0,<2.0.0
 # GPU学習用（ローカルのみ。Cloudでは不要）
 # torch>=2.6.0

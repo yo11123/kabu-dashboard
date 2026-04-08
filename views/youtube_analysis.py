@@ -416,8 +416,16 @@ def _display_results(results: list[dict]) -> None:
                 st.caption(sector_text)
 
             confidence = summary.get("confidence", "")
+            source_method = r.get("source_method", "")
+            captions = []
             if confidence:
-                st.caption(f"情報信頼度: {confidence}")
+                captions.append(f"信頼度: {confidence}")
+            if source_method:
+                captions.append(f"分析方法: {source_method}")
+            if summary.get("_source") == "NotebookLM":
+                captions.append("via NotebookLM")
+            if captions:
+                st.caption(" | ".join(captions))
 
             if st.button("削除", key=f"del_{video_id}_{analysis_date}"):
                 all_history = load_youtube_summaries()
