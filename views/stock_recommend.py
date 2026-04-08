@@ -774,7 +774,7 @@ def _render_detail_card(rank: int, item: dict) -> None:
         elif fb is not None:
             sc3.metric("ファンダ補正", f"{fb:+.0f}")
         else:
-            sc3.metric("ファンダ補正", "N/A")
+            sc3.metric("ファンダ補正", "+0")
         dp = item.get("_direction_prob")
         sc4.metric("方向予測(ML)", f"{dp:.0f}%" if dp is not None else "N/A")
         tp = item.get("_timing_prob")
