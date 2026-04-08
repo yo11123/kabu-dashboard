@@ -353,87 +353,59 @@ def render_scorecard(tech: dict, current_price: float) -> None:
     </svg>
     '''
 
-    # ── 各指標の行 HTML ──
-    indicator_rows_html = ""
-    for row in rows:
-        bar = _bar_html(row["pct"], row["color"])
-        badge = _signal_badge(row["signal"], row["color"])
-        score_text = f'{row["score"]}/{row["max_score"]}'
-
-        indicator_rows_html += f'''
-        <div style="display:grid;grid-template-columns:120px 90px 90px 1fr 50px;
-            align-items:center;gap:8px;padding:8px 14px;
-            background:{_BG_ROW};border-radius:4px;margin-bottom:3px;">
-          <span style="font-size:0.78em;color:{_TEXT};font-weight:500;
-              font-family:'Noto Sans JP',sans-serif;white-space:nowrap;">
-            {row["name"]}
-          </span>
-          <span style="font-size:0.75em;color:{_TEXT_DIM};
-              font-family:'IBM Plex Mono',monospace;white-space:nowrap;">
-            {row["value_text"]}
-          </span>
-          <span>{bar}</span>
-          <span style="text-align:center;">{badge}</span>
-          <span style="font-size:0.72em;color:{row["color"]};text-align:right;
-              font-family:'IBM Plex Mono',monospace;font-weight:600;">
-            {score_text}
-          </span>
-        </div>
-        '''
-
-    # ── カード全体を組み立て ──
-    html = f'''
-    <div style="background:{_BG};border:1px solid rgba(212,175,55,0.06);
-        border-radius:6px;padding:20px 24px;margin-bottom:16px;">
-
-      <!-- ヘッダー: 総合スコア -->
-      <div style="display:flex;align-items:center;gap:20px;margin-bottom:16px;
+    # ── ヘッダー ──
+    st.markdown(f'''<div style="background:{_BG};border:1px solid rgba(212,175,55,0.06);
+        border-radius:6px 6px 0 0;padding:20px 24px 14px;">
+      <div style="display:flex;align-items:center;gap:20px;
           padding-bottom:14px;border-bottom:1px solid #1a1f2e;">
         <div>{ring_svg}</div>
         <div>
           <div style="font-family:'Cormorant Garamond','Noto Sans JP',serif;
               font-size:1.15em;color:{_TEXT};letter-spacing:0.05em;font-weight:400;">
-            テクニカルスコア
-          </div>
+            テクニカルスコア</div>
           <div style="font-size:1.3em;font-weight:700;color:{total_color};
-              font-family:'Inter',sans-serif;margin-top:2px;">
-            {total_label}
-          </div>
+              font-family:'Inter',sans-serif;margin-top:2px;">{total_label}</div>
           <div style="font-size:0.72em;color:{_TEXT_DIM};margin-top:4px;
               font-family:'Inter',sans-serif;">
             現在値 ¥{current_price:,.0f}　|　RSI {tech.get("rsi", "N/A")}　|
-            BB {tech.get("bb_sigma", "N/A")}σ
-          </div>
+            BB {tech.get("bb_sigma", "N/A")}σ</div>
         </div>
       </div>
+    </div>''', unsafe_allow_html=True)
 
-      <!-- 指標ヘッダー -->
+    # ── 指標行（1行ずつ出力してサイズ制限を回避）──
+    st.markdown(f'''<div style="background:{_BG};padding:0 24px;">
       <div style="display:grid;grid-template-columns:120px 90px 90px 1fr 50px;
           align-items:center;gap:8px;padding:4px 14px;margin-bottom:4px;">
-        <span style="font-size:0.65em;color:{_TEXT_DIM};text-transform:uppercase;
-            letter-spacing:0.12em;font-family:'Inter',sans-serif;">指標</span>
-        <span style="font-size:0.65em;color:{_TEXT_DIM};text-transform:uppercase;
-            letter-spacing:0.12em;font-family:'Inter',sans-serif;">値</span>
-        <span style="font-size:0.65em;color:{_TEXT_DIM};text-transform:uppercase;
-            letter-spacing:0.12em;font-family:'Inter',sans-serif;">ゲージ</span>
-        <span style="font-size:0.65em;color:{_TEXT_DIM};text-transform:uppercase;
-            letter-spacing:0.12em;text-align:center;font-family:'Inter',sans-serif;">
-          シグナル</span>
-        <span style="font-size:0.65em;color:{_TEXT_DIM};text-transform:uppercase;
-            letter-spacing:0.12em;text-align:right;font-family:'Inter',sans-serif;">
-          点数</span>
+        <span style="font-size:0.65em;color:{_TEXT_DIM};letter-spacing:0.12em;">指標</span>
+        <span style="font-size:0.65em;color:{_TEXT_DIM};letter-spacing:0.12em;">値</span>
+        <span style="font-size:0.65em;color:{_TEXT_DIM};letter-spacing:0.12em;">ゲージ</span>
+        <span style="font-size:0.65em;color:{_TEXT_DIM};letter-spacing:0.12em;text-align:center;">シグナル</span>
+        <span style="font-size:0.65em;color:{_TEXT_DIM};letter-spacing:0.12em;text-align:right;">点数</span>
       </div>
+    </div>''', unsafe_allow_html=True)
 
-      <!-- 指標行 -->
-      {indicator_rows_html}
+    for row in rows:
+        bar = _bar_html(row["pct"], row["color"])
+        badge = _signal_badge(row["signal"], row["color"])
+        score_text = f'{row["score"]}/{row["max_score"]}'
+        st.markdown(f'''<div style="background:{_BG};padding:0 24px;">
+          <div style="display:grid;grid-template-columns:120px 90px 90px 1fr 50px;
+              align-items:center;gap:8px;padding:8px 14px;
+              background:{_BG_ROW};border-radius:4px;margin-bottom:3px;">
+            <span style="font-size:0.78em;color:{_TEXT};font-weight:500;white-space:nowrap;">{row["name"]}</span>
+            <span style="font-size:0.75em;color:{_TEXT_DIM};font-family:'IBM Plex Mono',monospace;white-space:nowrap;">{row["value_text"]}</span>
+            <span>{bar}</span>
+            <span style="text-align:center;">{badge}</span>
+            <span style="font-size:0.72em;color:{row["color"]};text-align:right;font-family:'IBM Plex Mono',monospace;font-weight:600;">{score_text}</span>
+          </div>
+        </div>''', unsafe_allow_html=True)
 
-      <!-- フッター -->
-      <div style="margin-top:10px;padding-top:8px;border-top:1px solid #1a1f2e;
-          font-size:0.62em;color:{_TEXT_DIM};font-family:'Inter',sans-serif;
-          letter-spacing:0.03em;">
+    # ── フッター ──
+    st.markdown(f'''<div style="background:{_BG};border:1px solid rgba(212,175,55,0.06);
+        border-radius:0 0 6px 6px;padding:8px 24px 16px;">
+      <div style="padding-top:8px;border-top:1px solid #1a1f2e;
+          font-size:0.62em;color:{_TEXT_DIM};letter-spacing:0.03em;">
         ※ スコアは各テクニカル指標を加重合計した参考値です。投資助言ではありません。
       </div>
-    </div>
-    '''
-
-    st.markdown(html, unsafe_allow_html=True)
+    </div>''', unsafe_allow_html=True)
