@@ -38,6 +38,18 @@ def _get_gemini_key() -> str:
     return key
 
 
+def _is_valid_summary(h: dict) -> bool:
+    """分析結果が有効かどうか判定する。"""
+    s = h.get("summary")
+    if not isinstance(s, dict):
+        return False
+    # key_points か title_summary があれば有効とみなす
+    if s.get("key_points") or s.get("title_summary") or s.get("market_outlook"):
+        return True
+    # errorのみの場合は無効
+    return False
+
+
 def _show_key_guide() -> None:
     st.info(
         "Gemini API キーが必要です。\n\n"
@@ -245,7 +257,7 @@ def _render_report_tab(gemini_key: str, history: list[dict]) -> None:
     # 動画選択
     valid_history = [
         h for h in history
-        if isinstance(h.get("summary"), dict) and "error" not in h.get("summary", {})
+        if _is_valid_summary(h)
     ]
 
     if not valid_history:
@@ -335,7 +347,7 @@ def _render_qa_tab(gemini_key: str, history: list[dict]) -> None:
     # 動画選択
     valid_history = [
         h for h in history
-        if isinstance(h.get("summary"), dict) and "error" not in h.get("summary", {})
+        if _is_valid_summary(h)
     ]
 
     if not valid_history:
