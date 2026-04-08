@@ -3,6 +3,8 @@ YouTube動画分析ページ
 株式関連のYouTube動画を字幕から分析し、投資インサイトを抽出する。
 """
 import html
+from datetime import date
+
 import streamlit as st
 
 from modules.styles import apply_theme
@@ -62,11 +64,15 @@ def main() -> None:
     history = load_youtube_summaries()
     history_count = len(history)
 
-    tab_analyze, tab_report, tab_qa = st.tabs([
-        "動画分析",
+    tab_nlm, tab_analyze, tab_report, tab_qa = st.tabs([
+        "NotebookLMインポート",
+        "自動分析",
         f"統合レポート ({history_count}本)",
         "動画Q&A",
     ])
+
+    with tab_nlm:
+        _render_nlm_import_tab(gemini_key, history)
 
     with tab_analyze:
         _render_analyze_tab(gemini_key, history)
@@ -79,7 +85,103 @@ def main() -> None:
 
 
 # ═══════════════════════════════════════════════════════════════════
-# タブ1: 動画分析
+# タブ0: NotebookLMインポート
+# ═══════════════════════════════════════════════════════════════════
+
+
+def _render_nlm_import_tab(gemini_key: str, history: list[dict]) -> None:
+    st.markdown("### NotebookLMの分析結果をインポート")
+    st.markdown(
+        "<div style='background:#1a1520; border:1px solid #6b5aad33; border-radius:8px; padding:16px; margin-bottom:16px;'>"
+        "<span style='color:#9b8ec4; font-weight:600;'>使い方</span><br>"
+        "<span style='color:#b8b0a2; font-size:0.9em;'>"
+        "1. NotebookLMでYouTube動画を読み込ませる<br>"
+        "2. 「この動画を株式投資の観点から分析して」等と質問<br>"
+        "3. NotebookLMの回答をコピーして下に貼り付ける<br>"
+        "4. 「分析開始」→ Geminiがニュース検索＋深掘り分析を追加"
+        "</span></div>",
+        unsafe_allow_html=True,
+    )
+
+    col_title, col_url = st.columns(2)
+    video_title = col_title.text_input(
+        "動画タイトル（任意）",
+        placeholder="例: 明日上がる株 2026年4月9日",
+    )
+    video_url = col_url.text_input(
+        "YouTube URL（任意）",
+        placeholder="https://www.youtube.com/watch?v=...",
+    )
+
+    nlm_text = st.text_area(
+        "NotebookLMの分析結果を貼り付け",
+        height=300,
+        placeholder="NotebookLMからコピーした分析テキストをここに貼り付けてください...",
+    )
+
+    import_btn = st.button("分析開始", type="primary", disabled=not nlm_text.strip())
+
+    if import_btn and nlm_text.strip():
+        # 動画ID抽出
+        video_id = ""
+        if video_url:
+            from modules.youtube_analyzer import extract_video_id
+            video_id = extract_video_id(video_url) or ""
+
+        if not video_title and video_id:
+            from modules.youtube_analyzer import get_video_title
+            video_title = get_video_title(video_id) or "NotebookLM分析"
+        if not video_title:
+            video_title = nlm_text[:50].replace("\n", " ").strip()
+
+        with st.spinner("NotebookLMの分析結果を構造化中..."):
+            # NotebookLMテキストを構造化
+            from modules.youtube_analyzer import _notebooklm_answer_to_summary
+            base_summary = _notebooklm_answer_to_summary(nlm_text)
+            base_summary["_source"] = "NotebookLM (手動インポート)"
+
+        # ニュース検索
+        news_items = []
+        with st.spinner("関連ニュースを検索中..."):
+            from modules.youtube_analyzer import _fetch_related_news
+            news_items = _fetch_related_news(base_summary)
+
+        # Gemini深掘り分析
+        final_summary = base_summary
+        if gemini_key and (news_items or len(nlm_text) > 100):
+            with st.spinner("Geminiで深掘り統合分析中..."):
+                from modules.youtube_analyzer import _deep_analyze_with_gemini
+                deep_result = _deep_analyze_with_gemini(base_summary, news_items, gemini_key, video_title)
+                if isinstance(deep_result, dict) and "error" not in deep_result:
+                    final_summary = deep_result
+                    final_summary["_source"] = "NotebookLM → Gemini深掘り"
+
+        # 保存
+        result = {
+            "url": video_url or "",
+            "video_id": video_id or f"nlm_{hash(nlm_text[:100]) % 100000}",
+            "title": video_title,
+            "summary": final_summary,
+            "date": date.today().isoformat(),
+            "transcript_length": len(nlm_text),
+            "source_method": "NotebookLM → Gemini深掘り" if gemini_key else "NotebookLM",
+            "news_count": len(news_items),
+        }
+        save_youtube_summaries([result])
+
+        st.success(f"インポート完了（関連ニュース {len(news_items)}件で深掘り分析）")
+        _display_results([result], key_prefix="nlm_new_")
+
+    # 過去のNotebookLMインポート履歴
+    nlm_history = [h for h in history if "NotebookLM" in (h.get("source_method", "") or h.get("summary", {}).get("_source", ""))]
+    if nlm_history:
+        st.divider()
+        st.markdown(f"### NotebookLMインポート履歴 ({len(nlm_history)}件)")
+        _display_results(nlm_history, key_prefix="nlm_hist_")
+
+
+# ═══════════════════════════════════════════════════════════════════
+# タブ1: 自動分析
 # ═══════════════════════════════════════════════════════════════════
 
 
