@@ -279,20 +279,40 @@ def _parse_gemini_json(text: str) -> dict:
             except json.JSONDecodeError:
                 pass
 
-    # 戦略4: JSONがなければテキスト応答をkey_pointsとして構造化
+    # 戦略4: テキスト応答をGeminiで再構造化
     if len(text) > 20:
+        try:
+            gemini_key = ""
+            try:
+                gemini_key = st.secrets.get("GEMINI_API_KEY", "")
+            except Exception:
+                pass
+            if gemini_key:
+                client = genai.Client(api_key=gemini_key)
+                response = client.models.generate_content(
+                    model="gemini-2.5-flash",
+                    contents=f"以下のテキストを指定のJSON形式に変換してください:\n\n{text[:5000]}",
+                    config=types.GenerateContentConfig(
+                        system_instruction=_SYSTEM_PROMPT,
+                        temperature=0,
+                        response_mime_type="application/json",
+                        max_output_tokens=2048,
+                    ),
+                )
+                retry_result = response.text.strip()
+                start2 = retry_result.find("{")
+                if start2 != -1:
+                    try:
+                        return json.loads(retry_result[start2:])
+                    except json.JSONDecodeError:
+                        pass
+        except Exception:
+            pass
+
+        # 最終フォールバック: テキストをそのまま構造化
         lines = [l.strip("- ・●").strip() for l in text.split("\n") if l.strip() and len(l.strip()) > 5]
         if lines:
-            return {
-                "title_summary": lines[0][:100],
-                "market_outlook": "中立: テキスト応答のため詳細不明",
-                "mentioned_tickers": [],
-                "key_points": lines[:5],
-                "risk_factors": [],
-                "catalysts": [],
-                "sector_outlook": {},
-                "confidence": "低",
-            }
+            return _notebooklm_answer_to_summary(text)
 
     return {"error": "JSON解析失敗", "raw": text[:500]}
 
