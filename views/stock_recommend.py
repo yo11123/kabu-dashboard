@@ -583,11 +583,35 @@ def _score_single_stock(code: str, name: str, sector: str,
         # テクニカルスコア
         tech_score, tech_signals = _calc_technical_score(df)
 
-        # ファンダメンタル補正
+        # ファンダメンタル補正（総合スコアリング）
         fund_bonus: float | None = None
         fund_details: dict[str, str] = {}
+        fund_score_obj = None
         if use_fundamental:
-            fund_bonus, fund_details = _get_fundamental_bonus(t, sector, commodity_data)
+            from modules.fundamental_score import calc_fundamental_score
+            yf_info = {}
+            try:
+                yf_info = t.info or {}
+            except Exception:
+                pass
+            kb_data = {}
+            try:
+                from modules.fundamental import fetch_fundamental_kabutan
+                kb_data = fetch_fundamental_kabutan(code) or {}
+            except Exception:
+                pass
+            # コモディティボーナスを計算
+            cb = 0.0
+            if commodity_data:
+                cb, _ = _calc_sector_commodity_bonus(sector, commodity_data)
+            fund_score_obj = calc_fundamental_score(
+                yf_info=yf_info, kb_data=kb_data,
+                sector_avgs=None, commodity_bonus=cb, sector=sector,
+            )
+            # スコア0-100を-25..+25の補正値に変換
+            fund_bonus = (fund_score_obj.total_score - 50) / 2
+            fund_details = {cat.name: f"{cat.score:.0f}/100" for cat in fund_score_obj.categories if cat.available > 0}
+            fund_details["総合"] = f"{fund_score_obj.grade} ({fund_score_obj.total_score:.0f}/100)"
 
         # ML予測
         direction_prob = None
@@ -642,6 +666,8 @@ def _score_single_stock(code: str, name: str, sector: str,
             "_ticker": code,
             "_tech_score": round(tech_score, 1),
             "_fund_bonus": round(fund_bonus, 1) if fund_bonus is not None else None,
+            "_fund_grade": fund_score_obj.grade if fund_score_obj else None,
+            "_fund_total": round(fund_score_obj.total_score, 1) if fund_score_obj else None,
             "_direction_prob": direction_prob,
             "_timing_prob": timing_prob,
             "_tech_signals": tech_signals,
@@ -741,7 +767,14 @@ def _render_detail_card(rank: int, item: dict) -> None:
         sc1.metric("複合スコア", f"{score:.0f} / 100")
         sc2.metric("テクニカル", f"{item['_tech_score']:.0f} / 100")
         fb = item.get("_fund_bonus", 0)
-        sc3.metric("ファンダ補正", f"{fb:+.0f}" if fb is not None else "N/A")
+        fg = item.get("_fund_grade")
+        ft = item.get("_fund_total")
+        if fg and ft is not None:
+            sc3.metric("ファンダ", f"{fg} ({ft:.0f}点)")
+        elif fb is not None:
+            sc3.metric("ファンダ補正", f"{fb:+.0f}")
+        else:
+            sc3.metric("ファンダ補正", "N/A")
         dp = item.get("_direction_prob")
         sc4.metric("方向予測(ML)", f"{dp:.0f}%" if dp is not None else "N/A")
         tp = item.get("_timing_prob")
