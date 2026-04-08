@@ -347,14 +347,166 @@ def _summarize_signals(signals: dict[str, str]) -> str:
 
 # ─── ファンダメンタル補正 ────────────────────────────────────────────
 
-def _get_fundamental_bonus(ticker: yf.Ticker) -> tuple[float, dict[str, str]]:
-    """ファンダメンタル情報から補正スコアと詳細を返す（最大15pt）。"""
+# セクター → 関連コモディティ/指標のマッピング
+_SECTOR_COMMODITY_MAP: dict[str, list[dict]] = {
+    # 石油・石炭: 原油価格に強く連動
+    "石油・石炭製品": [
+        {"ticker": "CL=F", "name": "原油", "weight": 1.0},
+    ],
+    "鉱業": [
+        {"ticker": "CL=F", "name": "原油", "weight": 0.6},
+        {"ticker": "GC=F", "name": "金", "weight": 0.4},
+    ],
+    # 鉄鋼・非鉄: 銅・鉄鉱石に連動
+    "鉄鋼": [
+        {"ticker": "HG=F", "name": "銅", "weight": 0.7},
+        {"ticker": "CL=F", "name": "原油", "weight": 0.3},
+    ],
+    "非鉄金属": [
+        {"ticker": "HG=F", "name": "銅", "weight": 0.5},
+        {"ticker": "GC=F", "name": "金", "weight": 0.5},
+    ],
+    # 商社: コモディティ全般
+    "卸売業": [
+        {"ticker": "CL=F", "name": "原油", "weight": 0.4},
+        {"ticker": "GC=F", "name": "金", "weight": 0.3},
+        {"ticker": "HG=F", "name": "銅", "weight": 0.3},
+    ],
+    # 電力・ガス: 原油・天然ガスに逆相関（コスト要因）
+    "電気・ガス業": [
+        {"ticker": "CL=F", "name": "原油", "weight": -0.7},
+    ],
+    # 輸送: 燃料コスト
+    "空運業": [
+        {"ticker": "CL=F", "name": "原油", "weight": -0.8},
+    ],
+    "海運業": [
+        {"ticker": "CL=F", "name": "原油", "weight": -0.3},
+    ],
+    # 自動車: ドル円に強く連動
+    "輸送用機器": [
+        {"ticker": "JPY=X", "name": "ドル円", "weight": 0.8, "inverse": True},
+    ],
+    # 電機・精密: 半導体・ドル円
+    "電気機器": [
+        {"ticker": "^SOX", "name": "半導体", "weight": 0.6},
+        {"ticker": "JPY=X", "name": "ドル円", "weight": 0.4, "inverse": True},
+    ],
+    "精密機器": [
+        {"ticker": "JPY=X", "name": "ドル円", "weight": 0.6, "inverse": True},
+    ],
+    # 銀行・保険: 金利に連動
+    "銀行業": [
+        {"ticker": "^TNX", "name": "米10年債", "weight": 0.7},
+    ],
+    "保険業": [
+        {"ticker": "^TNX", "name": "米10年債", "weight": 0.5},
+    ],
+    # 不動産: 金利に逆相関
+    "不動産業": [
+        {"ticker": "^TNX", "name": "米10年債", "weight": -0.7},
+    ],
+    # 金: 金価格に連動
+    "その他金融業": [
+        {"ticker": "GC=F", "name": "金", "weight": 0.3},
+    ],
+}
+
+
+@st.cache_data(ttl=1800, show_spinner=False)
+def _fetch_commodity_returns() -> dict[str, dict]:
+    """コモディティ/指標の直近リターンを取得する（30分キャッシュ）。"""
+    tickers = set()
+    for items in _SECTOR_COMMODITY_MAP.values():
+        for item in items:
+            tickers.add(item["ticker"])
+
+    results = {}
+    for ticker in tickers:
+        try:
+            df = yf.download(ticker, period="1mo", interval="1d", progress=False, auto_adjust=True)
+            if df is not None and len(df) >= 5:
+                if isinstance(df.columns, pd.MultiIndex):
+                    df.columns = [str(c[0]).capitalize() for c in df.columns]
+                close = df["Close" if "Close" in df.columns else df.columns[0]]
+                ret_5d = float((close.iloc[-1] / close.iloc[-6] - 1) * 100) if len(close) >= 6 else 0
+                ret_20d = float((close.iloc[-1] / close.iloc[0] - 1) * 100)
+                vol = float(close.pct_change().std() * np.sqrt(252) * 100)
+                results[ticker] = {
+                    "ret_5d": ret_5d,
+                    "ret_20d": ret_20d,
+                    "volatility": vol,
+                    "last": float(close.iloc[-1]),
+                }
+        except Exception:
+            continue
+    return results
+
+
+def _calc_sector_commodity_bonus(sector: str, commodity_data: dict) -> tuple[float, dict[str, str]]:
+    """セクターに関連するコモディティ/指標の動きから補正スコアを計算する。"""
+    if not sector or sector not in _SECTOR_COMMODITY_MAP or not commodity_data:
+        return 0.0, {}
+
     bonus = 0.0
     details: dict[str, str] = {}
+
+    for item in _SECTOR_COMMODITY_MAP[sector]:
+        ticker = item["ticker"]
+        name = item["name"]
+        weight = item["weight"]
+        inverse = item.get("inverse", False)
+
+        data = commodity_data.get(ticker)
+        if not data:
+            continue
+
+        ret_5d = data["ret_5d"]
+        ret_20d = data["ret_20d"]
+        vol = data["volatility"]
+
+        # 為替の場合: JPY=Xは「1ドル=何円」なので、円安(上昇)が輸出企業にプラス
+        if inverse:
+            effective_ret = -ret_5d  # 円安=プラス
+        else:
+            effective_ret = ret_5d
+
+        # 連動方向を考慮したスコア計算
+        impact = effective_ret * weight
+
+        if abs(impact) > 3:
+            # 大きな変動 → 大きな補正
+            pts = 5 if impact > 0 else -5
+            direction = "追い風" if impact > 0 else "逆風"
+            details[name] = f"{ret_5d:+.1f}% (5日) → {direction}"
+        elif abs(impact) > 1:
+            pts = 3 if impact > 0 else -3
+            direction = "やや追い風" if impact > 0 else "やや逆風"
+            details[name] = f"{ret_5d:+.1f}% (5日) → {direction}"
+        else:
+            pts = 0
+
+        # ボラティリティが高い場合はリスク警告
+        if vol > 40:
+            pts -= 1
+            details[name] = details.get(name, f"{ret_5d:+.1f}%") + " [高ボラ注意]"
+
+        bonus += pts
+
+    return max(-10, min(10, bonus)), details
+
+
+def _get_fundamental_bonus(ticker: yf.Ticker, sector: str = "",
+                           commodity_data: dict | None = None) -> tuple[float, dict[str, str]]:
+    """ファンダメンタル + セクター連動性から補正スコアと詳細を返す（最大25pt）。"""
+    bonus = 0.0
+    details: dict[str, str] = {}
+
+    # ── バリュエーション（最大15pt）───────────────────────
     try:
         info = ticker.info
         if not info:
-            return 0, {}
+            info = {}
 
         per = info.get("trailingPE") or info.get("forwardPE")
         if per is not None and per > 0:
@@ -390,13 +542,21 @@ def _get_fundamental_bonus(ticker: yf.Ticker) -> tuple[float, dict[str, str]]:
 
     except Exception:
         pass
-    return max(-5, min(15, bonus)), details
+
+    # ── セクター×コモディティ連動性（最大±10pt）─────────
+    if commodity_data:
+        commodity_bonus, commodity_details = _calc_sector_commodity_bonus(sector, commodity_data)
+        bonus += commodity_bonus
+        details.update(commodity_details)
+
+    return max(-10, min(25, bonus)), details
 
 
 # ─── 1銘柄のスコアリング ─────────────────────────────────────────────
 
 def _score_single_stock(code: str, name: str, sector: str,
-                        ml_available: bool, use_fundamental: bool) -> dict | None:
+                        ml_available: bool, use_fundamental: bool,
+                        commodity_data: dict | None = None) -> dict | None:
     """1銘柄のデータ取得・スコアリングを行い結果辞書を返す。"""
     try:
         t = yf.Ticker(code)
@@ -427,7 +587,7 @@ def _score_single_stock(code: str, name: str, sector: str,
         fund_bonus: float | None = None
         fund_details: dict[str, str] = {}
         if use_fundamental:
-            fund_bonus, fund_details = _get_fundamental_bonus(t)
+            fund_bonus, fund_details = _get_fundamental_bonus(t, sector, commodity_data)
 
         # ML予測
         direction_prob = None
@@ -506,13 +666,16 @@ def _run_recommend_scan(
     models = get_available_models()
     ml_available = models.get("XGBoost方向予測", False) or models.get("最適売買タイミング", False)
 
+    # コモディティ/指標データを事前取得（全銘柄で共有）
+    commodity_data = _fetch_commodity_returns() if use_fundamental else None
+
     results: list[dict] = []
     total = len(ticker_codes)
 
     with ThreadPoolExecutor(max_workers=15) as executor:
         futures = {}
         for code, name, sector in zip(ticker_codes, ticker_names, ticker_sectors):
-            f = executor.submit(_score_single_stock, code, name, sector, ml_available, use_fundamental)
+            f = executor.submit(_score_single_stock, code, name, sector, ml_available, use_fundamental, commodity_data)
             futures[f] = code
 
         for future in as_completed(futures):
