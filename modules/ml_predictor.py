@@ -34,19 +34,20 @@ def _load_pickle(name: str) -> dict | None:
 
 
 def _calc_features(df: pd.DataFrame) -> pd.DataFrame:
-    """推論用の特徴量を計算する（学習時と同じ計算）。"""
+    """推論用の特徴量を計算する（train_all_v2.py の calc_features_v2 と完全に一致）。"""
     close = df["Close"].copy()
-    high = df["High"].copy()
-    low = df["Low"].copy()
+    high = df["High"].copy() if "High" in df.columns else close.copy()
+    low = df["Low"].copy() if "Low" in df.columns else close.copy()
     volume = df["Volume"].copy() if "Volume" in df.columns else pd.Series(0, index=df.index)
+    opn = df["Open"].copy() if "Open" in df.columns else close.copy()
 
     feat = pd.DataFrame(index=df.index)
 
+    # ── テクニカル指標（基本）─────────────────────────────────
     delta = close.diff()
     gain = delta.clip(lower=0).rolling(14).mean()
     loss = (-delta.clip(upper=0)).rolling(14).mean().replace(0, np.nan)
     feat["rsi_14"] = 100 - 100 / (1 + gain / loss)
-
     gain5 = delta.clip(lower=0).rolling(5).mean()
     loss5 = (-delta.clip(upper=0)).rolling(5).mean().replace(0, np.nan)
     feat["rsi_5"] = 100 - 100 / (1 + gain5 / loss5)
@@ -56,35 +57,42 @@ def _calc_features(df: pd.DataFrame) -> pd.DataFrame:
     feat["macd"] = ema12 - ema26
     feat["macd_signal"] = feat["macd"].ewm(span=9, adjust=False).mean()
     feat["macd_hist"] = feat["macd"] - feat["macd_signal"]
+    feat["macd_hist_diff"] = feat["macd_hist"].diff()
 
     bb_mid = close.rolling(20).mean()
     bb_std = close.rolling(20).std()
     feat["bb_position"] = (close - bb_mid) / bb_std.replace(0, np.nan)
     feat["bb_width"] = (bb_std * 4) / bb_mid.replace(0, np.nan) * 100
+    feat["bb_width_change"] = feat["bb_width"].pct_change(5) * 100
 
-    for period in [5, 25, 75]:
+    for period in [5, 25, 75, 200]:
         sma = close.rolling(period).mean()
         feat[f"sma{period}_dev"] = (close - sma) / sma * 100
 
     sma25 = close.rolling(25).mean()
+    sma75 = close.rolling(75).mean()
     feat["sma25_slope"] = sma25.pct_change(5) * 100
+    feat["sma75_slope"] = sma75.pct_change(10) * 100
+    if len(close) >= 75:
+        feat["sma_cross_gap"] = (sma25 - sma75) / sma75 * 100
 
-    for days in [1, 3, 5, 10, 20]:
+    for days in [1, 2, 3, 5, 10, 20, 60]:
         feat[f"return_{days}d"] = close.pct_change(days) * 100
 
     feat["volatility_20d"] = close.pct_change().rolling(20).std() * np.sqrt(252) * 100
     feat["volatility_5d"] = close.pct_change().rolling(5).std() * np.sqrt(252) * 100
+    feat["vol_change"] = feat["volatility_5d"] - feat["volatility_20d"]
 
-    tr = pd.concat([
-        high - low,
-        (high - close.shift(1)).abs(),
-        (low - close.shift(1)).abs(),
-    ], axis=1).max(axis=1)
+    tr = pd.concat([high - low, (high - close.shift(1)).abs(), (low - close.shift(1)).abs()], axis=1).max(axis=1)
     feat["atr_14"] = tr.rolling(14).mean() / close * 100
 
     vol_ma20 = volume.rolling(20).mean()
     feat["volume_ratio"] = volume / vol_ma20.replace(0, np.nan)
     feat["volume_change_5d"] = volume.rolling(5).mean() / volume.rolling(20).mean()
+    up_mask = close > opn
+    up_vol = (volume * up_mask.astype(float)).rolling(10).mean()
+    dn_vol = (volume * (~up_mask).astype(float)).rolling(10).mean()
+    feat["volume_up_dn_ratio"] = up_vol / dn_vol.replace(0, np.nan)
 
     low14 = low.rolling(14).min()
     high14 = high.rolling(14).max()
@@ -92,9 +100,7 @@ def _calc_features(df: pd.DataFrame) -> pd.DataFrame:
     feat["stoch_d"] = feat["stoch_k"].rolling(3).mean()
 
     tp = (high + low + close) / 3
-    feat["cci_20"] = (tp - tp.rolling(20).mean()) / (
-        tp.rolling(20).apply(lambda x: np.abs(x - x.mean()).mean()) * 0.015
-    )
+    feat["cci_20"] = (tp - tp.rolling(20).mean()) / (tp.rolling(20).apply(lambda x: np.abs(x - x.mean()).mean()) * 0.015)
 
     feat["from_52w_high"] = (close / close.rolling(252).max() - 1) * 100
     feat["from_52w_low"] = (close / close.rolling(252).min() - 1) * 100
@@ -104,6 +110,85 @@ def _calc_features(df: pd.DataFrame) -> pd.DataFrame:
     )
     feat["up_day_ratio_10d"] = (close.diff() > 0).rolling(10).mean()
     feat["up_day_ratio_20d"] = (close.diff() > 0).rolling(20).mean()
+
+    # ── 高度な特徴量 ─────────────────────────────────────────
+    ret20 = close.pct_change().rolling(20)
+    feat["sharpe_20d"] = ret20.mean() / ret20.std().replace(0, np.nan) * np.sqrt(252)
+
+    feat["hurst_proxy"] = close.pct_change().rolling(60).apply(
+        lambda x: np.log(x.std()) / np.log(len(x)) if x.std() > 0 else np.nan, raw=False
+    )
+
+    if volume.sum() > 0:
+        vwap = (close * volume).rolling(20).sum() / volume.rolling(20).sum().replace(0, np.nan)
+        feat["vwap_dev"] = (close - vwap) / vwap * 100
+
+    feat["candle_body"] = (close - opn) / opn * 100
+    feat["candle_body_avg5"] = feat["candle_body"].rolling(5).mean()
+    feat["upper_shadow"] = (high - pd.concat([close, opn], axis=1).max(axis=1)) / close * 100
+    feat["lower_shadow"] = (pd.concat([close, opn], axis=1).min(axis=1) - low) / close * 100
+
+    # ── 一目均衡表 ───────────────────────────────────────────
+    if len(close) >= 52:
+        h9, l9 = high.rolling(9).max(), low.rolling(9).min()
+        h26, l26 = high.rolling(26).max(), low.rolling(26).min()
+        h52, l52 = high.rolling(52).max(), low.rolling(52).min()
+        tenkan = (h9 + l9) / 2
+        kijun = (h26 + l26) / 2
+        senkou_a = (tenkan + kijun) / 2
+        senkou_b = (h52 + l52) / 2
+        feat["ichimoku_tenkan_dev"] = (close - tenkan) / tenkan.replace(0, np.nan) * 100
+        feat["ichimoku_kijun_dev"] = (close - kijun) / kijun.replace(0, np.nan) * 100
+        feat["ichimoku_tk_cross"] = (tenkan - kijun) / kijun.replace(0, np.nan) * 100
+        feat["ichimoku_cloud_top"] = (close - senkou_a.shift(26)) / close * 100
+        feat["ichimoku_cloud_bottom"] = (close - senkou_b.shift(26)) / close * 100
+        feat["ichimoku_cloud_thickness"] = (senkou_a - senkou_b) / close * 100
+        feat["ichimoku_above_cloud"] = ((close > senkou_a.shift(26)) & (close > senkou_b.shift(26))).astype(int)
+        feat["ichimoku_below_cloud"] = ((close < senkou_a.shift(26)) & (close < senkou_b.shift(26))).astype(int)
+
+    # ── ADX / DMI ────────────────────────────────────────────
+    if len(close) >= 28:
+        plus_dm = (high.diff()).clip(lower=0)
+        minus_dm = (-low.diff()).clip(lower=0)
+        tr_14 = tr.rolling(14).mean().replace(0, np.nan)
+        feat["adx_plus_di"] = 100 * plus_dm.rolling(14).mean() / tr_14
+        feat["adx_minus_di"] = 100 * minus_dm.rolling(14).mean() / tr_14
+        di_diff = (feat["adx_plus_di"] - feat["adx_minus_di"]).abs()
+        di_sum = (feat["adx_plus_di"] + feat["adx_minus_di"]).replace(0, np.nan)
+        feat["adx"] = (di_diff / di_sum * 100).rolling(14).mean()
+        feat["di_diff"] = feat["adx_plus_di"] - feat["adx_minus_di"]
+
+    # ── Williams %R ──────────────────────────────────────────
+    for period in [14, 28]:
+        highest = high.rolling(period).max()
+        lowest = low.rolling(period).min()
+        feat[f"williams_r_{period}"] = (highest - close) / (highest - lowest).replace(0, np.nan) * -100
+
+    # ── ドンチャンチャネル位置 ────────────────────────────────
+    for period in [20, 50]:
+        dc_high = high.rolling(period).max()
+        dc_low = low.rolling(period).min()
+        feat[f"donchian_pos_{period}"] = (close - dc_low) / (dc_high - dc_low).replace(0, np.nan)
+
+    # ── TRIX ─────────────────────────────────────────────────
+    e1 = close.ewm(span=15, adjust=False).mean()
+    e2 = e1.ewm(span=15, adjust=False).mean()
+    e3 = e2.ewm(span=15, adjust=False).mean()
+    feat["trix"] = e3.pct_change() * 10000
+
+    # ── MA クロスシグナル ─────────────────────────────────────
+    if len(close) >= 75:
+        feat["golden_cross_5_25"] = ((sma25 > sma75) & (sma25.shift(1) <= sma75.shift(1))).astype(int)
+        feat["dead_cross_5_25"] = ((sma25 < sma75) & (sma25.shift(1) >= sma75.shift(1))).astype(int)
+
+    # ── OBV ──────────────────────────────────────────────────
+    if volume.sum() > 0:
+        obv_sign = np.sign(close.diff()).fillna(0)
+        obv = (obv_sign * volume).cumsum()
+        obv_sma20 = obv.rolling(20).mean()
+        feat["obv_dev"] = (obv - obv_sma20) / obv_sma20.abs().replace(0, np.nan) * 100
+        feat["obv_slope"] = obv.pct_change(5) * 100
+
     feat["weekday"] = df.index.dayofweek
     feat["month"] = df.index.month
 
@@ -111,6 +196,18 @@ def _calc_features(df: pd.DataFrame) -> pd.DataFrame:
 
 
 # ─── 公開API ────────────────────────────────────────────────────────────
+
+
+def _align_features(feat: pd.DataFrame, features: list[str]) -> pd.DataFrame:
+    """学習時の特徴量リストに合わせてカラムを整列する。足りないカラムは0埋め。"""
+    row = feat.iloc[-1:]
+    for f in features:
+        if f not in row.columns:
+            row[f] = 0
+    row = row[features].fillna(0).replace([np.inf, -np.inf], 0)
+    for col in row.columns:
+        row[col] = pd.to_numeric(row[col], errors="coerce")
+    return row.fillna(0)
 
 
 def predict_direction_xgb(df: pd.DataFrame) -> float | None:
@@ -124,7 +221,7 @@ def predict_direction_xgb(df: pd.DataFrame) -> float | None:
         feat = _calc_features(df)
         if feat.empty:
             return None
-        row = feat.iloc[-1:][features].fillna(0)
+        row = _align_features(feat, features)
         prob = model.predict_proba(row)[0][1]
         return round(float(prob) * 100, 1)
     except Exception:
@@ -197,7 +294,7 @@ def predict_earnings_surprise(df: pd.DataFrame) -> float | None:
         feat = _calc_features(df)
         if feat.empty:
             return None
-        row = feat.iloc[-1:][features].fillna(0)
+        row = _align_features(feat, features)
         prob = model.predict_proba(row)[0][1]
         return round(float(prob) * 100, 1)
     except Exception:
@@ -235,7 +332,10 @@ def predict_buy_timing(df: pd.DataFrame, fund: dict | None = None,
             if f not in row.columns:
                 row[f] = 0
 
-        row = row[features].fillna(0)
+        row = row[features].fillna(0).replace([np.inf, -np.inf], 0)
+        for col in row.columns:
+            row[col] = pd.to_numeric(row[col], errors="coerce")
+        row = row.fillna(0)
         prob = model.predict_proba(row)[0][1]
         return round(float(prob) * 100, 1)
     except Exception:
