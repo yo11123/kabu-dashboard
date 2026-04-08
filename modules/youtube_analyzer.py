@@ -122,18 +122,26 @@ def get_video_title(video_id: str) -> str:
 _SYSTEM_PROMPT = """あなたは株式投資の専門アナリストです。
 YouTube動画の字幕テキストから、投資に役立つ情報を抽出・要約してください。
 
-以下のJSON形式で出力してください（JSONのみ、他のテキストは不要）:
+## 出力ルール（厳守）
+- 下記のJSON形式**のみ**を出力すること。前後に説明文やコードブロック記号(```)を付けないこと
+- 全てのキーを必ず含めること（該当なしの場合は空配列 [] や空文字 "" を使う）
+- key_pointsは必ず3〜5個にすること
+- mentioned_tickersの銘柄コードは4桁の証券コード（例: 7203）を使うこと。不明なら銘柄名で可
+- market_outlookは「強気: 理由」「弱気: 理由」「中立: 理由」のいずれかで始めること
+- confidenceは「高」「中」「低」の3択のみ
+
+## 出力形式（JSONのみ）
 {
   "title_summary": "動画の主題を1行で",
-  "market_outlook": "市場全体の見通し（強気/弱気/中立 + 理由）",
+  "market_outlook": "強気/弱気/中立: 具体的な理由",
   "mentioned_tickers": [
-    {"ticker": "銘柄コードまたは名前", "direction": "買い/売り/中立", "reason": "理由"}
+    {"ticker": "4桁コードまたは名前", "direction": "買い/売り/中立", "reason": "理由"}
   ],
   "key_points": ["要点1", "要点2", "要点3"],
   "risk_factors": ["リスク1", "リスク2"],
   "catalysts": ["カタリスト1", "カタリスト2"],
   "sector_outlook": {"セクター名": "見通し"},
-  "confidence": "高/中/低（情報の信頼度）"
+  "confidence": "高/中/低"
 }
 
 注意:
@@ -164,7 +172,9 @@ def summarize_with_gemini(transcript_or_video_id: str, api_key: str, *, is_video
     client = genai.Client(api_key=api_key)
     config = types.GenerateContentConfig(
         system_instruction=_SYSTEM_PROMPT,
-        temperature=0.1,
+        temperature=0,
+        top_p=0.1,
+        top_k=1,
         max_output_tokens=2048,
     )
 
@@ -352,7 +362,9 @@ def generate_integrated_report(summaries: list[dict], api_key: str) -> str:
             contents=f"以下の{len(parts)}本のYouTube動画分析結果を統合してレポートを作成してください:\n\n{combined}",
             config=types.GenerateContentConfig(
                 system_instruction=_REPORT_PROMPT,
-                temperature=0.2,
+                temperature=0,
+                top_p=0.1,
+                top_k=1,
                 max_output_tokens=4096,
             ),
         )
@@ -409,7 +421,9 @@ def chat_with_videos(
             contents=messages,
             config=types.GenerateContentConfig(
                 system_instruction=_QA_SYSTEM,
-                temperature=0.3,
+                temperature=0.1,
+                top_p=0.2,
+                top_k=3,
                 max_output_tokens=2048,
             ),
         )

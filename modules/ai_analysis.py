@@ -594,16 +594,34 @@ def _call_openai(prompt: str, api_key: str) -> str:
     return response.choices[0].message.content
 
 
-def _call_gemini(prompt: str, api_key: str) -> str:
+_GEMINI_SYSTEM = (
+    "あなたは日本株市場の専門アナリストです。\n"
+    "回答ルール（必ず守ること）:\n"
+    "1. 指示されたJSON形式がある場合、JSONのみを出力し、前後に説明文を付けない\n"
+    "2. 数値は提供データから正確に引用し、推測しない\n"
+    "3. 提供データにない情報は「データなし」と明記する\n"
+    "4. 日本語で回答する\n"
+    "5. 毎回同じ構造・同じ粒度で回答する（回答の長さや深さにばらつきを出さない）\n"
+    "6. 「強気/弱気/中立」の判定基準: RSI>70=買われ過ぎ, RSI<30=売られ過ぎ, MACD正=強気, MACD負=弱気\n"
+    "7. 曖昧な表現（「かもしれない」「可能性がある」）を避け、データに基づく断定的な分析をする\n"
+)
+
+
+def _call_gemini(prompt: str, api_key: str, system: str | None = None) -> str:
     """Gemini (Google) を REST API で直接呼び出す（SDK の文字コード問題を回避）。"""
     import json as _json
     import requests as _req
 
     url = "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent"
     payload = {
+        "system_instruction": {
+            "parts": [{"text": system or _GEMINI_SYSTEM}],
+        },
         "contents": [{"role": "user", "parts": [{"text": prompt}]}],
         "generationConfig": {
             "temperature": 0,
+            "topP": 0.1,
+            "topK": 1,
             "maxOutputTokens": 4096,
         },
     }
@@ -927,9 +945,9 @@ def get_chat_response(
                         role = "user" if msg["role"] == "user" else "model"
                         contents.append({"role": role, "parts": [{"text": msg["content"]}]})
                     payload = {
-                        "system_instruction": {"parts": [{"text": system_prompt}]},
+                        "system_instruction": {"parts": [{"text": _GEMINI_SYSTEM + "\n\n" + system_prompt}]},
                         "contents": contents,
-                        "generationConfig": {"temperature": 0, "maxOutputTokens": 1000},
+                        "generationConfig": {"temperature": 0, "topP": 0.1, "topK": 1, "maxOutputTokens": 1000},
                     }
                     resp = _req.post(url, params={"key": gemini_key},
                                      headers={"Content-Type": "application/json; charset=utf-8"},
@@ -988,10 +1006,12 @@ def get_chat_response(
                 role = "user" if msg["role"] == "user" else "model"
                 contents.append({"role": role, "parts": [{"text": msg["content"]}]})
             payload = {
-                "system_instruction": {"parts": [{"text": system_prompt}]},
+                "system_instruction": {"parts": [{"text": _GEMINI_SYSTEM + "\n\n" + system_prompt}]},
                 "contents": contents,
                 "generationConfig": {
                     "temperature": 0,
+                    "topP": 0.1,
+                    "topK": 1,
                     "maxOutputTokens": 1000,
                 },
             }
