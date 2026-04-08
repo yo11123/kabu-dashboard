@@ -302,9 +302,21 @@ def summarize_with_gemini(transcript_or_video_id: str, api_key: str, *, is_video
 
     is_video_id=True の場合、YouTube URLを直接Geminiに渡して分析する（字幕API不要）。
     is_video_id=False の場合、字幕テキストを渡して分析する。
+    response_mime_type="application/json" でJSON出力を強制する。
     """
     client = genai.Client(api_key=api_key)
+
+    # JSON出力を強制する設定
     config = types.GenerateContentConfig(
+        system_instruction=_SYSTEM_PROMPT,
+        temperature=0,
+        top_p=0.1,
+        top_k=1,
+        max_output_tokens=2048,
+        response_mime_type="application/json",
+    )
+    # 動画URL直接分析はresponse_mime_typeと併用できない場合があるのでフォールバック用も用意
+    config_no_json = types.GenerateContentConfig(
         system_instruction=_SYSTEM_PROMPT,
         temperature=0,
         top_p=0.1,
@@ -315,22 +327,27 @@ def summarize_with_gemini(transcript_or_video_id: str, api_key: str, *, is_video
     # ── 方法1: YouTube URLを直接Geminiに渡す（クラウド対応）──
     if is_video_id:
         video_url = f"https://www.youtube.com/watch?v={transcript_or_video_id}"
-        try:
-            response = client.models.generate_content(
-                model="gemini-2.5-flash",
-                contents=[
-                    types.Content(parts=[
-                        types.Part.from_uri(file_uri=video_url, mime_type="video/mp4"),
-                        types.Part.from_text(text="この動画を分析してください。"),
-                    ]),
-                ],
-                config=config,
-            )
-            return _parse_gemini_json(response.text)
-        except Exception as e:
-            return {"error": f"Gemini動画分析エラー: {_redact_keys(str(e)[:200])}"}
+        # まずJSON強制で試す
+        for cfg in [config, config_no_json]:
+            try:
+                response = client.models.generate_content(
+                    model="gemini-2.5-flash",
+                    contents=[
+                        types.Content(parts=[
+                            types.Part.from_uri(file_uri=video_url, mime_type="video/mp4"),
+                            types.Part.from_text(text="この動画の内容を株式投資の観点から分析して、指定のJSON形式で出力してください。"),
+                        ]),
+                    ],
+                    config=cfg,
+                )
+                result = _parse_gemini_json(response.text)
+                if "error" not in result:
+                    return result
+            except Exception:
+                continue
+        return {"error": "Gemini動画分析エラー: JSONの取得に失敗しました"}
 
-    # ── 方法2: 字幕テキストで分析（フォールバック）──
+    # ── 方法2: 字幕テキストで分析 ──
     transcript = transcript_or_video_id
     if not transcript.strip():
         return {"error": "字幕テキストが空です"}
@@ -343,7 +360,20 @@ def summarize_with_gemini(transcript_or_video_id: str, api_key: str, *, is_video
         response = client.models.generate_content(
             model="gemini-2.5-flash",
             contents=f"以下のYouTube動画の字幕テキストを分析してください:\n\n{transcript}",
-            config=config,
+            config=config,  # JSON強制
+        )
+        result = _parse_gemini_json(response.text)
+        if "error" not in result:
+            return result
+    except Exception:
+        pass
+
+    # JSON強制が失敗した場合、通常モードで再試行
+    try:
+        response = client.models.generate_content(
+            model="gemini-2.5-flash",
+            contents=f"以下のYouTube動画の字幕テキストを分析してください:\n\n{transcript}",
+            config=config_no_json,
         )
         return _parse_gemini_json(response.text)
     except Exception as e:
@@ -493,25 +523,39 @@ def _deep_analyze_with_gemini(
 
     combined = "\n".join(parts)
 
-    try:
-        client = genai.Client(api_key=api_key)
-        response = client.models.generate_content(
-            model="gemini-2.5-flash",
-            contents=f"以下のYouTube動画分析と関連ニュースを統合して深い分析をしてください:\n\n{combined}",
-            config=types.GenerateContentConfig(
+    client = genai.Client(api_key=api_key)
+    prompt_text = f"以下のYouTube動画分析と関連ニュースを統合して深い分析をしてください:\n\n{combined}"
+
+    # まずJSON強制で試す
+    for mime in ["application/json", None]:
+        try:
+            cfg = types.GenerateContentConfig(
                 system_instruction=_DEEP_ANALYSIS_PROMPT,
                 temperature=0,
                 top_p=0.1,
                 top_k=1,
                 max_output_tokens=3000,
-            ),
-        )
-        result = _parse_gemini_json(response.text)
-        if "error" not in result:
-            result["_source"] = base_summary.get("_source", "Gemini")
-            return result
-    except Exception:
-        pass
+            )
+            if mime:
+                cfg = types.GenerateContentConfig(
+                    system_instruction=_DEEP_ANALYSIS_PROMPT,
+                    temperature=0,
+                    top_p=0.1,
+                    top_k=1,
+                    max_output_tokens=3000,
+                    response_mime_type=mime,
+                )
+            response = client.models.generate_content(
+                model="gemini-2.5-flash",
+                contents=prompt_text,
+                config=cfg,
+            )
+            result = _parse_gemini_json(response.text)
+            if "error" not in result:
+                result["_source"] = base_summary.get("_source", "Gemini")
+                return result
+        except Exception:
+            continue
 
     # 深掘り失敗時はベースの分析結果をそのまま返す
     return base_summary
@@ -521,11 +565,11 @@ def analyze_videos(urls: list[str], api_key: str, progress_bar=None) -> list[dic
     """複数のYouTube動画を一括分析する。
 
     分析フロー:
-    1. NotebookLMで動画を分析（最優先）
-    2. 失敗時: 字幕取得(youtube-transcript-api/Supadata) → Gemini分析
-    3. 失敗時: Geminiに直接YouTube URLを渡す
+    1. 字幕取得(youtube-transcript-api/Supadata) → Gemini分析（JSON強制）
+    2. 失敗時: Geminiに直接YouTube URLを渡す（JSON強制）
+    3. 失敗時: NotebookLMで分析（認証済みの場合のみ）
     4. 一次分析結果から関連ニュースを検索
-    5. 一次分析＋ニュースをGeminiで統合的に深掘り分析
+    5. 一次分析＋ニュースをGeminiで統合的に深掘り分析（JSON強制）
     """
     results = []
     for i, url in enumerate(urls):
@@ -539,28 +583,28 @@ def analyze_videos(urls: list[str], api_key: str, progress_bar=None) -> list[dic
         base_summary = None
         source_method = ""
 
-        # ── STEP 1: NotebookLM分析（最優先）──
-        nlm_answer = _analyze_with_notebooklm(video_id)
-        if nlm_answer:
-            base_summary = _notebooklm_answer_to_summary(nlm_answer)
-            source_method = "NotebookLM"
+        # ── STEP 1: 字幕取得 → Gemini分析（JSON強制）──
+        try:
+            transcript = get_transcript(video_id)
+        except Exception:
+            pass
+        if transcript:
+            base_summary = summarize_with_gemini(transcript, api_key, is_video_id=False)
+            source_method = "字幕+Gemini"
 
-        # ── STEP 2: 字幕取得 → Gemini分析 ──
-        if base_summary is None or (isinstance(base_summary, dict) and "error" in base_summary):
-            try:
-                transcript = get_transcript(video_id)
-            except Exception:
-                pass
-            if transcript:
-                base_summary = summarize_with_gemini(transcript, api_key, is_video_id=False)
-                source_method = "字幕+Gemini"
-
-        # ── STEP 3: Gemini直接動画分析 ──
+        # ── STEP 2: Gemini直接動画分析（JSON強制）──
         if base_summary is None or (isinstance(base_summary, dict) and "error" in base_summary):
             gemini_result = summarize_with_gemini(video_id, api_key, is_video_id=True)
             if not (isinstance(gemini_result, dict) and "error" in gemini_result):
                 base_summary = gemini_result
                 source_method = "Gemini直接分析"
+
+        # ── STEP 3: NotebookLM分析（認証済みの場合のみ）──
+        if base_summary is None or (isinstance(base_summary, dict) and "error" in base_summary):
+            nlm_answer = _analyze_with_notebooklm(video_id)
+            if nlm_answer:
+                base_summary = _notebooklm_answer_to_summary(nlm_answer)
+                source_method = "NotebookLM"
 
         if base_summary is None:
             base_summary = {"error": "全ての分析方法が失敗しました"}
