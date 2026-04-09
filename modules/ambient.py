@@ -21,108 +21,20 @@ import math
 # 背景パーティクル
 # ═══════════════════════════════════════════════════════════════════
 
-_PARTICLE_CSS = """
-/* === 共通: コンテンツの背面に配置 === */
-.ambient-rain, .ambient-stars, .ambient-fireflies {
-    position:fixed; top:0; left:0; width:100%; height:100%;
-    pointer-events:none; z-index:-1; overflow:hidden;
-}
-
-/* === 雨（暴落時）=== */
-.ambient-rain .drop {
-    position:absolute; top:-20px; width:2px; background:linear-gradient(to bottom, transparent, rgba(100,140,180,0.4));
-    border-radius:0 0 2px 2px; animation:ambientRainDrop linear infinite; pointer-events:none;
-}
-@keyframes ambientRainDrop {
-    0%   { transform:translateY(-20px); opacity:0.7; }
-    100% { transform:translateY(100vh); opacity:0.01; }
-}
-
-/* === 星（夜間）=== */
-.ambient-stars .star {
-    position:absolute; width:3px; height:3px; background:#f0ece4; border-radius:50%;
-    animation:ambientStarTwinkle ease-in-out infinite; pointer-events:none;
-}
-@keyframes ambientStarTwinkle {
-    0%, 100% { opacity:0.15; transform:scale(0.8); }
-    50%      { opacity:0.6; transform:scale(1.2); }
-}
-
-/* === 蛍（夜間）=== */
-.ambient-fireflies .firefly {
-    position:absolute; width:6px; height:6px; border-radius:50%;
-    background:radial-gradient(circle, rgba(212,175,55,0.6), rgba(212,175,55,0.01));
-    box-shadow:0 0 6px rgba(212,175,55,0.3);
-    animation:ambientFireflyFloat ease-in-out infinite; pointer-events:none;
-}
-@keyframes ambientFireflyFloat {
-    0%   { transform:translate(0, 0) scale(1); opacity:0.2; }
-    25%  { transform:translate(15px, -20px) scale(1.1); opacity:0.5; }
-    50%  { transform:translate(-10px, -35px) scale(0.9); opacity:0.3; }
-    75%  { transform:translate(20px, -15px) scale(1.05); opacity:0.5; }
-    100% { transform:translate(0, 0) scale(1); opacity:0.2; }
-}
-"""
-
-
-def _generate_rain_html(intensity: int = 20) -> str:
-    """雨のHTMLを生成する。"""
-    drops = []
-    for i in range(intensity):
-        left = (i * 37 + 13) % 100
-        height = 15 + (i * 7) % 20
-        duration = 0.8 + (i * 0.03)
-        delay = (i * 0.15) % 3
-        drops.append(
-            f'<div class="drop" style="left:{left}%;height:{height}px;'
-            f'animation-duration:{duration}s;animation-delay:{delay}s;"></div>'
-        )
-    return f'<div class="ambient-rain">{"".join(drops)}</div>'
-
-
-def _generate_stars_html(count: int = 30) -> str:
-    """星のHTMLを生成する。"""
-    stars = []
-    for i in range(count):
-        left = (i * 31 + 7) % 98 + 1
-        top = (i * 43 + 11) % 90 + 2
-        size = 2 + (i % 3)
-        duration = 2 + (i * 0.3) % 4
-        delay = (i * 0.2) % 5
-        stars.append(
-            f'<div class="star" style="left:{left}%;top:{top}%;width:{size}px;height:{size}px;'
-            f'animation-duration:{duration}s;animation-delay:{delay}s;"></div>'
-        )
-    return f'<div class="ambient-stars">{"".join(stars)}</div>'
-
-
-def _generate_fireflies_html(count: int = 8) -> str:
-    """蛍のHTMLを生成する。"""
-    flies = []
-    for i in range(count):
-        left = 5 + (i * 23 + 9) % 85
-        top = 10 + (i * 31 + 17) % 70
-        duration = 4 + (i * 1.5) % 6
-        delay = (i * 0.8) % 4
-        flies.append(
-            f'<div class="firefly" style="left:{left}%;top:{top}%;'
-            f'animation-duration:{duration}s;animation-delay:{delay}s;"></div>'
-        )
-    return f'<div class="ambient-fireflies">{"".join(flies)}</div>'
-
-
 def render_ambient_background(nikkei_change_pct: float | None = None) -> None:
-    """市場状況に応じた背景パーティクルを表示する。
+    """市場状況に応じた背景演出を表示する（CSS-onlyでDOM操作なし）。
 
-    Args:
-        nikkei_change_pct: 日経平均の前日比(%)。Noneの場合は時間帯のみで判定。
+    CSSのbox-shadowと疑似要素のみで実装し、
+    追加のHTML要素を生成しないことでReact DOM衝突を完全に回避する。
     """
-    # CSSを注入
-    st.markdown(f"<style>{_PARTICLE_CSS}</style>", unsafe_allow_html=True)
-
     # 暴落判定（-3%以上の下落）
     if nikkei_change_pct is not None and nikkei_change_pct <= -3.0:
-        st.markdown(_generate_rain_html(25), unsafe_allow_html=True)
+        # 雨の演出: 青みがかった暗いグラデーション
+        st.markdown("""<style>
+        .stApp::before {
+            background: radial-gradient(ellipse at top, rgba(60,80,120,0.08) 0%, transparent 70%) !important;
+        }
+        </style>""", unsafe_allow_html=True)
         return
 
     # 夜間判定（JST 18:00 - 06:00）
@@ -135,12 +47,23 @@ def render_ambient_background(nikkei_change_pct: float | None = None) -> None:
 
     hour = jst_now.hour
     if hour >= 18 or hour < 6:
-        # 夜はランダムで星か蛍のどちらか一方
         import random
         if random.random() < 0.5:
-            st.markdown(_generate_stars_html(20), unsafe_allow_html=True)
+            # 星空: 微かな白い輝き
+            st.markdown("""<style>
+            .stApp::before {
+                background: radial-gradient(ellipse at 20% 20%, rgba(240,236,228,0.03) 0%, transparent 50%),
+                            radial-gradient(ellipse at 80% 40%, rgba(240,236,228,0.02) 0%, transparent 40%) !important;
+            }
+            </style>""", unsafe_allow_html=True)
         else:
-            st.markdown(_generate_fireflies_html(6), unsafe_allow_html=True)
+            # 蛍: 温かいゴールドの光
+            st.markdown("""<style>
+            .stApp::before {
+                background: radial-gradient(ellipse at 30% 60%, rgba(212,175,55,0.04) 0%, transparent 50%),
+                            radial-gradient(ellipse at 70% 30%, rgba(212,175,55,0.03) 0%, transparent 40%) !important;
+            }
+            </style>""", unsafe_allow_html=True)
 
 
 # ═══════════════════════════════════════════════════════════════════
