@@ -22,8 +22,13 @@ import math
 # ═══════════════════════════════════════════════════════════════════
 
 _PARTICLE_CSS = """
+/* === 共通: コンテンツの背面に配置 === */
+.ambient-rain, .ambient-stars, .ambient-fireflies {
+    position:fixed; top:0; left:0; width:100%; height:100%;
+    pointer-events:none; z-index:-1; overflow:hidden;
+}
+
 /* === 雨（暴落時）=== */
-.ambient-rain { position:fixed; top:0; left:0; width:100%; height:100%; pointer-events:none; z-index:0; overflow:hidden; }
 .ambient-rain .drop {
     position:absolute; top:-20px; width:2px; background:linear-gradient(to bottom, transparent, rgba(100,140,180,0.4));
     border-radius:0 0 2px 2px; animation:ambientRainDrop linear infinite; pointer-events:none;
@@ -34,30 +39,28 @@ _PARTICLE_CSS = """
 }
 
 /* === 星（夜間）=== */
-.ambient-stars { position:fixed; top:0; left:0; width:100%; height:100%; pointer-events:none; z-index:0; overflow:hidden; }
 .ambient-stars .star {
     position:absolute; width:3px; height:3px; background:#f0ece4; border-radius:50%;
     animation:ambientStarTwinkle ease-in-out infinite; pointer-events:none;
 }
 @keyframes ambientStarTwinkle {
-    0%, 100% { opacity:0.2; transform:scale(0.8); }
-    50%      { opacity:0.9; transform:scale(1.2); }
+    0%, 100% { opacity:0.15; transform:scale(0.8); }
+    50%      { opacity:0.6; transform:scale(1.2); }
 }
 
 /* === 蛍（夜間）=== */
-.ambient-fireflies { position:fixed; top:0; left:0; width:100%; height:100%; pointer-events:none; z-index:0; overflow:hidden; }
 .ambient-fireflies .firefly {
     position:absolute; width:6px; height:6px; border-radius:50%;
-    background:radial-gradient(circle, rgba(212,175,55,0.8), rgba(212,175,55,0.01));
-    box-shadow:0 0 8px rgba(212,175,55,0.4);
+    background:radial-gradient(circle, rgba(212,175,55,0.6), rgba(212,175,55,0.01));
+    box-shadow:0 0 6px rgba(212,175,55,0.3);
     animation:ambientFireflyFloat ease-in-out infinite; pointer-events:none;
 }
 @keyframes ambientFireflyFloat {
-    0%   { transform:translate(0, 0) scale(1); opacity:0.3; }
-    25%  { transform:translate(15px, -20px) scale(1.1); opacity:0.8; }
-    50%  { transform:translate(-10px, -35px) scale(0.9); opacity:0.5; }
-    75%  { transform:translate(20px, -15px) scale(1.05); opacity:0.7; }
-    100% { transform:translate(0, 0) scale(1); opacity:0.3; }
+    0%   { transform:translate(0, 0) scale(1); opacity:0.2; }
+    25%  { transform:translate(15px, -20px) scale(1.1); opacity:0.5; }
+    50%  { transform:translate(-10px, -35px) scale(0.9); opacity:0.3; }
+    75%  { transform:translate(20px, -15px) scale(1.05); opacity:0.5; }
+    100% { transform:translate(0, 0) scale(1); opacity:0.2; }
 }
 """
 
@@ -132,9 +135,12 @@ def render_ambient_background(nikkei_change_pct: float | None = None) -> None:
 
     hour = jst_now.hour
     if hour >= 18 or hour < 6:
-        # 夜は星と蛍の両方
-        st.markdown(_generate_stars_html(25), unsafe_allow_html=True)
-        st.markdown(_generate_fireflies_html(6), unsafe_allow_html=True)
+        # 夜はランダムで星か蛍のどちらか一方
+        import random
+        if random.random() < 0.5:
+            st.markdown(_generate_stars_html(20), unsafe_allow_html=True)
+        else:
+            st.markdown(_generate_fireflies_html(6), unsafe_allow_html=True)
 
 
 # ═══════════════════════════════════════════════════════════════════
@@ -267,26 +273,10 @@ _GAUGE_CSS = """
 .gauge-container {
     position: relative;
     display: inline-block;
-    width: 140px;
-    height: 85px;
+    width: 160px;
+    height: 100px;
 }
 .gauge-bg { stroke: rgba(255,255,255,0.06); }
-.gauge-fill {
-    stroke-dasharray: 0 170;
-    animation: gaugeFill 1.5s ease-out forwards;
-    stroke-linecap: round;
-}
-.gauge-needle {
-    transform-origin: 70px 75px;
-    animation: gaugeNeedle 1.5s ease-out forwards;
-    stroke: #f0ece4;
-    stroke-width: 2;
-}
-@keyframes gaugeFill { to { stroke-dasharray: var(--gv) 170; } }
-@keyframes gaugeNeedle {
-    0%   { transform: rotate(-90deg); }
-    100% { transform: rotate(var(--ga)); }
-}
 .gauge-label {
     position: absolute;
     bottom: 0; left: 50%;
@@ -359,17 +349,34 @@ def render_gauge(
 
     uid = key or f"gauge_{label}_{id(value)}"
 
+    # 針の先端座標を計算
+    # angle: -90(左端) → 0(真上) → +90(右端)
+    # SVG座標: 右がx+、下がy+。角度0=真上なのでsin/cosを逆に使う
+    needle_len = 50
+    angle_rad = math.radians(angle)
+    nx = 80 + needle_len * math.sin(angle_rad)
+    ny = 80 - needle_len * math.cos(angle_rad)
+
     st.markdown(f"""
     <div class="gauge-container" id="{uid}">
-        <svg width="140" height="85" viewBox="0 0 140 85">
-            <path class="gauge-bg" d="M10,75 A60,60 0 0,1 130,75"
-                fill="none" stroke-width="10"/>
-            <path class="gauge-fill" d="M10,75 A60,60 0 0,1 130,75"
-                fill="none" stroke="{color}" stroke-width="10"
-                style="--gv:{fill_length:.0f};"/>
-            <line class="gauge-needle" x1="70" y1="75" x2="70" y2="22"
-                style="--ga:{angle:.0f}deg;"/>
-            <circle cx="70" cy="75" r="5" fill="{color}"/>
+        <svg width="160" height="100" viewBox="0 0 160 100">
+            <!-- 背景アーク -->
+            <path d="M15,80 A60,60 0 0,1 145,80"
+                fill="none" stroke="rgba(255,255,255,0.06)" stroke-width="12"/>
+            <!-- 値アーク -->
+            <path d="M15,80 A60,60 0 0,1 145,80"
+                fill="none" stroke="{color}" stroke-width="12"
+                stroke-dasharray="{fill_length:.0f} 190"
+                stroke-linecap="round"/>
+            <!-- 目盛り -->
+            <text x="12" y="95" fill="#4a5568" font-size="8" font-family="IBM Plex Mono,monospace">{min_val:.0f}</text>
+            <text x="132" y="95" fill="#4a5568" font-size="8" font-family="IBM Plex Mono,monospace">{max_val:.0f}</text>
+            <!-- 針 -->
+            <line x1="80" y1="80" x2="{nx:.1f}" y2="{ny:.1f}"
+                stroke="#f0ece4" stroke-width="2.5" stroke-linecap="round"/>
+            <!-- 針の中心点 -->
+            <circle cx="80" cy="80" r="4" fill="{color}"/>
+            <circle cx="80" cy="80" r="2" fill="#f0ece4"/>
         </svg>
         <div class="gauge-label">
             <div class="gauge-value" style="color:{color};">{value:.1f}</div>
