@@ -9,7 +9,10 @@ import sys
 import numpy as np
 import pandas as pd
 import plotly.graph_objects as go
-import quantstats as qs
+try:
+    import quantstats as qs
+except ImportError:
+    qs = None
 import streamlit as st
 import yfinance as yf
 
@@ -31,6 +34,10 @@ from modules.loading import helix_spinner
 from modules.persistence import load_into_session
 
 apply_theme()
+
+if qs is None:
+    st.error("quantstats ライブラリがインストールされていません。`pip install quantstats` を実行してください。")
+    st.stop()
 
 # ─── 定数 ─────────────────────────────────────────────────────────────────
 NIKKEI_TICKER = "^N225"  # 日経225（ベンチマーク）

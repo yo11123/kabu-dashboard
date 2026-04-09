@@ -21,6 +21,7 @@ xgboost>=2.0.0,<3.0.0
 lightgbm>=4.0.0,<5.0.0
 scikit-learn>=1.4.0,<2.0.0
 pandas-ta>=0.3.0,<1.0.0
+quantstats>=0.0.62,<1.0.0
 google-genai>=1.0.0,<2.0.0
 youtube-transcript-api>=1.0.0,<2.0.0
 supadata>=1.0.0,<2.0.0
