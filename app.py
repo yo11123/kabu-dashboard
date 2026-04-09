@@ -31,6 +31,7 @@ pages = {
     ],
     "運用": [
         st.Page("views/portfolio.py", title="ポートフォリオ", icon=":material/account_balance_wallet:"),
+        st.Page("views/portfolio_analytics.py", title="PFアナリティクス", icon=":material/analytics:"),
         st.Page("views/watchlist.py", title="ウォッチリスト", icon=":material/visibility:"),
     ],
     "ツール": [
