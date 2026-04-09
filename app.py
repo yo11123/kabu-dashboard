@@ -40,6 +40,7 @@ pages = {
         st.Page("views/youtube_analysis.py", title="YouTube分析", icon=":material/smart_display:"),
         st.Page("views/author_note.py", title="相場観掲示板", icon=":material/forum:"),
         st.Page("views/data_sources.py", title="データソース", icon=":material/database:"),
+        st.Page("views/ml_accuracy.py", title="ML精度", icon=":material/speed:"),
     ],
 }
 
