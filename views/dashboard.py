@@ -36,6 +36,7 @@ from modules.ai_analysis import (
 
 from modules.loading import helix_spinner
 from modules.tech_scorecard import render_scorecard
+from modules.ambient import render_ambient_background, render_ticker_tape, render_vix_gauge, render_rsi_gauge
 apply_theme()
 try_restore_from_cookies()
 
@@ -636,6 +637,9 @@ def main() -> None:
         st.divider()
         st.markdown(market_status_label(), unsafe_allow_html=True)
 
+    # ─── ティッカーテープ（画面上部） ──────────────────────────────
+    render_ticker_tape()
+
     # ─── データ取得（常に上場来全データ）────────────────────────────
     # @st.cache_data の TTL でレート制限を制御するため、毎回関数を呼ぶ。
     # 銘柄変更・ボタン押下時だけスピナーを表示し、autorefresh 時はサイレント更新。
@@ -881,6 +885,30 @@ def main() -> None:
     # ════════════════════════════════════════════════════════════════
     with tab_score:
         render_scorecard(_tech_summary, last_close)
+
+        # VIX / RSI ゲージ
+        g1, g2, g3 = st.columns([1, 1, 2])
+        with g1:
+            rsi_val = _tech_summary.get("rsi")
+            if rsi_val is not None:
+                render_rsi_gauge(float(rsi_val))
+        with g2:
+            try:
+                import yfinance as _yf
+                _vix_hist = _yf.Ticker("^VIX").history(period="1d")
+                if _vix_hist is not None and not _vix_hist.empty:
+                    _vix_cols = [c[0] if isinstance(c, tuple) else c for c in _vix_hist.columns]
+                    _vix_hist.columns = _vix_cols
+                    render_vix_gauge(float(_vix_hist["Close"].iloc[-1]))
+            except Exception:
+                pass
+
+        # 背景パーティクル（日経変動に連動）
+        try:
+            _nk_change = float(df["Close"].iloc[-1] / df["Close"].iloc[-2] - 1) * 100 if len(df) >= 2 else 0
+            render_ambient_background(nikkei_change_pct=_nk_change)
+        except Exception:
+            render_ambient_background()
 
     # ════════════════════════════════════════════════════════════════
     # TAB 1: ファンダメンタルズ + 信用残
