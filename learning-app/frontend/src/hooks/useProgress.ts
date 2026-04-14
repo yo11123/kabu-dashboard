@@ -3,11 +3,17 @@
 import { useState, useEffect, useCallback } from "react";
 import type { UserProgress } from "@/types/progress";
 import { pythonBasicsLessons } from "@/content/python-basics";
+import { machineLearningLessons } from "@/content/machine-learning";
+import { deepLearningLessons } from "@/content/deep-learning";
+import { generativeAiLessons } from "@/content/generative-ai";
 
 const STORAGE_KEY = "python-learning-progress";
 
 const lessonsMap: Record<string, { exercises: { id: string }[] }[]> = {
   "python-basics": pythonBasicsLessons,
+  "machine-learning": machineLearningLessons,
+  "deep-learning": deepLearningLessons,
+  "generative-ai": generativeAiLessons,
 };
 
 function loadProgress(): UserProgress {

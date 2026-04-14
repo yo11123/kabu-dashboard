@@ -84,15 +84,21 @@ print(f"パラメータ総数: {total_params}")
     ],
     testCases: [
       {
-        type: "stdout",
+        id: "tc1",
+                description: "正しい結果が出力される",
+                type: "stdout",
         expected: "入力形状: torch.Size([4, 20])",
       },
       {
+        id: "tc2",
+        description: "正しい結果が出力される",
         type: "stdout",
         expected: "出力形状: torch.Size([4, 5])",
       },
       {
-        type: "stdout",
+        id: "tc3",
+                description: "正しい結果が出力される",
+                type: "stdout",
         expected: "パラメータ総数: 3493",
       },
     ],
@@ -152,14 +158,20 @@ print(f"層の数: {len(model)}")
     ],
     testCases: [
       {
+        id: "tc4",
+        description: "正しい結果が出力される",
         type: "stdout",
         expected: "入力形状: torch.Size([8, 10])",
       },
       {
-        type: "stdout",
+        id: "tc5",
+                description: "正しい結果が出力される",
+                type: "stdout",
         expected: "出力形状: torch.Size([8, 1])",
       },
       {
+        id: "tc6",
+        description: "正しい結果が出力される",
         type: "stdout",
         expected: "層の数: 6",
       },

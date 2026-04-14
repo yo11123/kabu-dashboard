@@ -48,7 +48,9 @@ print(df.to_string(index=False))
     ],
     testCases: [
       {
-        type: "stdout",
+        id: "tc1",
+                description: "正しい結果が出力される",
+                type: "stdout",
         expected: "=== 欠損値の数 ===",
       },
     ],
@@ -102,6 +104,8 @@ print(f"最大値: {X_minmax.max(axis=0).round(2)}")
     ],
     testCases: [
       {
+        id: "tc2",
+        description: "正しい結果が出力される",
         type: "stdout",
         expected: "=== StandardScaler ===",
       },

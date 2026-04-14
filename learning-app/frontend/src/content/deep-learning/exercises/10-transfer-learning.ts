@@ -98,15 +98,21 @@ print(f"出力形状: {output.shape}")
     ],
     testCases: [
       {
-        type: "stdout",
+        id: "tc1",
+                description: "正しい結果が出力される",
+                type: "stdout",
         expected: "凍結パラメータ数: 8544",
       },
       {
+        id: "tc2",
+        description: "正しい結果が出力される",
         type: "stdout",
         expected: "学習可能パラメータ数: 165",
       },
       {
-        type: "stdout",
+        id: "tc3",
+                description: "正しい結果が出力される",
+                type: "stdout",
         expected: "出力形状: torch.Size([4, 5])",
       },
     ],
@@ -290,6 +296,8 @@ print("転移学習完了")
     ],
     testCases: [
       {
+        id: "tc4",
+        description: "正しい結果が出力される",
         type: "stdout",
         expected: "転移学習完了",
       },

@@ -15,6 +15,9 @@ import {
 } from "lucide-react";
 import { courses } from "@/content/courses";
 import { pythonBasicsLessons } from "@/content/python-basics";
+import { machineLearningLessons } from "@/content/machine-learning";
+import { deepLearningLessons } from "@/content/deep-learning";
+import { generativeAiLessons } from "@/content/generative-ai";
 import type { Course, LessonMeta } from "@/types/course";
 import { useProgress } from "@/hooks/useProgress";
 import { useState } from "react";
@@ -28,6 +31,9 @@ const iconMap: Record<string, React.ComponentType<React.SVGProps<SVGSVGElement> 
 
 const lessonsMap: Record<string, LessonMeta[]> = {
   "python-basics": pythonBasicsLessons,
+  "machine-learning": machineLearningLessons,
+  "deep-learning": deepLearningLessons,
+  "generative-ai": generativeAiLessons,
 };
 
 export default function Sidebar({

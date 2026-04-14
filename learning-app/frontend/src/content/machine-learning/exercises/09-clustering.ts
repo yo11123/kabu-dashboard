@@ -48,7 +48,9 @@ print(f"シルエットスコア: {score:.3f}")
     ],
     testCases: [
       {
-        type: "stdout",
+        id: "tc1",
+                description: "正しい結果が出力される",
+                type: "stdout",
         expected: "=== クラスタの重心 ===",
       },
     ],
@@ -105,6 +107,8 @@ print(f"\\n最適なクラスタ数: {best_k} (シルエットスコア: {best_s
     ],
     testCases: [
       {
+        id: "tc2",
+        description: "正しい結果が出力される",
         type: "stdout",
         expected: "最適なクラスタ数:",
       },

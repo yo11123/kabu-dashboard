@@ -91,7 +91,9 @@ for word, prob in sorted(probs.items(), key=lambda x: -x[1]):
     ],
     testCases: [
       {
-        type: "custom",
+        id: "tc1",
+                description: "正しい結果が出力される",
+                type: "custom",
         checkCode: `
 logits = {"A": 2.0, "B": 1.0, "C": 0.0}
 probs = apply_temperature(logits, 1.0)
@@ -104,7 +106,6 @@ probs_low = apply_temperature(logits, 0.1)
 assert probs_low["A"] > 0.95, "低いtemperatureでは最大値がほぼ1.0になるべきです"
 print("PASS")
 `,
-        description: "Temperature サンプリングが正しく動作すること",
       },
     ],
   },
@@ -195,7 +196,9 @@ print(f"最後のメッセージ: {result[-1]['content']}")
     ],
     testCases: [
       {
-        type: "custom",
+        id: "tc2",
+                description: "正しい結果が出力される",
+                type: "custom",
         checkCode: `
 msgs = [
     {"role": "system", "content": "sys"},
@@ -210,7 +213,6 @@ total = sum(estimate_message_tokens(m) for m in result)
 assert total <= 10, f"トークン数が制限を超えています: {total}"
 print("PASS")
 `,
-        description: "コンテキストウィンドウ管理が正しく動作すること",
       },
     ],
   },

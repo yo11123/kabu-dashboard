@@ -58,6 +58,8 @@ print(tree_rules)
     ],
     testCases: [
       {
+        id: "tc1",
+        description: "正しい結果が出力される",
         type: "stdout",
         expected: "正解率: 1.00",
       },

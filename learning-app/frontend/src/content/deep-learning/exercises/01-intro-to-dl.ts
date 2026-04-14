@@ -43,15 +43,21 @@ print(f"合計: {x_sum}")
     ],
     testCases: [
       {
-        type: "stdout",
+        id: "tc1",
+                description: "正しい結果が出力される",
+                type: "stdout",
         expected: "テンソル: tensor([1., 2., 3., 4., 5.])",
       },
       {
+        id: "tc2",
+        description: "正しい結果が出力される",
         type: "stdout",
         expected: "2乗: tensor([ 1.,  4.,  9., 16., 25.])",
       },
       {
-        type: "stdout",
+        id: "tc3",
+                description: "正しい結果が出力される",
+                type: "stdout",
         expected: "合計: 15.0",
       },
     ],
@@ -89,14 +95,20 @@ print(f"データ型: {matrix.dtype}")
     ],
     testCases: [
       {
+        id: "tc4",
+        description: "正しい結果が出力される",
         type: "stdout",
         expected: "形状: torch.Size([3, 4])",
       },
       {
-        type: "stdout",
+        id: "tc5",
+                description: "正しい結果が出力される",
+                type: "stdout",
         expected: "次元数: 2",
       },
       {
+        id: "tc6",
+        description: "正しい結果が出力される",
         type: "stdout",
         expected: "要素数: 12",
       },

@@ -33,7 +33,9 @@ print(f"2乗: {squared}")
     ],
     testCases: [
       {
-        type: "stdout",
+        id: "tc1",
+                description: "正しい結果が出力される",
+                type: "stdout",
         expected: "平均値: 5.5",
       },
     ],
@@ -81,6 +83,8 @@ print(sorted_df.to_string(index=False))
     ],
     testCases: [
       {
+        id: "tc2",
+        description: "正しい結果が出力される",
         type: "stdout",
         expected: "年齢の平均値: 30.0",
       },

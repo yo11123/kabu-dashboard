@@ -84,10 +84,14 @@ print(f"期待値: 重み≈2.00, バイアス≈1.00")
     ],
     testCases: [
       {
-        type: "stdout",
+        id: "tc1",
+                description: "正しい結果が出力される",
+                type: "stdout",
         expected: "学習した重み: 2.0",
       },
       {
+        id: "tc2",
+        description: "正しい結果が出力される",
         type: "stdout",
         expected: "学習したバイアス: 1.0",
       },
@@ -196,6 +200,8 @@ with torch.no_grad():
     ],
     testCases: [
       {
+        id: "tc3",
+        description: "正しい結果が出力される",
         type: "custom",
         checkCode: `
 output_lines = stdout.strip().split("\\n")

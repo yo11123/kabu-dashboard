@@ -46,7 +46,9 @@ print(classification_report(y_test, y_pred))
     ],
     testCases: [
       {
-        type: "stdout",
+        id: "tc1",
+                description: "正しい結果が出力される",
+                type: "stdout",
         expected: "正解率:",
       },
     ],
@@ -103,6 +105,8 @@ for i in range(5):
     ],
     testCases: [
       {
+        id: "tc2",
+        description: "正しい結果が出力される",
         type: "stdout",
         expected: "正解率: 1.00",
       },

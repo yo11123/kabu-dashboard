@@ -57,7 +57,9 @@ print(f"スケーリングありの正解率: {accuracy_score(y_test, y_pred_sca
     ],
     testCases: [
       {
-        type: "stdout",
+        id: "tc1",
+                description: "正しい結果が出力される",
+                type: "stdout",
         expected: "スケーリングなしの正解率:",
       },
     ],
@@ -116,6 +118,8 @@ for kernel in kernels:
     ],
     testCases: [
       {
+        id: "tc2",
+        description: "正しい結果が出力される",
         type: "stdout",
         expected: "カーネル=linear:",
       },

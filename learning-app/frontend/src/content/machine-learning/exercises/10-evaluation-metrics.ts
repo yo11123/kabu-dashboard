@@ -64,7 +64,9 @@ print(classification_report(y_test, y_pred))
     ],
     testCases: [
       {
-        type: "stdout",
+        id: "tc1",
+                description: "正しい結果が出力される",
+                type: "stdout",
         expected: "=== 混同行列 ===",
       },
     ],
@@ -120,6 +122,8 @@ print(f"R²:   {r2:.4f}")
     ],
     testCases: [
       {
+        id: "tc2",
+        description: "正しい結果が出力される",
         type: "stdout",
         expected: "MSE:",
       },

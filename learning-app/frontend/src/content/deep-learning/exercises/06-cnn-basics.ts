@@ -71,15 +71,21 @@ print(f"MaxPool後: {out2.shape}")
     ],
     testCases: [
       {
-        type: "stdout",
+        id: "tc1",
+                description: "正しい結果が出力される",
+                type: "stdout",
         expected: "入力形状: torch.Size([1, 3, 32, 32])",
       },
       {
+        id: "tc2",
+        description: "正しい結果が出力される",
         type: "stdout",
         expected: "Conv2d後: torch.Size([1, 16, 32, 32])",
       },
       {
-        type: "stdout",
+        id: "tc3",
+                description: "正しい結果が出力される",
+                type: "stdout",
         expected: "MaxPool後: torch.Size([1, 16, 16, 16])",
       },
     ],
@@ -166,14 +172,20 @@ print(f"パラメータ総数: {total_params}")
     ],
     testCases: [
       {
+        id: "tc4",
+        description: "正しい結果が出力される",
         type: "stdout",
         expected: "入力形状: torch.Size([2, 1, 28, 28])",
       },
       {
-        type: "stdout",
+        id: "tc5",
+                description: "正しい結果が出力される",
+                type: "stdout",
         expected: "出力形状: torch.Size([2, 10])",
       },
       {
+        id: "tc6",
+        description: "正しい結果が出力される",
         type: "stdout",
         expected: "パラメータ総数: 206922",
       },

@@ -44,10 +44,14 @@ print(f"行の平均: {row_mean}")
     ],
     testCases: [
       {
-        type: "stdout",
+        id: "tc1",
+                description: "正しい結果が出力される",
+                type: "stdout",
         expected: "列の合計: tensor([12, 15, 18, 21])",
       },
       {
+        id: "tc2",
+        description: "正しい結果が出力される",
         type: "stdout",
         expected: "行の平均: tensor([1.5000, 5.5000, 9.5000])",
       },
@@ -99,14 +103,20 @@ print(f"2行目: {row}")
     ],
     testCases: [
       {
-        type: "stdout",
+        id: "tc3",
+                description: "正しい結果が出力される",
+                type: "stdout",
         expected: "行列積:\ntensor([[ 58.,  64.],\n        [139., 154.]])",
       },
       {
+        id: "tc4",
+        description: "正しい結果が出力される",
         type: "stdout",
         expected: "5より大きい要素: tensor([8, 6, 9, 7])",
       },
       {
+        id: "tc5",
+        description: "正しい結果が出力される",
         type: "stdout",
         expected: "2行目: tensor([6, 2, 9])",
       },

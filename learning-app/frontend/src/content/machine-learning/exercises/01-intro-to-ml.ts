@@ -31,7 +31,9 @@ print(f"特徴量名: {list(iris.feature_names)}")
     ],
     testCases: [
       {
-        type: "stdout",
+        id: "tc1",
+                description: "正しい結果が出力される",
+                type: "stdout",
         expected: "データの形状: (150, 4)",
       },
     ],
@@ -70,6 +72,8 @@ print(f"テストデータ数: {X_test.shape[0]}")
     ],
     testCases: [
       {
+        id: "tc2",
+        description: "正しい結果が出力される",
         type: "stdout",
         expected: "訓練データ数: 120",
       },

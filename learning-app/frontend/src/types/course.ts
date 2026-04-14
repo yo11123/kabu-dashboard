@@ -31,7 +31,8 @@ export interface TestCase {
   id: string;
   description: string;
   type: "stdout" | "return_value" | "variable_check" | "custom";
-  expected: string | number | boolean | Record<string, unknown>;
+  expected?: string | number | boolean | Record<string, unknown>;
+  checkCode?: string;
 }
 
 export interface CourseWithLessons extends Course {

@@ -43,7 +43,9 @@ print(f"\\n平均スコア: {scores.mean():.4f} (+/- {scores.std():.4f})")
     ],
     testCases: [
       {
-        type: "stdout",
+        id: "tc1",
+                description: "正しい結果が出力される",
+                type: "stdout",
         expected: "=== 5-Fold 交差検証 ===",
       },
     ],
@@ -111,6 +113,8 @@ for i in range(3):
     ],
     testCases: [
       {
+        id: "tc2",
+        description: "正しい結果が出力される",
         type: "stdout",
         expected: "最良パラメータ:",
       },

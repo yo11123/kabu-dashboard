@@ -63,7 +63,7 @@ export default function Home() {
                     key={course.id}
                     course={course}
                     progress={courseProgress(course.id)}
-                    available={available || course.id === "python-basics"}
+                    available={true}
                   />
                 );
               })}

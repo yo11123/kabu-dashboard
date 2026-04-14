@@ -49,15 +49,21 @@ print(f"dy/dx = {x.grad.item()}")
     ],
     testCases: [
       {
-        type: "stdout",
+        id: "tc1",
+                description: "正しい結果が出力される",
+                type: "stdout",
         expected: "x = 3.0",
       },
       {
+        id: "tc2",
+        description: "正しい結果が出力される",
         type: "stdout",
         expected: "y = 31.0",
       },
       {
-        type: "stdout",
+        id: "tc3",
+                description: "正しい結果が出力される",
+                type: "stdout",
         expected: "dy/dx = 34.0",
       },
     ],
@@ -129,6 +135,8 @@ print(f"最小値 y = {((x.item() - 3) ** 2):.6f}")
     ],
     testCases: [
       {
+        id: "tc4",
+        description: "正しい結果が出力される",
         type: "stdout",
         expected: "最適化後の x = 3.0000",
       },

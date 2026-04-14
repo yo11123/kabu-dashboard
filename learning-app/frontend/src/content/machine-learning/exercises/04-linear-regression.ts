@@ -57,7 +57,9 @@ print(f"切片: {model.intercept_:.4f}")
     ],
     testCases: [
       {
-        type: "stdout",
+        id: "tc1",
+                description: "正しい結果が出力される",
+                type: "stdout",
         expected: "R²スコア:",
       },
     ],
@@ -113,6 +115,8 @@ for name, model in models.items():
     ],
     testCases: [
       {
+        id: "tc2",
+        description: "正しい結果が出力される",
         type: "stdout",
         expected: "LinearRegression:",
       },

@@ -65,10 +65,10 @@ print(estimate_tokens("Python 3.12"))
     ],
     testCases: [
       {
-        type: "stdout",
-        input: "",
-        expected: "3",
+        id: "tc1",
         description: "英語テキスト 'Hello World' のトークン推定",
+        type: "stdout",
+        expected: "3",
       },
     ],
   },
@@ -119,6 +119,8 @@ for category, techs in sorted(result.items()):
     ],
     testCases: [
       {
+        id: "tc2",
+        description: "AI技術が正しく分類されていること",
         type: "custom",
         checkCode: `
 result = classify_ai_technologies()
@@ -130,7 +132,6 @@ assert "DALL-E" in result["画像生成"], "DALL-Eは画像生成です"
 assert "Whisper" in result["音声処理"], "Whisperは音声処理です"
 print("PASS")
 `,
-        description: "AI技術が正しく分類されていること",
       },
     ],
   },

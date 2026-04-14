@@ -55,18 +55,26 @@ print(f"セル状態形状: {c_n.shape}")
     ],
     testCases: [
       {
-        type: "stdout",
+        id: "tc1",
+                description: "正しい結果が出力される",
+                type: "stdout",
         expected: "入力形状: torch.Size([3, 8, 5])",
       },
       {
+        id: "tc2",
+        description: "正しい結果が出力される",
         type: "stdout",
         expected: "出力形状: torch.Size([3, 8, 10])",
       },
       {
-        type: "stdout",
+        id: "tc3",
+                description: "正しい結果が出力される",
+                type: "stdout",
         expected: "隠れ状態形状: torch.Size([2, 3, 10])",
       },
       {
+        id: "tc4",
+        description: "正しい結果が出力される",
         type: "stdout",
         expected: "セル状態形状: torch.Size([2, 3, 10])",
       },
@@ -203,6 +211,8 @@ with torch.no_grad():
     ],
     testCases: [
       {
+        id: "tc5",
+        description: "正しい結果が出力される",
         type: "stdout",
         expected: "学習完了",
       },

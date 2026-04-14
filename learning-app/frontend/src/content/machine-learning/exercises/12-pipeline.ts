@@ -58,7 +58,9 @@ print(f"パイプラインあり（スケーリングあり）: {accuracy_score(
     ],
     testCases: [
       {
-        type: "stdout",
+        id: "tc1",
+                description: "正しい結果が出力される",
+                type: "stdout",
         expected: "パイプラインなし",
       },
     ],
@@ -127,6 +129,8 @@ print(f"テストデータの正解率: {accuracy_score(y_test, y_pred):.2f}")
     ],
     testCases: [
       {
+        id: "tc2",
+        description: "正しい結果が出力される",
         type: "stdout",
         expected: "最良パラメータ:",
       },

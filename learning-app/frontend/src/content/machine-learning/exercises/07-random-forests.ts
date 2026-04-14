@@ -54,7 +54,9 @@ for i in range(5):
     ],
     testCases: [
       {
-        type: "stdout",
+        id: "tc1",
+                description: "正しい結果が出力される",
+                type: "stdout",
         expected: "正解率:",
       },
     ],
@@ -112,6 +114,8 @@ print(f"ランダムフォレストのOOBスコア: {rf.oob_score_:.2f}")
     ],
     testCases: [
       {
+        id: "tc2",
+        description: "正しい結果が出力される",
         type: "stdout",
         expected: "決定木の正解率:",
       },

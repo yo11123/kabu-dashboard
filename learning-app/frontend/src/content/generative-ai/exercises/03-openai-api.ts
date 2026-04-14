@@ -71,7 +71,9 @@ print(json.dumps(request, ensure_ascii=False, indent=2))
     ],
     testCases: [
       {
-        type: "custom",
+        id: "tc1",
+                description: "正しい結果が出力される",
+                type: "custom",
         checkCode: `
 req = build_chat_request("gpt-4", "system msg", "user msg", 0.5, 100)
 assert req["model"] == "gpt-4", "modelが正しくありません"
@@ -82,7 +84,6 @@ assert req["temperature"] == 0.5, "temperatureが正しくありません"
 assert req["max_tokens"] == 100, "max_tokensが正しくありません"
 print("PASS")
 `,
-        description: "正しいAPIリクエストボディが構築されること",
       },
     ],
   },
@@ -197,7 +198,9 @@ for key, value in result.items():
     ],
     testCases: [
       {
-        type: "custom",
+        id: "tc2",
+                description: "正しい結果が出力される",
+                type: "custom",
         checkCode: `
 result = parse_chat_response(MOCK_RESPONSE)
 assert "content" in result, "contentが必要です"
@@ -210,7 +213,6 @@ expected_cost = (45 / 1000 * 0.03) + (32 / 1000 * 0.06)
 assert abs(result["estimated_cost"] - round(expected_cost, 6)) < 0.0001, "コスト計算が正しくありません"
 print("PASS")
 `,
-        description: "APIレスポンスが正しくパースされること",
       },
     ],
   },

@@ -61,18 +61,26 @@ print(f"output[:,-1,:] == h_n[0]: {is_equal}")
     ],
     testCases: [
       {
-        type: "stdout",
+        id: "tc1",
+                description: "正しい結果が出力される",
+                type: "stdout",
         expected: "入力形状: torch.Size([2, 5, 4])",
       },
       {
+        id: "tc2",
+        description: "正しい結果が出力される",
         type: "stdout",
         expected: "出力形状: torch.Size([2, 5, 8])",
       },
       {
-        type: "stdout",
+        id: "tc3",
+                description: "正しい結果が出力される",
+                type: "stdout",
         expected: "最終隠れ状態形状: torch.Size([1, 2, 8])",
       },
       {
+        id: "tc4",
+        description: "正しい結果が出力される",
         type: "stdout",
         expected: "output[:,-1,:] == h_n[0]: True",
       },
@@ -155,14 +163,20 @@ print(f"パラメータ総数: {total_params}")
     ],
     testCases: [
       {
-        type: "stdout",
+        id: "tc5",
+                description: "正しい結果が出力される",
+                type: "stdout",
         expected: "入力形状: torch.Size([5, 10, 3])",
       },
       {
+        id: "tc6",
+        description: "正しい結果が出力される",
         type: "stdout",
         expected: "出力形状: torch.Size([5, 4])",
       },
       {
+        id: "tc7",
+        description: "正しい結果が出力される",
         type: "stdout",
         expected: "パラメータ総数: 388",
       },

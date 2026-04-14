@@ -9,11 +9,17 @@ import Header from "@/components/layout/Header";
 import ProgressBar from "@/components/progress/ProgressBar";
 import { courses } from "@/content/courses";
 import { pythonBasicsLessons } from "@/content/python-basics";
+import { machineLearningLessons } from "@/content/machine-learning";
+import { deepLearningLessons } from "@/content/deep-learning";
+import { generativeAiLessons } from "@/content/generative-ai";
 import { useProgress } from "@/hooks/useProgress";
 import type { LessonMeta } from "@/types/course";
 
 const lessonsMap: Record<string, LessonMeta[]> = {
   "python-basics": pythonBasicsLessons,
+  "machine-learning": machineLearningLessons,
+  "deep-learning": deepLearningLessons,
+  "generative-ai": generativeAiLessons,
 };
 
 export default function CoursePage({

@@ -164,6 +164,8 @@ print("学習完了")
     ],
     testCases: [
       {
+        id: "tc1",
+        description: "正しい結果が出力される",
         type: "stdout",
         expected: "学習完了",
       },
