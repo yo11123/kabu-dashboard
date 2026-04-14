@@ -1,0 +1,142 @@
+@import "tailwindcss";
+
+:root {
+  --bg-base: #06090f;
+  --bg-panel: #0a0f1a;
+  --bg-elevated: #0e1320;
+  --bg-sidebar: #050810;
+  --border: rgba(212, 175, 55, 0.08);
+  --border-hover: rgba(212, 175, 55, 0.2);
+  --gold: #d4af37;
+  --gold-light: #e6c34d;
+  --sage: #8fb8a0;
+  --ivory: #f0ece4;
+  --ivory-muted: #b8b0a2;
+  --text-muted: #6b7280;
+  --success: #5ca08b;
+  --error: #c45c5c;
+  --warning: #d4a037;
+}
+
+@theme inline {
+  --color-bg-base: var(--bg-base);
+  --color-bg-panel: var(--bg-panel);
+  --color-bg-elevated: var(--bg-elevated);
+  --color-bg-sidebar: var(--bg-sidebar);
+  --color-border: var(--border);
+  --color-border-hover: var(--border-hover);
+  --color-gold: var(--gold);
+  --color-gold-light: var(--gold-light);
+  --color-sage: var(--sage);
+  --color-ivory: var(--ivory);
+  --color-ivory-muted: var(--ivory-muted);
+  --color-text-muted: var(--text-muted);
+  --color-success: var(--success);
+  --color-error: var(--error);
+  --color-warning: var(--warning);
+  --font-sans: "Inter", "Noto Sans JP", sans-serif;
+  --font-mono: "IBM Plex Mono", "Consolas", monospace;
+  --font-serif: "Cormorant Garamond", "Noto Sans JP", serif;
+}
+
+body {
+  background: var(--bg-base);
+  color: var(--ivory);
+  font-family: var(--font-sans);
+}
+
+/* Scrollbar styling */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+::-webkit-scrollbar-track {
+  background: var(--bg-panel);
+}
+
+::-webkit-scrollbar-thumb {
+  background: rgba(212, 175, 55, 0.15);
+  border-radius: 3px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: rgba(212, 175, 55, 0.3);
+}
+
+/* Code block base styling */
+pre code {
+  font-family: var(--font-mono);
+  font-size: 14px;
+  line-height: 1.6;
+}
+
+/* Lesson content styling */
+.lesson-content h1 {
+  font-family: var(--font-serif);
+  color: var(--gold);
+  font-size: 2rem;
+  font-weight: 600;
+  margin-bottom: 1rem;
+}
+
+.lesson-content h2 {
+  font-family: var(--font-serif);
+  color: var(--gold);
+  font-size: 1.5rem;
+  font-weight: 500;
+  margin-top: 2rem;
+  margin-bottom: 0.75rem;
+}
+
+.lesson-content h3 {
+  color: var(--ivory);
+  font-size: 1.2rem;
+  font-weight: 500;
+  margin-top: 1.5rem;
+  margin-bottom: 0.5rem;
+}
+
+.lesson-content p {
+  color: var(--ivory-muted);
+  line-height: 1.8;
+  margin-bottom: 1rem;
+}
+
+.lesson-content code:not(pre code) {
+  background: var(--bg-elevated);
+  color: var(--sage);
+  padding: 0.15rem 0.4rem;
+  border-radius: 4px;
+  font-family: var(--font-mono);
+  font-size: 0.9em;
+}
+
+.lesson-content ul,
+.lesson-content ol {
+  color: var(--ivory-muted);
+  padding-left: 1.5rem;
+  margin-bottom: 1rem;
+  line-height: 1.8;
+}
+
+.lesson-content li {
+  margin-bottom: 0.25rem;
+}
+
+.lesson-content blockquote {
+  border-left: 3px solid var(--gold);
+  padding: 0.75rem 1rem;
+  margin: 1rem 0;
+  background: rgba(212, 175, 55, 0.05);
+  border-radius: 0 4px 4px 0;
+}
+
+.lesson-content blockquote p {
+  margin-bottom: 0;
+}
+
+.lesson-content strong {
+  color: var(--ivory);
+  font-weight: 600;
+}

@@ -5,3 +5,9 @@ __pycache__/
 .venv/
 venv/
 .data/
+
+# Learning app
+learning-app/frontend/node_modules/
+learning-app/frontend/.next/
+learning-app/frontend/.env.local
+learning-app/backend/__pycache__/
