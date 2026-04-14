@@ -43,6 +43,9 @@ pages = {
         st.Page("views/data_sources.py", title="データソース", icon=":material/database:"),
         st.Page("views/ml_accuracy.py", title="ML精度", icon=":material/speed:"),
     ],
+    "学習": [
+        st.Page("views/learning.py", title="Python学習", icon=":material/school:"),
+    ],
 }
 
 pg = st.navigation(pages)
