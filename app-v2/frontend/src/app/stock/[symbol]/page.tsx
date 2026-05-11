@@ -1,11 +1,18 @@
 "use client";
 
-import { use, useEffect, useState } from "react";
+import { use, useCallback, useEffect, useMemo, useState } from "react";
+import type { IChartApi } from "lightweight-charts";
 import { useOhlcv, useTechnicals, useFundamentals } from "@/hooks/useStockData";
 import { useIsMobile } from "@/hooks/useBreakpoint";
 import { useSettings } from "@/stores/settings";
 import { CandleChart } from "@/components/chart/CandleChart";
-import { ChartToolbar, type Period, type Overlays } from "@/components/chart/ChartToolbar";
+import { IndicatorPane } from "@/components/chart/IndicatorPane";
+import {
+  ChartToolbar,
+  type Period,
+  type Overlays,
+  type Subpanels,
+} from "@/components/chart/ChartToolbar";
 import { TechnicalPanel } from "@/components/panels/TechnicalPanel";
 import { FundamentalsPanel } from "@/components/panels/FundamentalsPanel";
 import { AIPanel } from "@/components/panels/AIPanel";
@@ -26,7 +33,13 @@ export default function StockDetailPage({ params }: { params: Promise<{ symbol: 
     sma200: false,
     bb: false,
   });
+  const [subpanels, setSubpanels] = useState<Subpanels>({
+    volume: true,
+    rsi: false,
+    macd: false,
+  });
   const [tab, setTab] = useState<Tab>("technical");
+  const [mainChart, setMainChart] = useState<IChartApi | null>(null);
 
   const ohlcvQ = useOhlcv(symbol, period, "1d");
   const techQ = useTechnicals(symbol, period);
@@ -38,6 +51,39 @@ export default function StockDetailPage({ params }: { params: Promise<{ symbol: 
 
   const toggleOverlay = (k: keyof Overlays) =>
     setOverlays((o) => ({ ...o, [k]: !o[k] }));
+  const toggleSubpanel = (k: keyof Subpanels) =>
+    setSubpanels((s) => ({ ...s, [k]: !s[k] }));
+
+  const handleChartReady = useCallback((chart: IChartApi) => {
+    setMainChart(chart);
+  }, []);
+
+  const rsiData = useMemo(
+    () =>
+      (techQ.data?.series ?? []).map((p) => ({ time: p.time, value: p.rsi14 })),
+    [techQ.data],
+  );
+  const macdLine = useMemo(
+    () =>
+      (techQ.data?.series ?? []).map((p) => ({ time: p.time, value: p.macd })),
+    [techQ.data],
+  );
+  const macdSignal = useMemo(
+    () =>
+      (techQ.data?.series ?? []).map((p) => ({
+        time: p.time,
+        value: p.macd_signal,
+      })),
+    [techQ.data],
+  );
+  const macdHist = useMemo(
+    () =>
+      (techQ.data?.series ?? []).map((p) => ({
+        time: p.time,
+        value: p.macd_hist,
+      })),
+    [techQ.data],
+  );
 
   const lastPrice = ohlcvQ.data?.points.at(-1)?.close;
   const firstPrice = ohlcvQ.data?.points[0]?.close;
@@ -76,11 +122,12 @@ export default function StockDetailPage({ params }: { params: Promise<{ symbol: 
       onPeriodChange={setPeriod}
       overlays={overlays}
       onOverlayToggle={toggleOverlay}
-      compact={isMobile}
+      subpanels={subpanels}
+      onSubpanelToggle={toggleSubpanel}
     />
   );
 
-  const Chart = ohlcvQ.isLoading ? (
+  const ChartStack = ohlcvQ.isLoading ? (
     <div className="h-[400px] flex items-center justify-center text-[var(--text-faint)] text-sm">
       読み込み中…
     </div>
@@ -89,12 +136,44 @@ export default function StockDetailPage({ params }: { params: Promise<{ symbol: 
       データを取得できませんでした
     </div>
   ) : (
-    <CandleChart
-      ohlcv={ohlcvQ.data?.points ?? []}
-      technicals={techQ.data?.series}
-      overlays={overlays}
-      height={isMobile ? 320 : 480}
-    />
+    <div className="space-y-1">
+      <CandleChart
+        ohlcv={ohlcvQ.data?.points ?? []}
+        technicals={techQ.data?.series}
+        overlays={overlays}
+        showVolume={subpanels.volume}
+        height={isMobile ? 320 : 460}
+        onChartReady={handleChartReady}
+      />
+      {subpanels.rsi && techQ.data && (
+        <IndicatorPane
+          title="RSI(14)"
+          height={isMobile ? 100 : 120}
+          parentChart={mainChart}
+          lines={[{ key: "rsi", data: rsiData, color: "#c97444", lineWidth: 1 }]}
+          referenceLines={[
+            { value: 70, color: "rgba(200,74,74,0.5)" },
+            { value: 30, color: "rgba(47,138,95,0.5)" },
+          ]}
+        />
+      )}
+      {subpanels.macd && techQ.data && (
+        <IndicatorPane
+          title="MACD(12,26,9)"
+          height={isMobile ? 100 : 120}
+          parentChart={mainChart}
+          lines={[
+            { key: "macd", data: macdLine, color: "#4ea3ff", lineWidth: 1 },
+            { key: "signal", data: macdSignal, color: "#c97444", lineWidth: 1 },
+          ]}
+          histogram={{
+            data: macdHist,
+            positiveColor: "rgba(47,138,95,0.55)",
+            negativeColor: "rgba(200,74,74,0.55)",
+          }}
+        />
+      )}
+    </div>
   );
 
   const TabContent = (
@@ -122,7 +201,7 @@ export default function StockDetailPage({ params }: { params: Promise<{ symbol: 
           {Header}
         </div>
         <div className="px-4 py-3 overflow-x-auto">{Toolbar}</div>
-        <div className="px-2">{Chart}</div>
+        <div className="px-2">{ChartStack}</div>
 
         <div className="sticky top-[72px] z-20 bg-[var(--bg)]/95 backdrop-blur border-y border-[var(--border)] flex">
           <TabButton active={tab === "technical"} onClick={() => setTab("technical")}>
@@ -147,7 +226,7 @@ export default function StockDetailPage({ params }: { params: Promise<{ symbol: 
         <section className="space-y-3">
           {Toolbar}
           <div className="rounded-xl border border-[var(--border)] bg-[var(--surface)] p-3">
-            {Chart}
+            {ChartStack}
           </div>
         </section>
 

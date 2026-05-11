@@ -8,6 +8,7 @@ import {
   type IChartApi,
   type ISeriesApi,
   type CandlestickData,
+  type HistogramData,
   type LineData,
   type Time,
 } from "lightweight-charts";
@@ -18,13 +19,23 @@ interface Props {
   ohlcv: OHLCVPoint[];
   technicals?: TechnicalPoint[];
   overlays: { sma20?: boolean; sma50?: boolean; sma200?: boolean; bb?: boolean };
+  showVolume?: boolean;
   height?: number;
+  onChartReady?: (chart: IChartApi) => void;
 }
 
-export function CandleChart({ ohlcv, technicals, overlays, height = 480 }: Props) {
+export function CandleChart({
+  ohlcv,
+  technicals,
+  overlays,
+  showVolume = false,
+  height = 480,
+  onChartReady,
+}: Props) {
   const containerRef = useRef<HTMLDivElement>(null);
   const chartRef = useRef<IChartApi | null>(null);
   const candleSeriesRef = useRef<ISeriesApi<"Candlestick"> | null>(null);
+  const volumeSeriesRef = useRef<ISeriesApi<"Histogram"> | null>(null);
   const overlaySeriesRef = useRef<Map<string, ISeriesApi<"Line">>>(new Map());
 
   // Create chart once
@@ -47,7 +58,7 @@ export function CandleChart({ ohlcv, technicals, overlays, height = 480 }: Props
         horzLines: { color: grid },
       },
       crosshair: { mode: CrosshairMode.Normal },
-      rightPriceScale: { borderVisible: false },
+      rightPriceScale: { borderVisible: false, minimumWidth: 60 },
       timeScale: {
         borderVisible: false,
         timeVisible: false,
@@ -60,7 +71,7 @@ export function CandleChart({ ohlcv, technicals, overlays, height = 480 }: Props
       handleScroll: {
         horzTouchDrag: true,
         vertTouchDrag: false,
-        mouseWheel: false, // disable mouseWheel horizontal scroll (zoom remains via pinch)
+        mouseWheel: false,
         pressedMouseMove: true,
       },
       handleScale: {
@@ -83,29 +94,74 @@ export function CandleChart({ ohlcv, technicals, overlays, height = 480 }: Props
     chartRef.current = chart;
     candleSeriesRef.current = candle;
 
+    onChartReady?.(chart);
+
     return () => {
       chart.remove();
       chartRef.current = null;
       candleSeriesRef.current = null;
+      volumeSeriesRef.current = null;
       overlaySeriesRef.current.clear();
     };
-  }, []);
+  }, [onChartReady]);
 
-  // Update candle data
+  // Toggle volume series + adjust main scale margins
+  useEffect(() => {
+    const chart = chartRef.current;
+    const candle = candleSeriesRef.current;
+    if (!chart || !candle) return;
+
+    if (showVolume) {
+      if (!volumeSeriesRef.current) {
+        const vol = chart.addHistogramSeries({
+          priceFormat: { type: "volume" },
+          priceScaleId: "volume",
+          color: "rgba(140,140,140,0.45)",
+        });
+        chart
+          .priceScale("volume")
+          .applyOptions({ scaleMargins: { top: 0.78, bottom: 0 } });
+        volumeSeriesRef.current = vol;
+      }
+      // Push the main candle scale up to leave room for volume.
+      candle.priceScale().applyOptions({ scaleMargins: { top: 0.05, bottom: 0.28 } });
+    } else {
+      if (volumeSeriesRef.current) {
+        chart.removeSeries(volumeSeriesRef.current);
+        volumeSeriesRef.current = null;
+      }
+      candle.priceScale().applyOptions({ scaleMargins: { top: 0.08, bottom: 0.08 } });
+    }
+  }, [showVolume]);
+
+  // Update candle + volume data
   useEffect(() => {
     if (!candleSeriesRef.current || !chartRef.current || ohlcv.length === 0) return;
-    const data: CandlestickData<Time>[] = ohlcv.map((p) => ({
+
+    const bull = getCssVar("--bull") || "#2f8a5f";
+    const bear = getCssVar("--bear") || "#c84a4a";
+
+    const candleData: CandlestickData<Time>[] = ohlcv.map((p) => ({
       time: p.time as Time,
       open: p.open,
       high: p.high,
       low: p.low,
       close: p.close,
     }));
-    candleSeriesRef.current.setData(data);
+    candleSeriesRef.current.setData(candleData);
+
+    if (volumeSeriesRef.current) {
+      const volData: HistogramData<Time>[] = ohlcv
+        .filter((p) => p.volume != null)
+        .map((p) => ({
+          time: p.time as Time,
+          value: p.volume as number,
+          color: p.close >= p.open ? `${bull}66` : `${bear}66`,
+        }));
+      volumeSeriesRef.current.setData(volData);
+    }
 
     const ts = chartRef.current.timeScale();
-    // Re-apply edge constraints — defensive against hot reload reusing an
-    // older chart instance that was created without these options.
     ts.applyOptions({
       rightOffset: 0,
       fixRightEdge: true,
@@ -113,10 +169,8 @@ export function CandleChart({ ohlcv, technicals, overlays, height = 480 }: Props
       lockVisibleTimeRangeOnResize: true,
       rightBarStaysOnScroll: true,
     });
-
-    // Show all data; fixRightEdge keeps the latest bar pinned to the right edge.
     ts.fitContent();
-  }, [ohlcv]);
+  }, [ohlcv, showVolume]);
 
   // Update overlays
   useEffect(() => {
@@ -143,12 +197,20 @@ export function CandleChart({ ohlcv, technicals, overlays, height = 480 }: Props
     for (const { key, color, field } of wanted) {
       let series = overlaySeriesRef.current.get(key);
       if (!series) {
-        series = chart.addLineSeries({ color, lineWidth: 1, priceLineVisible: false, lastValueVisible: false });
+        series = chart.addLineSeries({
+          color,
+          lineWidth: 1,
+          priceLineVisible: false,
+          lastValueVisible: false,
+        });
         overlaySeriesRef.current.set(key, series);
       }
       const data: LineData<Time>[] = technicals
         .map((p) => ({ time: p.time as Time, value: p[field] as number | null }))
-        .filter((p): p is LineData<Time> => p.value !== null && p.value !== undefined && !Number.isNaN(p.value));
+        .filter(
+          (p): p is LineData<Time> =>
+            p.value !== null && p.value !== undefined && !Number.isNaN(p.value),
+        );
       series.setData(data);
     }
   }, [technicals, overlays]);
