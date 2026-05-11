@@ -54,6 +54,19 @@ export function CandleChart({ ohlcv, technicals, overlays, height = 480 }: Props
         rightOffset: 0,
         fixRightEdge: true,
         fixLeftEdge: true,
+        lockVisibleTimeRangeOnResize: true,
+        rightBarStaysOnScroll: true,
+      },
+      handleScroll: {
+        horzTouchDrag: true,
+        vertTouchDrag: false,
+        mouseWheel: false, // disable mouseWheel horizontal scroll (zoom remains via pinch)
+        pressedMouseMove: true,
+      },
+      handleScale: {
+        axisPressedMouseMove: { time: true, price: false },
+        mouseWheel: true,
+        pinch: true,
       },
       autoSize: true,
     });
@@ -70,11 +83,7 @@ export function CandleChart({ ohlcv, technicals, overlays, height = 480 }: Props
     chartRef.current = chart;
     candleSeriesRef.current = candle;
 
-    const ro = new ResizeObserver(() => chart.timeScale().fitContent());
-    ro.observe(containerRef.current);
-
     return () => {
-      ro.disconnect();
       chart.remove();
       chartRef.current = null;
       candleSeriesRef.current = null;
@@ -95,24 +104,18 @@ export function CandleChart({ ohlcv, technicals, overlays, height = 480 }: Props
     candleSeriesRef.current.setData(data);
 
     const ts = chartRef.current.timeScale();
-    // Re-apply edge constraints in case the chart instance was created before
-    // these options existed (e.g. surviving a hot-module reload).
-    ts.applyOptions({ rightOffset: 0, fixRightEdge: true, fixLeftEdge: true });
-    ts.fitContent();
+    // Re-apply edge constraints — defensive against hot reload reusing an
+    // older chart instance that was created without these options.
+    ts.applyOptions({
+      rightOffset: 0,
+      fixRightEdge: true,
+      fixLeftEdge: true,
+      lockVisibleTimeRangeOnResize: true,
+      rightBarStaysOnScroll: true,
+    });
 
-    // Safety net: if user manages to pan past the last bar, snap back.
-    const maxIndex = data.length - 1;
-    const handler = (range: { from: number; to: number } | null) => {
-      if (!range) return;
-      if (range.to > maxIndex + 0.5) {
-        const span = range.to - range.from;
-        ts.setVisibleLogicalRange({ from: maxIndex - span, to: maxIndex });
-      }
-    };
-    ts.subscribeVisibleLogicalRangeChange(handler);
-    return () => {
-      ts.unsubscribeVisibleLogicalRangeChange(handler);
-    };
+    // Show all data; fixRightEdge keeps the latest bar pinned to the right edge.
+    ts.fitContent();
   }, [ohlcv]);
 
   // Update overlays
@@ -120,7 +123,7 @@ export function CandleChart({ ohlcv, technicals, overlays, height = 480 }: Props
     const chart = chartRef.current;
     if (!chart || !technicals) return;
 
-    const wanted: { key: string; color: string; field: keyof TechnicalPoint; lineWidth?: number }[] = [];
+    const wanted: { key: string; color: string; field: keyof TechnicalPoint }[] = [];
     if (overlays.sma20) wanted.push({ key: "sma20", color: "#4ea3ff", field: "sma20" });
     if (overlays.sma50) wanted.push({ key: "sma50", color: "#c97444", field: "sma50" });
     if (overlays.sma200) wanted.push({ key: "sma200", color: "#9c66cc", field: "sma200" });
