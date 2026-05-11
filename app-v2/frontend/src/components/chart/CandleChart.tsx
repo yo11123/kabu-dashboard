@@ -48,7 +48,13 @@ export function CandleChart({ ohlcv, technicals, overlays, height = 480 }: Props
       },
       crosshair: { mode: CrosshairMode.Normal },
       rightPriceScale: { borderVisible: false },
-      timeScale: { borderVisible: false, timeVisible: false },
+      timeScale: {
+        borderVisible: false,
+        timeVisible: false,
+        rightOffset: 0,
+        fixRightEdge: true,
+        fixLeftEdge: true,
+      },
       autoSize: true,
     });
 
