@@ -1,0 +1,112 @@
+@import "tailwindcss";
+
+/* --- Default theme: claude-warm (light, paper-like) ---
+   Themes are switched at runtime by writing to data-theme on <html>.
+   Each theme overrides these CSS variables; chart colors are read at
+   render time via getComputedStyle so they respond to live changes. */
+
+:root,
+[data-theme="claude-warm"] {
+  --bg: #f5f1ea;
+  --surface: #fffaf2;
+  --surface-2: #efeae1;
+  --border: rgba(60, 50, 35, 0.12);
+  --border-strong: rgba(60, 50, 35, 0.22);
+  --text: #2a2520;
+  --text-dim: #6b6358;
+  --text-faint: #9c9388;
+  --accent: #c97444; /* claude orange */
+  --accent-soft: rgba(201, 116, 68, 0.12);
+  --bull: #2f8a5f;
+  --bear: #c84a4a;
+  --grid: rgba(60, 50, 35, 0.08);
+  --shadow: 0 1px 2px rgba(0, 0, 0, 0.04), 0 8px 24px rgba(0, 0, 0, 0.06);
+}
+
+[data-theme="claude-dark"] {
+  --bg: #1a1814;
+  --surface: #221f1a;
+  --surface-2: #2a2620;
+  --border: rgba(255, 240, 220, 0.08);
+  --border-strong: rgba(255, 240, 220, 0.18);
+  --text: #f1ebe1;
+  --text-dim: #b8ad9c;
+  --text-faint: #837868;
+  --accent: #e08956;
+  --accent-soft: rgba(224, 137, 86, 0.18);
+  --bull: #5cc097;
+  --bear: #e36a6a;
+  --grid: rgba(255, 240, 220, 0.06);
+  --shadow: 0 1px 2px rgba(0, 0, 0, 0.2), 0 8px 32px rgba(0, 0, 0, 0.45);
+}
+
+[data-theme="terminal"] {
+  --bg: #0a0e12;
+  --surface: #0f141a;
+  --surface-2: #161c24;
+  --border: rgba(140, 200, 255, 0.1);
+  --border-strong: rgba(140, 200, 255, 0.25);
+  --text: #d4dde7;
+  --text-dim: #8a96a8;
+  --text-faint: #5a6478;
+  --accent: #4ea3ff;
+  --accent-soft: rgba(78, 163, 255, 0.15);
+  --bull: #4ade80;
+  --bear: #f87171;
+  --grid: rgba(140, 200, 255, 0.06);
+  --shadow: 0 1px 2px rgba(0, 0, 0, 0.4), 0 8px 32px rgba(0, 0, 0, 0.6);
+}
+
+@theme inline {
+  --color-bg: var(--bg);
+  --color-surface: var(--surface);
+  --color-surface-2: var(--surface-2);
+  --color-border: var(--border);
+  --color-border-strong: var(--border-strong);
+  --color-text: var(--text);
+  --color-text-dim: var(--text-dim);
+  --color-text-faint: var(--text-faint);
+  --color-accent: var(--accent);
+  --color-accent-soft: var(--accent-soft);
+  --color-bull: var(--bull);
+  --color-bear: var(--bear);
+  --font-sans: ui-sans-serif, system-ui, "Inter", "Noto Sans JP", sans-serif;
+  --font-serif: "Cormorant Garamond", "Noto Serif JP", Georgia, serif;
+  --font-mono: ui-monospace, "JetBrains Mono", "IBM Plex Mono", monospace;
+}
+
+html,
+body {
+  background: var(--bg);
+  color: var(--text);
+  font-family: var(--font-sans);
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+}
+
+* {
+  border-color: var(--border);
+}
+
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+::-webkit-scrollbar-thumb {
+  background: var(--border-strong);
+  border-radius: 4px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: var(--text-faint);
+}
+
+/* Tap-friendly hit areas on mobile */
+@media (pointer: coarse) {
+  button,
+  a {
+    min-height: 44px;
+  }
+}
