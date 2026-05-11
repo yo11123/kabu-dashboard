@@ -84,7 +84,7 @@ export function CandleChart({ ohlcv, technicals, overlays, height = 480 }: Props
 
   // Update candle data
   useEffect(() => {
-    if (!candleSeriesRef.current || ohlcv.length === 0) return;
+    if (!candleSeriesRef.current || !chartRef.current || ohlcv.length === 0) return;
     const data: CandlestickData<Time>[] = ohlcv.map((p) => ({
       time: p.time as Time,
       open: p.open,
@@ -93,7 +93,15 @@ export function CandleChart({ ohlcv, technicals, overlays, height = 480 }: Props
       close: p.close,
     }));
     candleSeriesRef.current.setData(data);
-    chartRef.current?.timeScale().fitContent();
+
+    // Re-apply edge constraints in case the chart instance was created before
+    // these options existed (e.g. surviving a hot-module reload).
+    chartRef.current.timeScale().applyOptions({
+      rightOffset: 0,
+      fixRightEdge: true,
+      fixLeftEdge: true,
+    });
+    chartRef.current.timeScale().fitContent();
   }, [ohlcv]);
 
   // Update overlays
