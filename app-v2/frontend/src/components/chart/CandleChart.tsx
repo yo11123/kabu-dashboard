@@ -94,14 +94,25 @@ export function CandleChart({ ohlcv, technicals, overlays, height = 480 }: Props
     }));
     candleSeriesRef.current.setData(data);
 
+    const ts = chartRef.current.timeScale();
     // Re-apply edge constraints in case the chart instance was created before
     // these options existed (e.g. surviving a hot-module reload).
-    chartRef.current.timeScale().applyOptions({
-      rightOffset: 0,
-      fixRightEdge: true,
-      fixLeftEdge: true,
-    });
-    chartRef.current.timeScale().fitContent();
+    ts.applyOptions({ rightOffset: 0, fixRightEdge: true, fixLeftEdge: true });
+    ts.fitContent();
+
+    // Safety net: if user manages to pan past the last bar, snap back.
+    const maxIndex = data.length - 1;
+    const handler = (range: { from: number; to: number } | null) => {
+      if (!range) return;
+      if (range.to > maxIndex + 0.5) {
+        const span = range.to - range.from;
+        ts.setVisibleLogicalRange({ from: maxIndex - span, to: maxIndex });
+      }
+    };
+    ts.subscribeVisibleLogicalRangeChange(handler);
+    return () => {
+      ts.unsubscribeVisibleLogicalRangeChange(handler);
+    };
   }, [ohlcv]);
 
   // Update overlays
